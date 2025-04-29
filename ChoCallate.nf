@@ -81,7 +81,7 @@ workflow {
     process_final_vcf(generate_final_vcf.out.fvcf, create_faidx.out.ref_genome)
 }
 
-Cleanup temporary files after workflow completion
+// Cleanup temporary files after workflow completion
 workflow.onComplete {
     def tmpDir = file("work/")
     if (tmpDir.exists()) {
