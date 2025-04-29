@@ -28,7 +28,7 @@ cd ChoCallate
 ```
 2. **Set up the Conda environment**:
 ```bash
-conda env create -f chocallate_env.yml
+conda env create -f environment.yaml
 conda activate chocallate
 ```
 3. **Run the pipeline on a test data**:
