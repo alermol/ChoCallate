@@ -54,7 +54,7 @@ nextflow run ChoCallate.nf \
 ## ⚙️ Parameters
 | Parameter | Default | Description |
 | :-------- | :------- | :---------- |
-|--samples_tsv	|input.tsv|	TSV file with samples|
+|--samples_tsv	|samples.tsv|	TSV file with samples|
 |--outdir	|ChoCallate_output|	Output directory|
 |--reference_genome	|-|	Reference genome (FASTA), must be not gzipped|
 |--reference_index	|-	|Bowtie2 index prefix for the reference|
