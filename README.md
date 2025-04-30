@@ -102,7 +102,7 @@ For questions or issues, please open an issue on GitHub.
 To cite this software repository in your work, use the following format:
 
 **APA Style**:  
-Author, A. (Year). *ChoCallate: Consensus variant calling pipeline for diploid organisms* (Version 1.0.0) \[Computer software\]. GitHub. https://github.com/alermol/ChoCallate
+Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline for diploid organisms* \[Computer software\]. GitHub. https://github.com/alermol/ChoCallate
 
 **BibTeX**:  
 ```bibtex
@@ -110,8 +110,7 @@ Author, A. (Year). *ChoCallate: Consensus variant calling pipeline for diploid o
   author = {Ermolaev, A.},
   title = {ChoCallate: Consensus variant calling pipeline for diploid organisms},
   url = {https://github.com/alermol/ChoCallate},
-  version = {1.0.0},
-  date = {2025-04-30}
+  year = {2025}
 }
 ```
 
