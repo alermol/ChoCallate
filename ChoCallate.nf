@@ -240,7 +240,7 @@ process freebayes_calling {
             --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
             --haplotype-length -1 --bam ${bam} --limit-coverage 250 | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
             bcftools view --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
-            bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.freebayes
+            bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
         """
     
     else if ( params.reads_source == 'wgs' )
@@ -250,7 +250,7 @@ process freebayes_calling {
             --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
             --haplotype-length -1 --bam ${bam} --limit-coverage 250 | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
             bcftools view --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
-            bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.freebayes
+            bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
         """
     
     else
@@ -278,7 +278,7 @@ process bcftools_calling {
         bcftools call -Ov --multiallelic-caller --threads ${task.cpus} | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --max-alleles 2 - | \
-        bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.bcftools
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.bcftools
     """
 }
 
@@ -303,7 +303,7 @@ process gatk4_calling {
     bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA - | bcftools view --max-alleles 2 - | \
-        bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.gatk
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
     """
 }
 
@@ -327,9 +327,8 @@ process vardict_calling {
         -VS SILENT --nosv -k 0 -q ${params.min_base_quality} -c 1 -S 2 -E 3 -g 4 ${coverage} | \
         var2vcf_valid.pl -q ${params.min_base_quality} -N ${bam.baseName} -E | \
         bcftools reheader -f ${ref_genome_fai} - | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
-        bcftools view --max-alleles 2 - | \
-        bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.vardict
+        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | bcftools view --max-alleles 2 - | \
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.vardict
     """
 }
 
@@ -359,7 +358,7 @@ process snver_calling {
     bcftools concat ${bam.baseName}.indel.filter.vcf.gz ${bam.baseName}.filter.vcf.gz --naive-force | \
         bcftools reheader -f reference.fasta.fai - | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | bcftools view --max-alleles 2 - | \
-        bcftools annotate --threads ${task.cpus} --set-id \"${id_template}\" -Ov -o ${bam.baseName}.snver
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.snver
     """
 }
 
