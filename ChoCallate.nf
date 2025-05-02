@@ -11,9 +11,6 @@ params.min_snp_qual = 20
 params.reads_type = 'pe' // se - single-end reads; pe - pair-end reads
 params.reads_source = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
 
-// Template for variant ID formatting
-def id_template = '%CHROM\\_%POS\\_%REF\\_%ALT\\_[%GT]'
-
 // Main workflow definition
 workflow {
     // Create channel from samples TSV file and parse into tuples
