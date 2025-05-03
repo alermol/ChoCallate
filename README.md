@@ -86,7 +86,9 @@ If `--reads_type se`, then the third column in `samples.tsv` must contain the sa
 
 ## 📊 Output
 The `outdir` will contain:
-- `<sample>`.vcf.gz — Final VCF for each sample (bgziped)
+- `<sample>` folder
+- `<sample>`/`<sample>`.snps.vcf.gz — Final VCF for the `<sample>` containing SNPs only (bgziped)
+- `<sample>`/`<sample>`.indels.vcf.gz — Final VCF for the `<sample>` containing INDELs only (bgziped)
 
 
 ## 🛠️ Dependencies
