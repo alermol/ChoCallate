@@ -11,6 +11,7 @@ params.min_snp_qual = 20
 params.reads_type = 'pe' // se - single-end reads; pe - pair-end reads
 params.reads_source = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
 
+
 // Main workflow definition
 workflow {
     // Create channel from samples TSV file and parse into tuples
@@ -43,39 +44,47 @@ workflow {
     bam_cov_generation(bam_indexing.out.ind_bam, 
                        create_faidx.out.ref_genome)
 
-    // Call variants using different callers
-    freebayes_vcf = freebayes_calling(bam_indexing.out.ind_bam, 
+    // Call SNVs/INDELs using different callers
+    freebayes_snps = freebayes_calling(bam_indexing.out.ind_bam, 
                                       bam_cov_generation.out.coverage, 
-                                      create_faidx.out.ref_genome).vcf
-    bcftools_vcf = bcftools_calling(bam_indexing.out.ind_bam, 
+                                      create_faidx.out.ref_genome)
+    bcftools_snps = bcftools_calling(bam_indexing.out.ind_bam, 
                                     bam_cov_generation.out.coverage, 
-                                    create_faidx.out.ref_genome).vcf
-    gatk4_vcf = gatk4_calling(bam_indexing.out.ind_bam, 
+                                    create_faidx.out.ref_genome)
+    gatk4_snps = gatk4_calling(bam_indexing.out.ind_bam, 
                               bam_cov_generation.out.coverage, 
                               create_faidx.out.ref_genome,
-                              create_sequence_dictionary.out.gen_dict).vcf
-    vardict_vcf = vardict_calling(bam_indexing.out.ind_bam, 
+                              create_sequence_dictionary.out.gen_dict)
+    vardict_snps = vardict_calling(bam_indexing.out.ind_bam, 
                                   bam_cov_generation.out.coverage, 
-                                  create_faidx.out.ref_genome).vcf
-    snver_vcf = snver_calling(bam_indexing.out.ind_bam, 
+                                  create_faidx.out.ref_genome)
+    snver_snps = snver_calling(bam_indexing.out.ind_bam, 
                               bam_cov_generation.out.coverage, 
-                              create_faidx.out.ref_genome).vcf
+                              create_faidx.out.ref_genome)
 
-    // Merge VCFs from all callers
-    merged_vcfs = freebayes_vcf
-        .join(bcftools_vcf)
-        .join(gatk4_vcf)
-        .join(vardict_vcf)
-        .join(snver_vcf)
+    // Process SNPs
+    merged_snps_vcfs = freebayes_snps.snps_vcf
+        .join(bcftools_snps.snps_vcf)
+        .join(gatk4_snps.snps_vcf)
+        .join(vardict_snps.snps_vcf)
+        .join(snver_snps.snps_vcf)
         .map { sample, freebayes, bcftools, gatk, vardict, snver -> 
             tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
         }
+    generate_final_vcf_snps(merged_snps_vcfs)
+    process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome)
 
-    // Generate final consensus VCF
-    generate_final_vcf(merged_vcfs)
-
-    // Process and compress final VCF
-    process_final_vcf(generate_final_vcf.out.fvcf, create_faidx.out.ref_genome)
+    // Process INDELs
+    merged_indels_vcfs = freebayes_snps.indels_vcf
+        .join(bcftools_snps.indels_vcf)
+        .join(gatk4_snps.indels_vcf)
+        .join(vardict_snps.indels_vcf)
+        .join(snver_snps.indels_vcf)
+        .map { sample, freebayes, bcftools, gatk, vardict, snver -> 
+            tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
+        }
+    generate_final_vcf_indels(merged_indels_vcfs)
+    process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome)
 }
 
 // Cleanup temporary files after workflow completion
@@ -227,7 +236,8 @@ process freebayes_calling {
     tuple path(ref_genome), path(ref_genome_fai)
     
     output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.freebayes"), emit: vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_freebayes"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_freebayes"), emit: indels_vcf
     
     script:
     if ( params.reads_source == 'gbs' )
@@ -235,9 +245,14 @@ process freebayes_calling {
         freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels \
             --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
             --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
-            --haplotype-length -1 --bam ${bam} --limit-coverage 250 | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-            bcftools view --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
+            --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
+            bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
+            bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
+
+        bcftools view -v snps -Ov -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
+        
+        bcftools view -v indels -Ov -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
     
     else if ( params.reads_source == 'wgs' )
@@ -245,9 +260,14 @@ process freebayes_calling {
         freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels \
             --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
             --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
-            --haplotype-length -1 --bam ${bam} --limit-coverage 250 | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-            bcftools view --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
+            --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
+            bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
+            bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
+
+        bcftools view -v snps -Ov -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
+        
+        bcftools view -v indels -Ov -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
     
     else
@@ -266,7 +286,8 @@ process bcftools_calling {
     tuple path(ref_genome), path(ref_genome_fai)
     
     output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.bcftools"), emit: vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_bcftools"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_bcftools"), emit: indels_vcf
     
     script:
     """
@@ -276,6 +297,10 @@ process bcftools_calling {
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.bcftools
+
+    bcftools view -V indels,mnps,bnd,other -Ov -o ${bam.baseName}.snps_bcftools ${bam.baseName}.bcftools
+    
+    bcftools view -v indels -Ov -o ${bam.baseName}.indels_bcftools ${bam.baseName}.bcftools
     """
 }
 
@@ -292,15 +317,20 @@ process gatk4_calling {
     path(ref_genome_dict)
     
     output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.gatk"), emit: vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_gatk"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_gatk"), emit: indels_vcf
     
     script:
     """
     gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage}
     bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
-        bcftools view -AA - | bcftools view --max-alleles 2 - | \
+        bcftools view -AA --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
+
+    bcftools view -v snps -Ov -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
+    
+    bcftools view -v indels -Ov -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
     """
 }
 
@@ -316,7 +346,8 @@ process vardict_calling {
     tuple path(ref_genome), path(ref_genome_fai)
     
     output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.vardict"), emit: vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_vardict"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_vardict"), emit: indels_vcf
     
     script:
     """
@@ -324,8 +355,12 @@ process vardict_calling {
         -VS SILENT --nosv -k 0 -q ${params.min_base_quality} -c 1 -S 2 -E 3 -g 4 ${coverage} | \
         var2vcf_valid.pl -q ${params.min_base_quality} -N ${bam.baseName} -E | \
         bcftools reheader -f ${ref_genome_fai} - | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | bcftools view --max-alleles 2 - | \
+        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.vardict
+
+    bcftools view -v snps -Ov -o ${bam.baseName}.snps_vardict ${bam.baseName}.vardict
+    
+    bcftools view -v indels -Ov -o ${bam.baseName}.indels_vardict ${bam.baseName}.vardict
     """
 }
 
@@ -341,27 +376,110 @@ process snver_calling {
     tuple path(ref_genome), path(ref_genome_fai)
     
     output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snver"), emit: vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_snver"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_snver"), emit: indels_vcf
     
     script:
     """
     ln -s ${ref_genome} reference.fasta
+    
     samtools faidx reference.fasta
+    
     snver -i ${bam} -r reference.fasta -o ${bam.baseName} -l ${coverage} -bq ${params.min_base_quality}
-    bgzip ${bam.baseName}.indel.filter.vcf
-    bgzip ${bam.baseName}.filter.vcf
-    tabix -C ${bam.baseName}.indel.filter.vcf.gz
-    tabix -C ${bam.baseName}.filter.vcf.gz
-    bcftools concat ${bam.baseName}.indel.filter.vcf.gz ${bam.baseName}.filter.vcf.gz --naive-force | \
-        bcftools reheader -f reference.fasta.fai - | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | bcftools view --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.snver
+    
+    bcftools reheader -f reference.fasta.fai ${bam.baseName}.filter.vcf | \
+        bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
+        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.snps_snver
+        
+    bcftools reheader -f reference.fasta.fai ${bam.baseName}.indel.filter.vcf | \
+        bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
+        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.indels_snver
     """
 }
 
+
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 2 callers
-process generate_final_vcf {
+process generate_final_vcf_indels {
+    maxForks 1
+    cpus 1
+
+    tag "${sample}-generate"
+
+    input:
+    tuple val(sample), path(vcf1), path(vcf2), path(vcf3), path(vcf4), path(vcf5)
+
+    output:
+    path("${sample}.vcf"), emit: fvcf
+
+    script:
+    """
+    #!/usr/bin/env python3
+    
+    import sys
+    from collections import defaultdict, Counter
+
+    def sort_gt(s):
+        parts = s.split('/')
+        numbers = [int(part) for part in parts]
+        numbers_sorted = sorted(numbers)
+        result = '/'.join(map(str, numbers_sorted))
+        return result
+
+    
+    def get_most_frequent(items):
+        counter = Counter(items)
+        most_common = counter.most_common(1)
+        return most_common
+    
+    
+    def parse_vcf(vcf_file):
+        variants = defaultdict(dict)
+        with open(vcf_file) as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                fields = line.strip().split('\\t')
+                if '.' in fields[9]:
+                    continue
+                else:
+                    chrom = fields[0]
+                    pos = int(fields[1])
+                    ref = fields[3]
+                    alt = fields[4]
+                    gt = sort_gt(fields[9])
+                    variants[(chrom, pos)] = [(ref, alt, gt)]
+        return variants
+
+    indels = defaultdict(list)
+    for file in ["${vcf1}", "${vcf2}", "${vcf3}", "${vcf4}", "${vcf5}"]:
+        polymorphic_indels = parse_vcf(file)
+        for coord, gen in polymorphic_indels.items():
+            indels[coord].append(gen[0])
+
+    with open("${sample}.vcf", 'w') as out:
+        out.write('##fileformat=VCFv4.3\\n')
+        out.write('##FORMAT=<ID=GT,Number=1,Type=String>\\n')
+        out.write(f'#CHROM\\tPOS\\tID\\tREF\\tALT\\tQUAL\\tFILTER\\tINFO\\tFORMAT\\t{"${sample}"}\\n')
+        for coord, gen in indels.items():
+            most_freq_var = get_most_frequent(gen)
+            if ((most_freq_var[0][1] < 3) | 
+                ('.' in most_freq_var[0][0][2]) | 
+                (not most_freq_var[0][0][0].isupper())):
+                continue
+            else:
+                chrom = coord[0]
+                pos = coord[1]
+                ref = most_freq_var[0][0][0]
+                alt = most_freq_var[0][0][1]
+                gt = most_freq_var[0][0][2]
+                out.write('\\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f'{gt}\\n']))
+    """
+}
+
+process generate_final_vcf_snps {
     maxForks 1
     cpus 1
 
@@ -444,23 +562,42 @@ process generate_final_vcf {
 }
 
 // Process to finalize and compress the VCF file
-process process_final_vcf {
+process process_final_vcf_snps {
     maxForks 1
     cpus 1
 
-    tag "${vcf.baseName}-finalize"
-    publishDir "${params.outdir}", mode: 'copy', pattern: '*.vcf.gz'
+    tag "${vcf.baseName}-finalizeSNP"
+    publishDir "${params.outdir}/${vcf.baseName}/", mode: 'copy', pattern: '*.snps.vcf.gz'
 
     input:
     path(vcf)
     tuple path(ref_genome), path(ref_genome_fai)
 
     output:
-    path("${vcf.baseName}.vcf.gz")
+    path("${vcf.baseName}.snps.vcf.gz")
 
     script:
     """
-    bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.vcf.gz
+    bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.snps.vcf.gz
     """
 }
 
+process process_final_vcf_indels {
+    maxForks 1
+    cpus 1
+
+    tag "${vcf.baseName}-finalizeINDEL"
+    publishDir "${params.outdir}/${vcf.baseName}/", mode: 'copy', pattern: '*.indels.vcf.gz'
+
+    input:
+    path(vcf)
+    tuple path(ref_genome), path(ref_genome_fai)
+
+    output:
+    path("${vcf.baseName}.indels.vcf.gz")
+
+    script:
+    """
+    bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.indels.vcf.gz
+    """
+}
