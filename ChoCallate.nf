@@ -147,14 +147,14 @@ process map_reads {
     script:
     if ( params.reads_type == 'pe' )
         """
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} | \
+        bowtie2 --mm --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} | \
             samtools view -@ ${task.cpus} -S -b -q ${params.samtools_min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
         """
     else if ( params.reads_type == 'se' )
         """
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -U ${read1} | \
+        bowtie2 --mm --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -U ${read1} | \
             samtools view -@ ${task.cpus} -S -b -q ${params.samtools_min_map_qual} -F 4 - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
         """
