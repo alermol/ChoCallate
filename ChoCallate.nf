@@ -41,8 +41,7 @@ workflow {
     bam_indexing(left_align_indels.out.lai_bam)
 
     // Generate coverage information from BAM files
-    bam_cov_generation(bam_indexing.out.ind_bam, 
-                       create_faidx.out.ref_genome)
+    bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
     freebayes_snps = freebayes_calling(bam_indexing.out.ind_bam, 
@@ -72,7 +71,7 @@ workflow {
             tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
         }
     generate_final_vcf_snps(merged_snps_vcfs)
-    process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome)
+    process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
     // Process INDELs
     merged_indels_vcfs = freebayes_snps.indels_vcf
@@ -84,7 +83,7 @@ workflow {
             tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
         }
     generate_final_vcf_indels(merged_indels_vcfs)
-    process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome)
+    process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 }
 
 // Cleanup temporary files after workflow completion
@@ -210,8 +209,7 @@ process bam_cov_generation {
     tag "${bam.baseName}-coverage"
 
     input:
-    tuple path(bam), path(bam_index)
-    tuple path(ref_genome), path(genome_fai)
+    path(bam)
 
     output:
     path("${bam.baseName}.bed"), emit: coverage
@@ -571,7 +569,7 @@ process process_final_vcf_snps {
 
     input:
     path(vcf)
-    tuple path(ref_genome), path(ref_genome_fai)
+    path(ref_genome_fai)
 
     output:
     path("${vcf.baseName}.snps.vcf.gz")
@@ -591,7 +589,7 @@ process process_final_vcf_indels {
 
     input:
     path(vcf)
-    tuple path(ref_genome), path(ref_genome_fai)
+    path(ref_genome_fai)
 
     output:
     path("${vcf.baseName}.indels.vcf.gz")
