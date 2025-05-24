@@ -18,6 +18,8 @@ This pipeline is designed specifically for diploid organisms. Some integrated ca
 3. **Consensus Generation**: Merges results using majority rule
 4. **Output**: Final compressed VCF files
 
+![image](ChoCallate_scheme.png)
+
 
 ## ⚙️ Installation
 
