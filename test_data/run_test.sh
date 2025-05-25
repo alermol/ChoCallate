@@ -11,7 +11,6 @@ read2=$(readlink -f ERR1839886_2.fastq.gz)
 echo -e "${name}\t${read1}\t${read2}" > samples.tsv
 
 nextflow run ../ChoCallate.nf \
-    -c ../ChoCallate.config \
     --samples_tsv samples.tsv \
     --reference_index arth_chr1.fasta \
     --outdir chocallate_test \
