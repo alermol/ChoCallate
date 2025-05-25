@@ -47,7 +47,6 @@ bash cleanup.sh
 **Basic execution**:
 ```bash
 nextflow run ChoCallate.nf \
-    -c ChoCallate.config \
     --reference_genome /path/to/ref.fasta \
     --reference_index /path/to/ref_index \
     --samples_tsv samples.tsv

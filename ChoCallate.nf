@@ -84,6 +84,14 @@ workflow {
         }
     generate_final_vcf_indels(merged_indels_vcfs)
     process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
+
+    cleanup(map_reads.out.bam, 
+            bam_indexing.out.ind_bam, 
+            bam_cov_generation.out.coverage, 
+            merged_snps_vcfs, 
+            merged_indels_vcfs,
+            process_final_vcf_snps.out.final_vcf_snp,
+            process_final_vcf_indels.out.final_vcf_indel)
 }
 
 // Cleanup temporary files after workflow completion
@@ -572,7 +580,7 @@ process process_final_vcf_snps {
     path(ref_genome_fai)
 
     output:
-    path("${vcf.baseName}.snps.vcf.gz")
+    path("${vcf.baseName}.snps.vcf.gz"), emit: final_vcf_snp
 
     script:
     """
@@ -592,10 +600,35 @@ process process_final_vcf_indels {
     path(ref_genome_fai)
 
     output:
-    path("${vcf.baseName}.indels.vcf.gz")
+    path("${vcf.baseName}.indels.vcf.gz"), emit: final_vcf_indel
 
     script:
     """
     bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.indels.vcf.gz
     """
 }
+
+process cleanup {
+    maxForks 1
+    cpus 1
+
+    tag "${bam.baseName}-cleanup"
+
+    input:
+    path(tmp_bam)
+    tuple path(bam), path(index)
+    path(coverage)
+    tuple val(sample), path(snp_vcf1), path(snp_vcf2), path(snp_vcf3), path(snp_vcf4), path(snp_vcf5)
+    tuple val(sample), path(indel_vcf1), path(indel_vcf2), path(indel_vcf3), path(indel_vcf4), path(indel_vcf5)
+    path(final_vcf_snps)
+    path(final_vcf_indels)
+
+
+    script:
+    """
+    for i in ${tmp_bam} ${bam} ${index} ${coverage} ${snp_vcf1} ${snp_vcf2} \
+        ${snp_vcf3} ${snp_vcf4} ${snp_vcf5} ${indel_vcf1} ${indel_vcf2} ${indel_vcf3} \
+        ${indel_vcf4} ${indel_vcf5}; do rm `realpath \${i}`; done
+    """
+}
+
