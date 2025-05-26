@@ -89,8 +89,7 @@ workflow {
             bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage,
             generate_final_vcf_snps.out.fvcf,
-            merged_snps_vcfs, 
-            merged_indels_vcfs,
+            merged_snps_vcfs,
             process_final_vcf_snps.out.final_vcf_snp,
             process_final_vcf_indels.out.final_vcf_indel)
 }
@@ -621,7 +620,6 @@ process cleanup {
     path(coverage)
     path(snps_vcf)
     tuple val(sample), path(snp_vcf1), path(snp_vcf2), path(snp_vcf3), path(snp_vcf4), path(snp_vcf5)
-    tuple val(sample), path(indel_vcf1), path(indel_vcf2), path(indel_vcf3), path(indel_vcf4), path(indel_vcf5)
     path(final_vcf_snps)
     path(final_vcf_indels)
 
@@ -629,8 +627,7 @@ process cleanup {
     script:
     """
     for i in ${tmp_bam} ${bam} ${index} ${coverage} ${snp_vcf1} ${snp_vcf2} \
-        ${snp_vcf3} ${snp_vcf4} ${snp_vcf5} ${indel_vcf1} ${indel_vcf2} ${indel_vcf3} \
-        ${indel_vcf4} ${indel_vcf5} ${snps_vcf}; do rm `realpath \${i}`; done
+        ${snp_vcf3} ${snp_vcf4} ${snp_vcf5} ${snps_vcf}; do rm -r \$(dirname \$(realpath \${i})); done
     """
 }
 
