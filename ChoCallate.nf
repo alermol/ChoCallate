@@ -62,25 +62,25 @@ workflow {
                               create_faidx.out.ref_genome)
 
     // Process SNPs
-    merged_snps_vcfs = freebayes_snps.snps_vcf
-        .join(bcftools_snps.snps_vcf)
+    merged_snps_vcfs = bcftools_snps.snps_vcf
+        .join(freebayes_snps.snps_vcf)
         .join(gatk4_snps.snps_vcf)
         .join(vardict_snps.snps_vcf)
         .join(snver_snps.snps_vcf)
-        .map { sample, freebayes, bcftools, gatk, vardict, snver -> 
-            tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
+        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
     generate_final_vcf_snps(merged_snps_vcfs)
     process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
     // Process INDELs
-    merged_indels_vcfs = freebayes_snps.indels_vcf
-        .join(bcftools_snps.indels_vcf)
+    merged_indels_vcfs = bcftools_snps.indels_vcf
+        .join(freebayes_snps.indels_vcf)
         .join(gatk4_snps.indels_vcf)
         .join(vardict_snps.indels_vcf)
         .join(snver_snps.indels_vcf)
-        .map { sample, freebayes, bcftools, gatk, vardict, snver -> 
-            tuple(sample, freebayes, bcftools, gatk, vardict, snver) 
+        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
     generate_final_vcf_indels(merged_indels_vcfs)
     process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
@@ -422,66 +422,7 @@ process generate_final_vcf_indels {
 
     script:
     """
-    #!/usr/bin/env python3
-    
-    import sys
-    from collections import defaultdict, Counter
-
-    def sort_gt(s):
-        parts = s.split('/')
-        numbers = [int(part) for part in parts]
-        numbers_sorted = sorted(numbers)
-        result = '/'.join(map(str, numbers_sorted))
-        return result
-
-    
-    def get_most_frequent(items):
-        counter = Counter(items)
-        most_common = counter.most_common(1)
-        return most_common
-    
-    
-    def parse_vcf(vcf_file):
-        variants = defaultdict(dict)
-        with open(vcf_file) as f:
-            for line in f:
-                if line.startswith('#'):
-                    continue
-                fields = line.strip().split('\\t')
-                if '.' in fields[9]:
-                    continue
-                else:
-                    chrom = fields[0]
-                    pos = int(fields[1])
-                    ref = fields[3]
-                    alt = fields[4]
-                    gt = sort_gt(fields[9])
-                    variants[(chrom, pos)] = [(ref, alt, gt)]
-        return variants
-
-    indels = defaultdict(list)
-    for file in ["${vcf1}", "${vcf2}", "${vcf3}", "${vcf4}", "${vcf5}"]:
-        polymorphic_indels = parse_vcf(file)
-        for coord, gen in polymorphic_indels.items():
-            indels[coord].append(gen[0])
-
-    with open("${sample}.vcf", 'w') as out:
-        out.write('##fileformat=VCFv4.3\\n')
-        out.write('##FORMAT=<ID=GT,Number=1,Type=String>\\n')
-        out.write(f'#CHROM\\tPOS\\tID\\tREF\\tALT\\tQUAL\\tFILTER\\tINFO\\tFORMAT\\t{"${sample}"}\\n')
-        for coord, gen in indels.items():
-            most_freq_var = get_most_frequent(gen)
-            if ((most_freq_var[0][1] < 3) | 
-                ('.' in most_freq_var[0][0][2]) | 
-                (not most_freq_var[0][0][0].isupper())):
-                continue
-            else:
-                chrom = coord[0]
-                pos = coord[1]
-                ref = most_freq_var[0][0][0]
-                alt = most_freq_var[0][0][1]
-                gt = most_freq_var[0][0][2]
-                out.write('\\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f'{gt}\\n']))
+    python3 ${projectDir}/scripts/process_indels.py --vcf1 "${vcf1}" --vcf2 "${vcf2}" --vcf3 "${vcf3}" --vcf4 "${vcf4}" --vcf5 "${vcf5}" --sample "${sample}"
     """
 }
 
@@ -499,71 +440,7 @@ process generate_final_vcf_snps {
 
     script:
     """
-    #!/usr/bin/env python3
-    
-    import sys
-    from collections import defaultdict, Counter
-
-    def sort_gt(s):
-        parts = s.split('/')
-        numbers = [int(part) for part in parts]
-        numbers_sorted = sorted(numbers)
-        result = '/'.join(map(str, numbers_sorted))
-        return result
-
-    
-    def get_most_frequent(items):
-        counter = Counter(items)
-        most_common = counter.most_common(1)
-        return most_common
-    
-    
-    def parse_vcf(vcf_file):
-        variants = defaultdict(dict)
-        with open(vcf_file) as f:
-            for line in f:
-                if line.startswith('#'):
-                    continue
-                fields = line.strip().split('\\t')
-                if '.' in fields[9]:
-                    continue
-                else:
-                    chrom = fields[0]
-                    pos = int(fields[1])
-                    ref = fields[3]
-                    alt = fields[4]
-                    gt = sort_gt(fields[9])
-                    variants[(chrom, pos)] = [(ref, alt, gt)]
-        return variants
-
-
-    base_vars = parse_vcf("${vcf2}")
-
-    for file in ["${vcf1}", "${vcf3}", "${vcf4}", "${vcf5}"]:
-        polymorphic_vcf = parse_vcf(file)
-        for coord, gen in base_vars.items():
-            if coord in polymorphic_vcf.keys():
-                base_vars[coord].append(polymorphic_vcf[coord][0])
-            else:
-                base_vars[coord].append(base_vars[coord][0])
-
-    with open("${sample}.vcf", 'w') as out:
-        out.write('##fileformat=VCFv4.3\\n')
-        out.write('##FORMAT=<ID=GT,Number=1,Type=String>\\n')
-        out.write(f'#CHROM\\tPOS\\tID\\tREF\\tALT\\tQUAL\\tFILTER\\tINFO\\tFORMAT\\t{"${sample}"}\\n')
-        for coord, gen in base_vars.items():
-            most_freq_var = get_most_frequent(gen)
-            if ((most_freq_var[0][1] < 3) | 
-                ('.' in most_freq_var[0][0][2]) | 
-                (not most_freq_var[0][0][0].isupper())):
-                continue
-            else:
-                chrom = coord[0]
-                pos = coord[1]
-                ref = most_freq_var[0][0][0]
-                alt = most_freq_var[0][0][1]
-                gt = most_freq_var[0][0][2]
-                out.write('\\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f'{gt}\\n']))
+    python3 ${projectDir}/scripts/process_snps.py --vcf1 "${vcf1}" --vcf2 "${vcf2}" --vcf3 "${vcf3}" --vcf4 "${vcf4}" --vcf5 "${vcf5}" --sample "${sample}"
     """
 }
 
