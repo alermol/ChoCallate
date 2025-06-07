@@ -4,17 +4,21 @@
 
 ## 📋 Description
 
-⚠️ **Important Note**  
-This pipeline is designed specifically for diploid organisms. Some integrated callers (e.g., vardict, bcftools) assume diploidy by default and lack explicit ploidy parameterization.
+⚠️ **Important Notes**
+- **Diploid species**: The main pipeline `ChoCallate.nf` is optimized for diploid organisms. Some integrated callers (e.g., vardict, bcftools) assume diploidy by default
+- **Polyploid species**: For polyploid species, use the `polyChoCallate.nf` pipeline with explicit ploidy parameterization. VarDict and bcftools are not using in `polyChoCallate.nf`.
+
 
 **Key Features**
-- **Consensus-driven approach**: Combines results from 5 callers (FreeBayes, bcftools, GATK4, VarDict, SNVer) using majority rule (≥3/5 callers)
+- **Consensus-driven approach**: Combines results from 5 callers (FreeBayes, bcftools, GATK4, VarDict, SNVer) or 3 in the `polyChoCallate.nf` pipeline, using majority rule
+- **Ploidy flexibility**: Supports both diploid (`ChoCallate.nf`) and polyploid species (`polyChoCallate.nf`).
 - **Flexible input**: Compatible with both GBS (Genotyping-by-Sequencing) and WGS data
 - **Quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
 
+
 **Workflow Steps**
 1. **Alignment**: Bowtie2-based read alignment
-2. **Variant Calling**: Parallel execution of 5 callers
+2. **Variant Calling**: Parallel execution of 5 callers (3 callers in `polyChoCallate.nf`)
 3. **Consensus Generation**: Merges results using majority rule
 4. **Output**: Final compressed VCF files
 
@@ -50,6 +54,12 @@ nextflow run ChoCallate.nf \
     --reference_genome /path/to/ref.fasta \
     --reference_index /path/to/ref_index \
     --samples_tsv samples.tsv
+
+nextflow run polyChoCallate.nf \
+    --reference_genome /path/to/ref.fasta \
+    --reference_index /path/to/ref_index \
+    --samples_tsv samples.tsv
+    --ploidy 4
 ```
 
 ## ⚙️ Parameters
@@ -63,6 +73,7 @@ nextflow run ChoCallate.nf \
 |--min_base_quality	|20	|Minimum base quality for SNP-calling|
 |--bowtie2_cpu	|10	|Number of threads for Bowtie2|
 |--min_snp_qual	|20	|Minimum SNP quality|
+|--ploidy |2 |Ploidy (for `polyChoCallate.py` only)|
 |--reads_type	|pe	|Reads type (pe for paired-end, se for single-end)|
 |--reads_source	|gbs|	Data source (gbs for GBS or wgs for WGS)|
 
