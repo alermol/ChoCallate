@@ -11,15 +11,12 @@ params.reads_type = 'pe' // se - single-end reads; pe - pair-end reads
 params.reads_source = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
 params.bowtie2_cpu = 10
 params.bowtie2_forks = 1
-params.freebayes_cpu = 1
 params.freebayes_forks = 1
 params.bcftools_cpu = 1
 params.bcftools_forks = 1
-params.gatk4_cpu = 1
 params.gatk4_forks = 1
 params.vardict_cpu = 1
 params.vardict_forks = 1
-params.snver_cpu = 1
 params.snver_forks = 1
 
 // Main workflow definition
@@ -245,7 +242,6 @@ process bam_cov_generation {
 // Process to call variants using FreeBayes
 process freebayes_calling {
     maxForks params.freebayes_forks
-    cpus params.freebayes_cpu
 
     tag "${bam.baseName}-freebayes"
     
@@ -327,7 +323,6 @@ process bcftools_calling {
 // Process to call variants using GATK4
 process gatk4_calling {
     maxForks params.gatk4_forks
-    cpus params.gatk4_cpu
 
     tag "${bam.baseName}-gatk4"
     
@@ -389,7 +384,6 @@ process vardict_calling {
 // Process to call variants using SNVer
 process snver_calling {
     maxForks params.snver_forks
-    cpus params.snver_cpu
 
     tag "${bam.baseName}-snver"
     
