@@ -5,12 +5,22 @@ params.samples_tsv = 'input.tsv'
 params.outdir = 'ChoCallate_output'
 params.min_coverage = 5
 params.min_base_quality = 20
-params.bowtie2_cpu = 10
 params.samtools_min_map_qual = 10
 params.min_snp_qual = 20
 params.reads_type = 'pe' // se - single-end reads; pe - pair-end reads
 params.reads_source = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
-
+params.bowtie2_cpu = 10
+params.bowtie2_forks = 1
+params.freebayes_cpu = 1
+params.freebayes_forks = 1
+params.bcftools_cpu = 1
+params.bcftools_forks = 1
+params.gatk4_cpu = 1
+params.gatk4_forks = 1
+params.vardict_cpu = 1
+params.vardict_forks = 1
+params.snver_cpu = 1
+params.snver_forks = 1
 
 // Main workflow definition
 workflow {
@@ -123,6 +133,8 @@ process create_faidx {
 
 // Process to create sequence dictionary (for GATK4)
 process create_sequence_dictionary {
+    maxForks 1
+
     tag "${ref_genome.baseName}-CreateSequenceDictionary"
 
     input:
@@ -139,7 +151,7 @@ process create_sequence_dictionary {
 
 // Process to map reads to reference genome
 process map_reads {
-    maxForks 1
+    maxForks params.bowtie2_forks
     cpus params.bowtie2_cpu
 
     tag "${sample_id}-bowtie2"
@@ -232,7 +244,8 @@ process bam_cov_generation {
 
 // Process to call variants using FreeBayes
 process freebayes_calling {
-    cpus 1
+    maxForks params.freebayes_forks
+    cpus params.freebayes_cpu
 
     tag "${bam.baseName}-freebayes"
     
@@ -282,7 +295,8 @@ process freebayes_calling {
 
 // Process to call variants using bcftools
 process bcftools_calling {
-    cpus 1
+    maxForks params.bcftools_forks
+    cpus params.bcftools_cpu
     
     tag "${bam.baseName}-bcftools"
     
@@ -312,7 +326,8 @@ process bcftools_calling {
 
 // Process to call variants using GATK4
 process gatk4_calling {
-    cpus 1
+    maxForks params.gatk4_forks
+    cpus params.gatk4_cpu
 
     tag "${bam.baseName}-gatk4"
     
@@ -342,7 +357,8 @@ process gatk4_calling {
 
 // Process to call variants using VarDict
 process vardict_calling {
-    cpus 1
+    maxForks params.vardict_forks
+    cpus params.vardict_cpu
 
     tag "${bam.baseName}-vardict"
     
@@ -372,7 +388,8 @@ process vardict_calling {
 
 // Process to call variants using SNVer
 process snver_calling {
-    cpus 1
+    maxForks params.snver_forks
+    cpus params.snver_cpu
 
     tag "${bam.baseName}-snver"
     
@@ -407,10 +424,9 @@ process snver_calling {
 
 
 // Process to generate final consensus VCF from all callers using majority rule
-// Majority rule - variant is true if detected more than 2 callers
+// Majority rule - variant is true if detected more than 3 callers
 process generate_final_vcf_indels {
     maxForks 1
-    cpus 1
 
     tag "${sample}-generate"
 
@@ -428,7 +444,6 @@ process generate_final_vcf_indels {
 
 process generate_final_vcf_snps {
     maxForks 1
-    cpus 1
 
     tag "${sample}-generate"
 
@@ -461,7 +476,7 @@ process process_final_vcf_snps {
 
     script:
     """
-    bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.snps.vcf.gz
+    bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.snps.vcf.gz
     """
 }
 
@@ -481,14 +496,11 @@ process process_final_vcf_indels {
 
     script:
     """
-    bcftools reheader -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.indels.vcf.gz
+    bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.indels.vcf.gz
     """
 }
 
 process cleanup {
-    maxForks 1
-    cpus 1
-
     tag "${bam.baseName}-cleanup"
 
     input:
