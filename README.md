@@ -63,19 +63,27 @@ nextflow run polyChoCallate.nf \
 ```
 
 ## ⚙️ Parameters
-| Parameter | Default | Description |
-| :-------- | :------- | :---------- |
-|--samples_tsv	|samples.tsv|	TSV file with samples|
-|--outdir	|ChoCallate_output|	Output directory|
-|--reference_genome	|-|	Reference genome (FASTA), must be not gzipped|
-|--reference_index	|-	|Bowtie2 index prefix for the reference|
-|--min_coverage|	5|	Minimum position coverage depth for SNP-calling|
-|--min_base_quality	|20	|Minimum base quality for SNP-calling|
-|--bowtie2_cpu	|10	|Number of threads for Bowtie2|
-|--min_snp_qual	|20	|Minimum SNP quality|
-|--ploidy |2 |Ploidy (for `polyChoCallate.py` only)|
-|--reads_type	|pe	|Reads type (pe for paired-end, se for single-end)|
-|--reads_source	|gbs|	Data source (gbs for GBS or wgs for WGS)|
+| Parameter | Default | Description | ChoCallate | polyChoCallate |
+| :-------- | :------- | :---------- | :---------: | :----------: |
+|--samples_tsv	|samples.tsv|	TSV file with samples| 🟢 | 🟢 |
+|--outdir	|ChoCallate_output|	Output directory| 🟢 | 🟢 |
+|--reference_genome	|-|	Reference genome (FASTA), must be not gzipped| 🟢 | 🟢 |
+|--reference_index	|-	|Bowtie2 index prefix for the reference| 🟢 | 🟢 |
+|--min_coverage|	5|	Minimum position coverage depth for SNP-calling| 🟢 | 🟢 |
+|--min_base_quality	|20	|Minimum base quality for SNP-calling| 🟢 | 🟢 |
+|--min_snp_qual	|20	|Minimum SNP quality| 🟢 | 🟢 |
+|--reads_type	|pe	|Reads type (pe for paired-end, se for single-end)| 🟢 | 🟢 |
+|--reads_source	|gbs|	Data source (gbs for GBS or wgs for WGS)| 🟢 | 🟢 |
+|--bowtie2_cpu	|10	|Number of threads for Bowtie2| 🟢 | 🟢 |
+|--bowtie2_forks	|1	|Number of Bowtie2 processes running in parallel| 🟢 | 🟢 |
+|--freebayes_forks	|1	|Number of freebayes processes running in parallel| 🟢 | 🟢 |
+|--gatk4_forks	|1	|Number of GATK4 processes running in parallel| 🟢 | 🟢 |
+|--snver_forks	|1	|Number of Snver processes running in parallel| 🟢 | 🟢 |
+|--bcftools_cpu	|1	|Number of threads for bcftools| 🟢 | 🔴 |
+|--bcftools_forks	|1	|Number of bcftools processes running in parallel| 🟢 | 🔴 |
+|--vardict_cpu	|1	|Number of threads for VarDict| 🟢 | 🔴 |
+|--vardict_forks	|1	|Number of VarDict processes running in parallel| 🟢 | 🔴 |
+|--ploidy |2 |Ploidy | 🔴 | 🟢 |
 
 
 ## 📂 Input Data Structure
