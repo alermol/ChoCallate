@@ -79,6 +79,7 @@ nextflow run polyChoCallate.nf \
 |--freebayes_forks	|1	|Number of freebayes processes running in parallel| 🟢 | 🟢 |
 |--gatk4_forks	|1	|Number of GATK4 processes running in parallel| 🟢 | 🟢 |
 |--snver_forks	|1	|Number of Snver processes running in parallel| 🟢 | 🟢 |
+|--debug	|false	|If set, the working directory will not be deleted after the pipeline completes| 🟢 | 🟢 |
 |--bcftools_cpu	|1	|Number of threads for bcftools| 🟢 | 🔴 |
 |--bcftools_forks	|1	|Number of bcftools processes running in parallel| 🟢 | 🔴 |
 |--vardict_cpu	|1	|Number of threads for VarDict| 🟢 | 🔴 |

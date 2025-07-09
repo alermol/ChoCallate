@@ -18,6 +18,7 @@ params.gatk4_forks = 1
 params.vardict_cpu = 1
 params.vardict_forks = 1
 params.snver_forks = 1
+params.debug = false
 
 // Main workflow definition
 workflow {
@@ -103,9 +104,9 @@ workflow {
 
 // Cleanup temporary files after workflow completion
 workflow.onComplete {
-    def tmpDir = file("work/")
-    if (tmpDir.exists()) {
-        tmpDir.deleteDir()
+    def workDir = workflow.workDir ? file(workflow.workDir) : null
+    if (workDir?.exists() && !params.debug) {
+        workDir.deleteDir()
         }
 }
 

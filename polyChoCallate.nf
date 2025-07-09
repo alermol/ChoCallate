@@ -91,9 +91,9 @@ workflow {
 
 // Cleanup temporary files after workflow completion
 workflow.onComplete {
-    def tmpDir = file("work/")
-    if (tmpDir.exists()) {
-        tmpDir.deleteDir()
+    def workDir = workflow.workDir ? file(workflow.workDir) : null
+    if (workDir?.exists() && !params.debug) {
+        workDir.deleteDir()
         }
 }
 
