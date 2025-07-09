@@ -1,24 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-from collections import defaultdict, Counter
+import sqlite3
 
 def sort_gt(s):
     parts = s.split('/')
-    numbers = [int(part) for part in parts]
-    numbers_sorted = sorted(numbers)
-    result = '/'.join(map(str, numbers_sorted))
-    return result
-
-
-def get_most_frequent(items):
-    counter = Counter(items)
-    most_common = counter.most_common(1)
-    return most_common
-
+    numbers = sorted(int(part) for part in parts)
+    return '/'.join(map(str, numbers))
 
 def parse_vcf(vcf_file):
-    variants = defaultdict(dict)
     with open(vcf_file) as f:
         for line in f:
             if line.startswith('#'):
@@ -26,16 +16,14 @@ def parse_vcf(vcf_file):
             fields = line.strip().split('\t')
             if '.' in fields[9]:
                 continue
-            else:
-                chrom = fields[0]
-                pos = int(fields[1])
-                ref = fields[3]
-                alt = fields[4]
-                gt = sort_gt(fields[9])
-                variants[(chrom, pos)] = [(ref, alt, gt)]
-    return variants
+            chrom = fields[0]
+            pos = int(fields[1])
+            ref = fields[3]
+            alt = fields[4]
+            gt = sort_gt(fields[9])
+            yield (chrom, pos, ref, alt, gt)
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--vcf1', required=True, help='Path to VCF file 1 (bcftools)')
     parser.add_argument('--vcf2', required=True, help='Path to VCF file 2')
@@ -45,27 +33,81 @@ if __name__ == "__main__":
     parser.add_argument('--sample', required=True, help='Sample name')
     args = parser.parse_args()
 
-    base_vars = parse_vcf(args.vcf1)
+    conn = sqlite3.connect(f'{args.sample}_database.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE variants (
+            chrom TEXT NOT NULL,
+            pos INTEGER NOT NULL,
+            ref TEXT NOT NULL,
+            alt TEXT NOT NULL,
+            gt TEXT NOT NULL,
+            source INTEGER NOT NULL,
+            PRIMARY KEY (chrom, pos, source))
+    ''')
 
-    for file in [args.vcf2, args.vcf3, args.vcf4, args.vcf5]:
-        polymorphic_vcf = parse_vcf(file)
-        for coord, gen in base_vars.items():
-            base_vars[coord].append(gen[0])
+    vcf_files = [
+        (1, args.vcf1),
+        (2, args.vcf2),
+        (3, args.vcf3),
+        (4, args.vcf4),
+        (5, args.vcf5)
+    ]
+
+    for source_id, vcf_file in vcf_files:
+        for record in parse_vcf(vcf_file):
+            chrom, pos, ref, alt, gt = record
+            try:
+                c.execute('''
+                    INSERT INTO variants (chrom, pos, ref, alt, gt, source)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (chrom, pos, ref, alt, gt, source_id))
+            except sqlite3.IntegrityError:
+                continue
+    conn.commit()
+
+    query = '''
+        WITH base_coords AS (
+        	SELECT DISTINCT chrom, pos, ref, alt, gt FROM variants
+        ),
+        aggregated AS (
+        	SELECT 
+        		v.chrom, 
+        		v.pos, 
+        		v.ref, 
+        		v.alt, 
+        		v.gt, 
+        		COUNT(*) AS cnt
+        	FROM variants v
+        	JOIN base_coords b 
+        		ON v.chrom = b.chrom AND v.pos = b.pos AND v.ref = b.ref AND v.alt = b.alt AND v.gt = b.gt
+        	GROUP BY v.chrom, v.pos, v.ref, v.alt, v.gt
+        ),
+        ranked AS (
+        	SELECT 
+        		*,
+        		ROW_NUMBER() OVER (
+        			PARTITION BY chrom, pos, ref, alt, gt
+        			ORDER BY cnt DESC
+        		) AS rn
+        	FROM aggregated
+        )
+        SELECT chrom, pos, ref, alt, gt, cnt
+        FROM ranked
+        WHERE rn = 1
+    '''
+    c.execute(query)
+    results = c.fetchall()
 
     with open(f"{args.sample}.vcf", 'w') as out:
         out.write('##fileformat=VCFv4.3\n')
         out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')
         out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}\n')
-        for coord, gen in base_vars.items():
-            most_freq_var = get_most_frequent(gen)
-            if ((most_freq_var[0][1] < 3) | 
-                ('.' in most_freq_var[0][0][2]) | 
-                (not most_freq_var[0][0][0].isupper())):
-                continue
-            else:
-                chrom = coord[0]
-                pos = coord[1]
-                ref = most_freq_var[0][0][0]
-                alt = most_freq_var[0][0][1]
-                gt = most_freq_var[0][0][2]
-                out.write('\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f'{gt}\n']))
+        
+        for row in results:
+            chrom, pos, ref, alt, gt, cnt = row
+            if cnt >= 3 and ref.isupper() and '.' not in gt:
+                out.write('\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f"{gt}\n"]))
+
+if __name__ == "__main__":
+    main()
