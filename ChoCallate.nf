@@ -93,13 +93,15 @@ workflow {
     generate_final_vcf_indels(merged_indels_vcfs)
     process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
-    cleanup(map_reads.out.bam, 
+    if (params.debug) {
+        cleanup(map_reads.out.bam,
             bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage,
             generate_final_vcf_snps.out.fvcf,
             merged_snps_vcfs,
             process_final_vcf_snps.out.final_vcf_snp,
             process_final_vcf_indels.out.final_vcf_indel)
+    }
 }
 
 // Cleanup temporary files after workflow completion
