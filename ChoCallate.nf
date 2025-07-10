@@ -93,7 +93,7 @@ workflow {
     generate_final_vcf_indels(merged_indels_vcfs)
     process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
-    if (params.debug) {
+    if (!params.debug) {
         cleanup(map_reads.out.bam,
             bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage,
