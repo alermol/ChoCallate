@@ -9,6 +9,11 @@ def sort_gt(s):
     numbers_sorted = sorted(numbers)
     return '/'.join(map(str, numbers_sorted))
 
+
+# def extract_contigs_list(vcf):
+#     with open()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--vcf1', required=True, help='Path to VCF file 1 (bcftools)')
@@ -19,11 +24,9 @@ def main():
     parser.add_argument('--sample', required=True, help='Sample name')
     args = parser.parse_args()
 
-    # Set up in-memory database
-    conn = sqlite3.connect(f'{args.sample}_database.db')
+    conn = sqlite3.connect(f':memory:')
     cursor = conn.cursor()
     
-    # Create tables
     cursor.execute('''
         CREATE TABLE variants (
             chrom TEXT NOT NULL,
@@ -44,10 +47,8 @@ def main():
     ''')
     conn.commit()
 
-    # Track base positions
     base_positions_set = set()
     
-    # Process base VCF (vcf1)
     with open(args.vcf1) as f:
         for line in f:
             if line.startswith('#'):
@@ -68,7 +69,6 @@ def main():
             ''', (chrom, pos))
     conn.commit()
 
-    # Process other VCFs (vcf2 to vcf5)
     other_vcfs = [
         (2, args.vcf2),
         (3, args.vcf3),
@@ -93,7 +93,6 @@ def main():
                 ''', (chrom, pos, ref, alt, gt, source_id))
         conn.commit()
 
-    # Create genotypes table (5 entries per base position)
     cursor.execute('''
         CREATE TABLE genotypes AS
         SELECT base.chrom, base.pos,
@@ -106,7 +105,6 @@ def main():
         LEFT JOIN variants v ON base.chrom = v.chrom AND base.pos = v.pos AND v.source = s.source
     ''')
 
-    # Query for most frequent genotypes meeting criteria
     cursor.execute('''
         SELECT chrom, pos, ref, alt, gt
         FROM (
@@ -120,7 +118,6 @@ def main():
     ''')
     results = cursor.fetchall()
 
-    # Write output VCF
     with open(f"{args.sample}.vcf", 'w') as out:
         out.write('##fileformat=VCFv4.3\n')
         out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')

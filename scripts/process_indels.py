@@ -33,7 +33,7 @@ def main():
     parser.add_argument('--sample', required=True, help='Sample name')
     args = parser.parse_args()
 
-    conn = sqlite3.connect(f'{args.sample}_database.db')
+    conn = sqlite3.connect(f':memory:')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE variants (
