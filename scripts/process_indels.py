@@ -31,9 +31,10 @@ def main():
     parser.add_argument('--vcf4', required=True, help='Path to VCF file 4')
     parser.add_argument('--vcf5', required=True, help='Path to VCF file 5')
     parser.add_argument('--sample', required=True, help='Sample name')
+    parser.add_argument('--chr', required=True, help='Chromosome name')
     args = parser.parse_args()
 
-    conn = sqlite3.connect(f':memory:')
+    conn = sqlite3.connect(':memory:')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE variants (
@@ -99,7 +100,7 @@ def main():
     c.execute(query)
     results = c.fetchall()
 
-    with open(f"{args.sample}.vcf", 'w') as out:
+    with open(f"all_chrs/{args.chr}.vcf", 'w') as out:
         out.write('##fileformat=VCFv4.3\n')
         out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')
         out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}\n')
