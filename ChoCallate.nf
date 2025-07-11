@@ -268,9 +268,9 @@ process freebayes_calling {
             bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
 
-        bcftools view -v snps -Ov -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
+        bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
         
-        bcftools view -v indels -Ov -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
+        bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
     
     else if ( params.reads_source == 'wgs' )
@@ -283,9 +283,9 @@ process freebayes_calling {
             bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
 
-        bcftools view -v snps -Ov -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
+        bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
         
-        bcftools view -v indels -Ov -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
+        bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
     
     else
@@ -317,9 +317,9 @@ process bcftools_calling {
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.bcftools
 
-    bcftools view -V indels,mnps,bnd,other -Ov -o ${bam.baseName}.snps_bcftools ${bam.baseName}.bcftools
+    bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_bcftools ${bam.baseName}.bcftools
     
-    bcftools view -v indels -Ov -o ${bam.baseName}.indels_bcftools ${bam.baseName}.bcftools
+    bcftools view -v indels -Oz -o ${bam.baseName}.indels_bcftools ${bam.baseName}.bcftools
     """
 }
 
@@ -341,15 +341,15 @@ process gatk4_calling {
     
     script:
     """
-    gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage}
+    gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} --do-not-run-physical-phasing true
     bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
 
-    bcftools view -v snps -Ov -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
+    bcftools view -v snps -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
     
-    bcftools view -v indels -Ov -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
+    bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
     """
 }
 
@@ -378,9 +378,9 @@ process vardict_calling {
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.vardict
 
-    bcftools view -v snps -Ov -o ${bam.baseName}.snps_vardict ${bam.baseName}.vardict
+    bcftools view -v snps -Oz -o ${bam.baseName}.snps_vardict ${bam.baseName}.vardict
     
-    bcftools view -v indels -Ov -o ${bam.baseName}.indels_vardict ${bam.baseName}.vardict
+    bcftools view -v indels -Oz -o ${bam.baseName}.indels_vardict ${bam.baseName}.vardict
     """
 }
 
@@ -410,12 +410,12 @@ process snver_calling {
     bcftools reheader -f reference.fasta.fai ${bam.baseName}.filter.vcf | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.snps_snver
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Oz -o ${bam.baseName}.snps_snver
         
     bcftools reheader -f reference.fasta.fai ${bam.baseName}.indel.filter.vcf | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.indels_snver
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Oz -o ${bam.baseName}.indels_snver
     """
 }
 
@@ -435,7 +435,27 @@ process generate_final_vcf_indels {
 
     script:
     """
-    python3 ${projectDir}/scripts/process_indels.py --vcf1 "${vcf1}" --vcf2 "${vcf2}" --vcf3 "${vcf3}" --vcf4 "${vcf4}" --vcf5 "${vcf5}" --sample "${sample}"
+    mkdir all_chrs
+    for i in ${sample}.indels_*; do tabix -C \${i}; done
+    tabix -l ${sample}.indels_bcftools > chr_list
+    while read r
+    do
+    	for i in \$(ls ${sample}.indels_* | grep -v '.csi')
+    	do 
+    		bcftools view -r \${r} \${i} > \${r}.\${i}
+    	done
+    	python3 ${projectDir}/scripts/process_indels.py \
+            --vcf1 \${r}.${sample}.indels_bcftools \
+            --vcf2 \${r}.${sample}.indels_freebayes \
+            --vcf3 \${r}.${sample}.indels_gatk \
+            --vcf4 \${r}.${sample}.indels_vardict \
+            --vcf5 \${r}.${sample}.indels_snver \
+            --sample ${sample} --chr \${r}
+    	rm \${r}.${sample}.indels_*
+    	bgzip all_chrs/*.vcf
+    done < chr_list
+    bcftools concat --naive-force -Oz -o ${sample}.vcf.gz all_chrs/*.gz
+    bgzip -d ${sample}.vcf.gz
     """
 }
 
@@ -452,7 +472,27 @@ process generate_final_vcf_snps {
 
     script:
     """
-    python3 ${projectDir}/scripts/process_snps.py --vcf1 "${vcf1}" --vcf2 "${vcf2}" --vcf3 "${vcf3}" --vcf4 "${vcf4}" --vcf5 "${vcf5}" --sample "${sample}"
+    mkdir all_chrs
+    for i in ${sample}.snps_*; do tabix -C \${i}; done
+    tabix -l ${sample}.snps_bcftools > chr_list
+    while read r
+    do
+    	for i in \$(ls ${sample}.snps_* | grep -v '.csi')
+    	do 
+    		bcftools view -r \${r} \${i} > \${r}.\${i}
+    	done
+    	python3 ${projectDir}/scripts/process_snps.py \
+            --vcf1 \${r}.${sample}.snps_bcftools \
+            --vcf2 \${r}.${sample}.snps_freebayes \
+            --vcf3 \${r}.${sample}.snps_gatk \
+            --vcf4 \${r}.${sample}.snps_vardict \
+            --vcf5 \${r}.${sample}.snps_snver \
+            --sample ${sample} --chr \${r}
+    	rm \${r}.${sample}.snps_*
+    	bgzip all_chrs/*.vcf
+    done < chr_list
+    bcftools concat --naive-force -Oz -o ${sample}.vcf.gz all_chrs/*.gz
+    bgzip -d ${sample}.vcf.gz
     """
 }
 
