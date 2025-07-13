@@ -15,6 +15,9 @@ params.bowtie2_forks = 1
 params.freebayes_forks = 1
 params.gatk4_forks = 1
 params.snver_forks = 1
+params.cons_snps_forks = 1
+params.cons_indels_forks = 1
+params.debug = false
 
 
 // Main workflow definition
@@ -298,7 +301,7 @@ process gatk4_calling {
     
     script:
     """
-    gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} -ERC BP_RESOLUTION -ploidy ${params.ploidy} --do-not-run-physical-phasing true
+    gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} -ERC BP_RESOLUTION -ploidy ${params.ploidy} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
     bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA - | bcftools view --max-alleles 2 - | \
@@ -350,7 +353,7 @@ process snver_calling {
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 2 callers
 process generate_final_vcf_indels {
-    maxForks 1
+    maxForks params.cons_indels_forks
 
     tag "${sample}-generate"
 
@@ -385,7 +388,7 @@ process generate_final_vcf_indels {
 }
 
 process generate_final_vcf_snps {
-    maxForks 1
+    maxForks params.cons_snps_forks
 
     tag "${sample}-generate"
 
