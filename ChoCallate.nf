@@ -81,7 +81,7 @@ workflow {
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
     generate_final_vcf_snps(merged_snps_vcfs)
-    process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
+    final_snps = process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
     // Process INDELs
     merged_indels_vcfs = bcftools_snps.indels_vcf
@@ -93,17 +93,16 @@ workflow {
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
     generate_final_vcf_indels(merged_indels_vcfs)
-    process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
+    final_indels = process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
-    if (!params.debug) {
-        cleanup(map_reads.out.bam,
+    all_vcf_done = final_snps.final_vcf_snp.merge(final_indels.final_vcf_indel)
+
+    cleanup(map_reads.out.bam,
             bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage,
             generate_final_vcf_snps.out.fvcf,
             merged_snps_vcfs,
-            process_final_vcf_snps.out.final_vcf_snp,
-            process_final_vcf_indels.out.final_vcf_indel)
-    }
+            all_vcf_done)
 }
 
 // Cleanup temporary files after workflow completion
@@ -540,6 +539,11 @@ process process_final_vcf_indels {
 }
 
 process cleanup {
+    maxForks 1
+    
+    when:
+    params.debug == true
+    
     tag "${bam.baseName}-cleanup"
 
     input:
@@ -548,8 +552,7 @@ process cleanup {
     path(coverage)
     path(snps_vcf)
     tuple val(sample), path(snp_vcf1), path(snp_vcf2), path(snp_vcf3), path(snp_vcf4), path(snp_vcf5)
-    path(final_vcf_snps)
-    path(final_vcf_indels)
+    path(done_signal)
 
 
     script:
