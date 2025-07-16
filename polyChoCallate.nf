@@ -101,6 +101,10 @@ workflow.onComplete {
         }
 }
 
+workflow.onError {
+    println "Error: ChoCallate execution stopped with the following message: ${workflow.errorMessage}"
+}
+
 // Process to create FASTA index file (for FreeBayes)
 process create_faidx {
     maxForks 1
