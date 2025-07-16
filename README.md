@@ -46,6 +46,14 @@ bash run_test.sh
 ```bash
 bash cleanup.sh
 ```
+5. **(Optional) Adjust amout of RAM available for Snver and VarDict**     
+Important if you are working with large genomes or large numbers of reads      
+Replace N with the desired amount of RAM in GB
+```bash
+sed -i 's/-Xmx1g/-XmxNg/' $CONDA_PREFIX/bin/snver
+sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
+```      
+
 
 ## 🚀 Usage
 **Basic execution**:
@@ -58,7 +66,7 @@ nextflow run ChoCallate.nf \
 nextflow run polyChoCallate.nf \
     --reference_genome /path/to/ref.fasta \
     --reference_index /path/to/ref_index \
-    --samples_tsv samples.tsv
+    --samples_tsv samples.tsv \
     --ploidy 4
 ```
 
@@ -79,8 +87,7 @@ nextflow run polyChoCallate.nf \
 |--freebayes_forks	|1	|Number of freebayes processes running in parallel| 🟢 | 🟢 |
 |--gatk4_forks	|1	|Number of GATK4 processes running in parallel| 🟢 | 🟢 |
 |--snver_forks	|1	|Number of Snver processes running in parallel| 🟢 | 🟢 |
-|--cons_snps_forks	|1	|Number of SNPs consensus generation processes running in parallel| 🟢 | 🟢 |
-|--cons_indels_forks	|1	|Number of INDELs consensus generation processes running in parallel| 🟢 | 🟢 |
+|--cons_forks	|1	|Number of consensus generation processes running in parallel| 🟢 | 🟢 |
 |--debug	|false	|If set, the working directory will not be deleted after the pipeline completes| 🟢 | 🟢 |
 |--bcftools_cpu	|1	|Number of threads for bcftools| 🟢 | 🔴 |
 |--bcftools_forks	|1	|Number of bcftools processes running in parallel| 🟢 | 🔴 |
