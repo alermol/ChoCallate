@@ -89,11 +89,13 @@ workflow {
 
     generate_consensus_vcfs(merged_snps_vcfs, merged_indels_vcfs, create_faidx.out.ref_genome.map{it[1]})
 
-    cleanup(map_reads.out.bam,
-            bam_indexing.out.ind_bam, 
-            bam_cov_generation.out.coverage,
-            merged_snps_vcfs,
-            generate_consensus_vcfs.out.done_signal)
+    if (!params.debug) {
+        cleanup(map_reads.out.bam,
+                bam_indexing.out.ind_bam, 
+                bam_cov_generation.out.coverage,
+                merged_snps_vcfs,
+                generate_consensus_vcfs.out.done_signal)
+    }
 }
 
 // Cleanup temporary files after workflow completion
@@ -482,9 +484,6 @@ process generate_consensus_vcfs {
 
 process cleanup {
     maxForks 1
-    
-    when:
-    params.debug == true
     
     tag "${sample}-cleanup"
 
