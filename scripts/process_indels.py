@@ -100,7 +100,7 @@ def main():
     c.execute(query)
     results = c.fetchall()
 
-    with open(f"all_chrs/{args.chr}.vcf", 'w') as out:
+    with open(f"all_chrs_indels/{args.chr}.vcf", 'w') as out:
         out.write('##fileformat=VCFv4.3\n')
         out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')
         out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}\n')

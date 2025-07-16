@@ -18,8 +18,7 @@ params.gatk4_forks = 1
 params.vardict_cpu = 1
 params.vardict_forks = 1
 params.snver_forks = 1
-params.cons_snps_forks = 1
-params.cons_indels_forks = 1
+params.cons_forks = 1
 params.debug = false
 
 // Main workflow definition
@@ -71,7 +70,6 @@ workflow {
                               bam_cov_generation.out.coverage, 
                               create_faidx.out.ref_genome)
 
-    // Process SNPs
     merged_snps_vcfs = bcftools_snps.snps_vcf
         .join(freebayes_snps.snps_vcf)
         .join(gatk4_snps.snps_vcf)
@@ -80,10 +78,6 @@ workflow {
         .map { sample, bcftools, freebayes, gatk, vardict, snver ->
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
-    generate_final_vcf_snps(merged_snps_vcfs)
-    final_snps = process_final_vcf_snps(generate_final_vcf_snps.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
-
-    // Process INDELs
     merged_indels_vcfs = bcftools_snps.indels_vcf
         .join(freebayes_snps.indels_vcf)
         .join(gatk4_snps.indels_vcf)
@@ -92,17 +86,14 @@ workflow {
         .map { sample, bcftools, freebayes, gatk, vardict, snver ->
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
-    generate_final_vcf_indels(merged_indels_vcfs)
-    final_indels = process_final_vcf_indels(generate_final_vcf_indels.out.fvcf, create_faidx.out.ref_genome.map{it[1]})
 
-    all_vcf_done = final_snps.final_vcf_snp.merge(final_indels.final_vcf_indel)
+    generate_consensus_vcfs(merged_snps_vcfs, merged_indels_vcfs, create_faidx.out.ref_genome.map{it[1]})
 
     cleanup(map_reads.out.bam,
             bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage,
-            generate_final_vcf_snps.out.fvcf,
             merged_snps_vcfs,
-            all_vcf_done)
+            generate_consensus_vcfs.out.done_signal)
 }
 
 // Cleanup temporary files after workflow completion
@@ -427,22 +418,30 @@ process snver_calling {
 
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 3 callers
-process generate_final_vcf_indels {
-    maxForks params.cons_indels_forks
+process generate_consensus_vcfs {
+    maxForks params.cons_forks
 
     tag "${sample}-generate"
 
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
+
     input:
-    tuple val(sample), path(vcf1), path(vcf2), path(vcf3), path(vcf4), path(vcf5)
+    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3), path(snps_vcf4), path(snps_vcf5)
+    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3), path(indels_vcf4), path(indels_vcf5)
+    path(ref_genome_fai)
 
     output:
-    path("${sample}.vcf"), emit: fvcf
+    path("${sample}.snps.vcf.gz")
+    path("${sample}.indels.vcf.gz")
+    val true, emit: done_signal
 
     script:
     """
-    mkdir all_chrs
-    for i in ${sample}.indels_*; do tabix -C \${i}; done
-    tabix -l ${sample}.indels_bcftools > chr_list
+    mkdir all_chrs_snps all_chrs_indels
+    for i in ${sample}.*_*; do tabix -C \${i}; done
+    cut -f 1 ${ref_genome_fai} > chr_list
+    
     while read r
     do
     	for i in \$(ls ${sample}.indels_* | grep -v '.csi')
@@ -456,33 +455,8 @@ process generate_final_vcf_indels {
             --vcf4 \${r}.${sample}.indels_vardict \
             --vcf5 \${r}.${sample}.indels_snver \
             --sample ${sample} --chr \${r}
-    	rm \${r}.${sample}.indels_*
-    	bgzip all_chrs/*.vcf
-    done < chr_list
-    bcftools concat --naive-force -Oz -o ${sample}.vcf.gz all_chrs/*.gz
-    bgzip -d ${sample}.vcf.gz
-    """
-}
 
-process generate_final_vcf_snps {
-    maxForks params.cons_snps_forks
-
-    tag "${sample}-generate"
-
-    input:
-    tuple val(sample), path(vcf1), path(vcf2), path(vcf3), path(vcf4), path(vcf5)
-
-    output:
-    path("${sample}.vcf"), emit: fvcf
-
-    script:
-    """
-    mkdir all_chrs
-    for i in ${sample}.snps_*; do tabix -C \${i}; done
-    tabix -l ${sample}.snps_bcftools > chr_list
-    while read r
-    do
-    	for i in \$(ls ${sample}.snps_* | grep -v '.csi')
+        for i in \$(ls ${sample}.snps_* | grep -v '.csi')
     	do 
     		bcftools view -r \${r} \${i} > \${r}.\${i}
     	done
@@ -493,52 +467,16 @@ process generate_final_vcf_snps {
             --vcf4 \${r}.${sample}.snps_vardict \
             --vcf5 \${r}.${sample}.snps_snver \
             --sample ${sample} --chr \${r}
-    	rm \${r}.${sample}.snps_*
-    	bgzip all_chrs/*.vcf
+    	rm \${r}.${sample}.*_*
+        bgzip all_chrs_snps/\${r}.vcf all_chrs_indels/\${r}.vcf
     done < chr_list
-    bcftools concat --naive-force -Oz -o ${sample}.vcf.gz all_chrs/*.gz
-    bgzip -d ${sample}.vcf.gz
-    """
-}
-
-// Process to finalize and compress the VCF file
-process process_final_vcf_snps {
-    maxForks 1
-    cpus 1
-
-    tag "${vcf.baseName}-finalizeSNP"
-    publishDir "${params.outdir}/${vcf.baseName}/", mode: 'copy', pattern: '*.snps.vcf.gz'
-
-    input:
-    path(vcf)
-    path(ref_genome_fai)
-
-    output:
-    path("${vcf.baseName}.snps.vcf.gz"), emit: final_vcf_snp
-
-    script:
-    """
-    bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.snps.vcf.gz
-    """
-}
-
-process process_final_vcf_indels {
-    maxForks 1
-    cpus 1
-
-    tag "${vcf.baseName}-finalizeINDEL"
-    publishDir "${params.outdir}/${vcf.baseName}/", mode: 'copy', pattern: '*.indels.vcf.gz'
-
-    input:
-    path(vcf)
-    path(ref_genome_fai)
-
-    output:
-    path("${vcf.baseName}.indels.vcf.gz"), emit: final_vcf_indel
-
-    script:
-    """
-    bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} ${vcf} | bcftools sort -Oz -o ${vcf.baseName}.indels.vcf.gz
+    
+    bcftools concat --naive-force -Oz all_chrs_snps/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.snps.vcf.gz
+    bcftools concat --naive-force -Oz all_chrs_indels/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.indels.vcf.gz
     """
 }
 
@@ -548,21 +486,20 @@ process cleanup {
     when:
     params.debug == true
     
-    tag "${bam.baseName}-cleanup"
+    tag "${sample}-cleanup"
 
     input:
     path(tmp_bam)
     tuple path(bam), path(index)
     path(coverage)
-    path(snps_vcf)
     tuple val(sample), path(snp_vcf1), path(snp_vcf2), path(snp_vcf3), path(snp_vcf4), path(snp_vcf5)
-    path(done_signal)
+    val(done_signal)
 
 
     script:
     """
     for i in ${tmp_bam} ${bam} ${index} ${coverage} ${snp_vcf1} ${snp_vcf2} \
-        ${snp_vcf3} ${snp_vcf4} ${snp_vcf5} ${snps_vcf}; do rm -r \$(dirname \$(realpath \${i})); done
+        ${snp_vcf3} ${snp_vcf4} ${snp_vcf5}; do rm -r \$(dirname \$(realpath \${i}))/*; done
     """
 }
 
