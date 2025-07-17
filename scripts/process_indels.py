@@ -107,8 +107,8 @@ def main():
         
         for row in results:
             chrom, pos, ref, alt, gt, cnt = row
-            if cnt >= 3 and ref.isupper() and '.' not in gt:
-                out.write('\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f"{gt}\n"]))
+            if cnt >= 3 and '.' not in gt:
+                out.write('\t'.join([chrom, str(pos), '.', ref.upper(), alt, '.', '.', '.', 'GT', f"{gt}\n"]))
 
 if __name__ == "__main__":
     main()

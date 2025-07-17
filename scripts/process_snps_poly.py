@@ -105,7 +105,7 @@ def main():
             FROM genotypes
             GROUP BY chrom, pos, ref, alt, gt
         ) t
-        WHERE rn = 1 AND cnt >= 2 AND gt NOT LIKE '%.%' AND ref = UPPER(ref)
+        WHERE rn = 1 AND cnt >= 2 AND gt NOT LIKE '%.%'
         ORDER BY chrom, pos, ref, alt, gt
     ''')
     results = cursor.fetchall()
@@ -115,7 +115,7 @@ def main():
         out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')
         out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}\n')
         for chrom, pos, ref, alt, gt in results:
-            out.write('\t'.join([chrom, str(pos), '.', ref, alt, '.', '.', '.', 'GT', f'{gt}\n']))
+            out.write('\t'.join([chrom, str(pos), '.', ref.upper(), alt, '.', '.', '.', 'GT', f'{gt}\n']))
 
 if __name__ == "__main__":
     main()
