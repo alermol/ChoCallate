@@ -60,115 +60,39 @@ if __name__ == "__main__":
     diploid_pipeline_path = parser_resolve_path('diploid_calling.nf')
     polyploid_pipeline_path = parser_resolve_path('polyploid_calling.nf')
 
+    chunks = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
     if args.chunk_size == 0:
-        if args.ploidy == 2:
-            run(
-                f"""
-                {diploid_pipeline_path} \
-                    --samples_tsv {args.samples_tsv} \
-                    --outdir {args.outdir} \
-                    --reference_genome {args.reference_genome} \
-                    --reference_index {args.reference_index} \
-                    --min_coverage {args.min_coverage} \
-                    --min_base_quality {args.min_base_quality} \
-                    --samtools_min_map_qual {args.samtools_min_map_qual} \
-                    --min_snp_qual {args.min_snp_qual} \
-                    --reads_type {args.reads_type} \
-                    --reads_source {args.reads_source} \
-                    --bowtie2_cpu {args.bowtie2_cpu} \
-                    --bowtie2_forks {args.bowtie2_forks} \
-                    --freebayes_forks {args.freebayes_forks} \
-                    --bcftools_cpu {args.bcftools_cpu} \
-                    --bcftools_forks {args.bcftools_forks} \
-                    --gatk4_forks {args.gatk4_forks} \
-                    --vardict_cpu {args.vardict_cpu} \
-                    --vardict_forks {args.vardict_forks} \
-                    --snver_forks {args.snver_forks} \
-                    --cons_forks {args.cons_forks} \
-                    {"--debug" if args.debug else ""}
-                """,
-                shell=True
-            )
-        else:
-            run(
-                f"""
-                {polyploid_pipeline_path} \
-                    --samples_tsv {args.samples_tsv} \
-                    --outdir {args.outdir} \
-                    --reference_genome {args.reference_genome} \
-                    --reference_index {args.reference_index} \
-                    --min_coverage {args.min_coverage} \
-                    --min_base_quality {args.min_base_quality} \
-                    --samtools_min_map_qual {args.samtools_min_map_qual} \
-                    --min_snp_qual {args.min_snp_qual} \
-                    --reads_type {args.reads_type} \
-                    --reads_source {args.reads_source} \
-                    --bowtie2_cpu {args.bowtie2_cpu} \
-                    --bowtie2_forks {args.bowtie2_forks} \
-                    --freebayes_forks {args.freebayes_forks} \
-                    --gatk4_forks {args.gatk4_forks} \
-                    --snver_forks {args.snver_forks} \
-                    --cons_forks {args.cons_forks} \
-                    --ploidy {args.ploidy} \
-                    {"--debug" if args.debug else ""}
-                """,
-                shell=True
-            )
+        print('Input file will be processed as a single file')
     else:
-        chunks = split_samplesheet(args.samples_tsv, args.chunk_size)
-        for c in chunks:
-            if args.ploidy == 2:
-                run(
-                    f"""
-                    {diploid_pipeline_path} \
-                        --samples_tsv {str(c)} \
-                        --outdir {args.outdir} \
-                        --reference_genome {args.reference_genome} \
-                        --reference_index {args.reference_index} \
-                        --min_coverage {args.min_coverage} \
-                        --min_base_quality {args.min_base_quality} \
-                        --samtools_min_map_qual {args.samtools_min_map_qual} \
-                        --min_snp_qual {args.min_snp_qual} \
-                        --reads_type {args.reads_type} \
-                        --reads_source {args.reads_source} \
-                        --bowtie2_cpu {args.bowtie2_cpu} \
-                        --bowtie2_forks {args.bowtie2_forks} \
-                        --freebayes_forks {args.freebayes_forks} \
-                        --bcftools_cpu {args.bcftools_cpu} \
-                        --bcftools_forks {args.bcftools_forks} \
-                        --gatk4_forks {args.gatk4_forks} \
-                        --vardict_cpu {args.vardict_cpu} \
-                        --vardict_forks {args.vardict_forks} \
-                        --snver_forks {args.snver_forks} \
-                        --cons_forks {args.cons_forks} \
-                        {"--debug" if args.debug else ""}
-                    """,
-                    shell=True
-                )
-        else:
-            run(
-                f"""
-                {polyploid_pipeline_path} \
-                    --samples_tsv {str(c)} \
-                    --outdir {args.outdir} \
-                    --reference_genome {args.reference_genome} \
-                    --reference_index {args.reference_index} \
-                    --min_coverage {args.min_coverage} \
-                    --min_base_quality {args.min_base_quality} \
-                    --samtools_min_map_qual {args.samtools_min_map_qual} \
-                    --min_snp_qual {args.min_snp_qual} \
-                    --reads_type {args.reads_type} \
-                    --reads_source {args.reads_source} \
-                    --bowtie2_cpu {args.bowtie2_cpu} \
-                    --bowtie2_forks {args.bowtie2_forks} \
-                    --freebayes_forks {args.freebayes_forks} \
-                    --gatk4_forks {args.gatk4_forks} \
-                    --snver_forks {args.snver_forks} \
-                    --cons_forks {args.cons_forks} \
-                    --ploidy {args.ploidy} \
-                    {"--debug" if args.debug else ""}
+        print(f'Input file was splitted into {len(chunks)} files')
+
+
+    for c in chunks:
+        run(
+            f"""
+            {polyploid_pipeline_path if args.ploidy > 2 else diploid_pipeline_path} \
+                --samples_tsv {str(c)} \
+                --outdir {args.outdir} \
+                --reference_genome {args.reference_genome} \
+                --reference_index {args.reference_index} \
+                --min_coverage {args.min_coverage} \
+                --min_base_quality {args.min_base_quality} \
+                --samtools_min_map_qual {args.samtools_min_map_qual} \
+                --min_snp_qual {args.min_snp_qual} \
+                --reads_type {args.reads_type} \
+                --reads_source {args.reads_source} \
+                --bowtie2_cpu {args.bowtie2_cpu} \
+                --bowtie2_forks {args.bowtie2_forks} \
+                --freebayes_forks {args.freebayes_forks} \
+                {"" if args.ploidy > 2 else f"--bcftools_cpu {args.bcftools_cpu}"} \
+                {"" if args.ploidy > 2 else f"--bcftools_forks {args.bcftools_forks}"} \
+                --gatk4_forks {args.gatk4_forks} \
+                {"" if args.ploidy > 2 else f"--vardict_cpu {args.vardict_cpu}"} \
+                {"" if args.ploidy > 2 else f"--vardict_forks {args.vardict_forks}"} \
+                --snver_forks {args.snver_forks} \
+                --cons_forks {args.cons_forks} \
+                {f"--ploidy {args.ploidy}" if args.ploidy > 2 else ""}
+                {"--debug" if args.debug else ""}
                 """,
                 shell=True
             )
-    
-
