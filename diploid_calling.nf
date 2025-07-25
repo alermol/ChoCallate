@@ -1,4 +1,4 @@
-
+#!/usr/bin/env nextflow
 
 // ChoCallate
 // Pipeline for SNV/INDEL calling using *Cho*rus of *Call*ers
