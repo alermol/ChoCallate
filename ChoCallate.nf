@@ -1,3 +1,5 @@
+
+
 // ChoCallate
 // Pipeline for SNV/INDEL calling using *Cho*rus of *Call*ers
 
@@ -450,7 +452,7 @@ process generate_consensus_vcfs {
     	do 
     		bcftools view -r \${r} \${i} > \${r}.\${i}
     	done
-    	python3 ${projectDir}/scripts/process_indels.py \
+    	process_indels.py \
             --vcf1 \${r}.${sample}.indels_bcftools \
             --vcf2 \${r}.${sample}.indels_freebayes \
             --vcf3 \${r}.${sample}.indels_gatk \
@@ -462,7 +464,7 @@ process generate_consensus_vcfs {
     	do 
     		bcftools view -r \${r} \${i} > \${r}.\${i}
     	done
-    	python3 ${projectDir}/scripts/process_snps.py \
+    	process_snps.py \
             --vcf1 \${r}.${sample}.snps_bcftools \
             --vcf2 \${r}.${sample}.snps_freebayes \
             --vcf3 \${r}.${sample}.snps_gatk \

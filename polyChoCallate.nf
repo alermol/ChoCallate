@@ -379,7 +379,7 @@ process generate_consensus_vcfs {
     	do 
     		bcftools view -r \${r} \${i} > \${r}.\${i}
     	done
-    	python3 ${projectDir}/scripts/process_indels_poly.py \
+    	process_indels_poly.py \
             --vcf1 \${r}.${sample}.indels_gatk \
             --vcf2 \${r}.${sample}.indels_freebayes \
             --vcf3 \${r}.${sample}.indels_snver\
@@ -389,7 +389,7 @@ process generate_consensus_vcfs {
     	do 
     		bcftools view -r \${r} \${i} > \${r}.\${i}
     	done
-    	python3 ${projectDir}/scripts/process_snps_poly.py \
+    	process_snps_poly.py \
             --vcf1 \${r}.${sample}.snps_gatk \
             --vcf2 \${r}.${sample}.snps_freebayes \
             --vcf3 \${r}.${sample}.snps_snver\
