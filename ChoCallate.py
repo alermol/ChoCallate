@@ -57,14 +57,14 @@ if __name__ == "__main__":
     # add validation of arguments
 
 
-    diploid_pipeline_path = parser_resolve_path('diploid_calling.nf')
-    polyploid_pipeline_path = parser_resolve_path('polyploid_calling.nf')
+    diploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/diploid_calling.nf')
+    polyploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/polyploid_calling.nf')
 
     chunks = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
     if args.chunk_size == 0:
-        print('Input file will be processed as a single file')
+        print('The input file will be processed as a single file.')
     else:
-        print(f'Input file was splitted into {len(chunks)} files')
+        print(f'The input file was split into {len(chunks)} files.')
 
 
     for c in chunks:
