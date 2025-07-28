@@ -1,24 +1,24 @@
 # ChoCallate 🍫
 
-**ChoCallate** (*Chor*us of *Call*ers) is an automated pipeline for calling single-nucleotide variants (SNVs) and indels (INDELs) using multiple popular variant callers. The pipeline consolidates results and applies a majority rule for final variant calling.
+**ChoCallate** (**Cho**rus of **Call**ers) is an automated pipeline for calling single-nucleotide variants (SNVs) and indels (INDELs) using several variant callers. The pipeline consolidates results and applies a majority rule for final variant calling.
 
 ## 📋 Description
-
+<!-- 
 ⚠️ **Important Notes**
 - **Diploid species**: The main pipeline `ChoCallate.nf` is optimized for diploid organisms. Some integrated callers (e.g., vardict, bcftools) assume diploidy by default
-- **Polyploid species**: For polyploid species, use the `polyChoCallate.nf` pipeline with explicit ploidy parameterization. VarDict and bcftools are not using in `polyChoCallate.nf`.
+- **Polyploid species**: For polyploid species, use the `polyChoCallate.nf` pipeline with explicit ploidy parameterization. VarDict and bcftools are not using in `polyChoCallate.nf`. -->
 
 
 **Key Features**
-- **Consensus-driven approach**: Combines results from 5 callers (FreeBayes, bcftools, GATK4, VarDict, SNVer) or 3 in the `polyChoCallate.nf` pipeline, using majority rule
-- **Ploidy flexibility**: Supports both diploid (`ChoCallate.nf`) and polyploid species (`polyChoCallate.nf`).
+- **Consensus-driven approach**: Combines results from 5 callers for diploid calling (FreeBayes, bcftools, GATK4, VarDict, SNVer) or 3 for polyploid calling (VarDict and bcftools are not support ploidy customization), using majority rule
+- **Ploidy flexibility**: Supports both diploid and polyploid species.
 - **Flexible input**: Compatible with both GBS (Genotyping-by-Sequencing) and WGS data
 - **Quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
 
 
 **Workflow Steps**
 1. **Alignment**: Bowtie2-based read alignment
-2. **Variant Calling**: Parallel execution of 5 callers (3 callers in `polyChoCallate.nf`)
+2. **Variant Calling**: Parallel execution of 5 or 3 callers
 3. **Consensus Generation**: Merges results using majority rule
 4. **Output**: Final compressed VCF files
 
@@ -39,7 +39,6 @@ conda activate ChoCallate
 ```
 3. **Run the pipeline on a test data**:
 ```bash
-cd test_data
 bash run_test.sh
 ```
 4. **(Optional) Cleanup output after test**
@@ -58,20 +57,14 @@ sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 ## 🚀 Usage
 **Basic execution**:
 ```bash
-nextflow run ChoCallate.nf \
+./ChoCallate.py \
     --reference_genome /path/to/ref.fasta \
     --reference_index /path/to/ref_index \
     --samples_tsv samples.tsv
-
-nextflow run polyChoCallate.nf \
-    --reference_genome /path/to/ref.fasta \
-    --reference_index /path/to/ref_index \
-    --samples_tsv samples.tsv \
-    --ploidy 4
 ```
 
 ## ⚙️ Parameters
-| Parameter | Default | Description | ChoCallate | polyChoCallate |
+| Parameter | Default | Description | Didploid calling | Polyploid calling |
 | :-------- | :------- | :---------- | :---------: | :----------: |
 |--samples_tsv	|samples.tsv|	TSV file with samples| 🟢 | 🟢 |
 |--outdir	|ChoCallate_output|	Output directory| 🟢 | 🟢 |
@@ -87,13 +80,17 @@ nextflow run polyChoCallate.nf \
 |--freebayes_forks	|1	|Number of freebayes processes running in parallel| 🟢 | 🟢 |
 |--gatk4_forks	|1	|Number of GATK4 processes running in parallel| 🟢 | 🟢 |
 |--snver_forks	|1	|Number of Snver processes running in parallel| 🟢 | 🟢 |
-|--cons_forks	|1	|Number of consensus generation processes running in parallel| 🟢 | 🟢 |
+|--snps_cons_forks	|1	|Number of SNPs consensus VCF generation processes running in parallel| 🟢 | 🟢 |
+|--indels_cons_forks	|1	|Number of INDELs consensus VCF sgeneration processes running in parallel| 🟢 | 🟢 |
+|--chunk_size	|0	|Chunk size for splitting the input file list. A value of 0 means file will not be split into chunks. For details, see the footnote below the table.| 🟢 | 🟢 |
 |--debug	|false	|If set, the working directory will not be deleted after the pipeline completes| 🟢 | 🟢 |
 |--bcftools_cpu	|1	|Number of threads for bcftools| 🟢 | 🔴 |
 |--bcftools_forks	|1	|Number of bcftools processes running in parallel| 🟢 | 🔴 |
 |--vardict_cpu	|1	|Number of threads for VarDict| 🟢 | 🔴 |
 |--vardict_forks	|1	|Number of VarDict processes running in parallel| 🟢 | 🔴 |
 |--ploidy |2 |Ploidy | 🔴 | 🟢 |
+
+> Each chunk will be processed sequentially. Intermediate files will be deleted after processing each chunk is complete. This is useful when processing a large number of files, which could otherwise lead to running out of disk space due to temporary files. 
 
 
 ## 📂 Input Data Structure
@@ -134,13 +131,13 @@ For questions or issues, please open an issue on GitHub.
 To cite this software repository in your work, use the following format:
 
 **APA Style**:  
-Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline for diploid organisms* \[Computer software\]. GitHub. https://github.com/alermol/ChoCallate
+Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline* \[Computer software\]. GitHub. https://github.com/alermol/ChoCallate
 
 **BibTeX**:  
 ```bibtex
 @software{ChoCallate,
   author = {Ermolaev, A.},
-  title = {ChoCallate: Consensus variant calling pipeline for diploid organisms},
+  title = {ChoCallate: Consensus variant calling pipeline},
   url = {https://github.com/alermol/ChoCallate},
   year = {2025}
 }
