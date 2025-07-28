@@ -92,8 +92,8 @@ if __name__ == "__main__":
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
 
-    diploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/diploid_calling.nf')
-    polyploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/polyploid_calling.nf')
+    diploid_pipeline_path = Path(__file__).parent.joinpath('modules/local/nextflow/run/diploid_calling.nf')
+    polyploid_pipeline_path = Path(__file__).parent.joinpath('modules/local/nextflow/run/polyploid_calling.nf')
 
     chunks = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
     if args.chunk_size == 0:
