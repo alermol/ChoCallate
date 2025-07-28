@@ -63,10 +63,10 @@ workflow calling {
 workflow {
     // Create channel from samples TSV file and parse into tuples
     Channel
-        .fromPath( params.samples_tsv )
-        .splitCsv( header: false, sep: '\t' )
-        .map { row -> tuple( row[0], file(row[1]), file(row[2]) ) }
-        .set { sample_run_ch }
+        .fromPath(params.samples_tsv)
+        .splitCsv(header: false, sep: '\t')
+        .map{row -> tuple(row[0], file(row[1]), file(row[2]))}
+        .set{sample_run_ch}
 
     // Define reference files
     ref_index = file(params.reference_index)
@@ -91,20 +91,20 @@ workflow {
     bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    snp_calling_results = calling(bam_indexing.out.ind_bam, 
-                                  bam_cov_generation.out.coverage, 
-                                  create_faidx.out.ref_genome, 
-                                  create_sequence_dictionary.out.gen_dict)
+    calling(bam_indexing.out.ind_bam, 
+            bam_cov_generation.out.coverage, 
+            create_faidx.out.ref_genome, 
+            create_sequence_dictionary.out.gen_dict)
 
-    generate_consensus_vcfs(snp_calling_results.merged_snps_vcfs, 
-                            snp_calling_results.merged_indels_vcfs, 
+    generate_consensus_vcfs(calling.out.merged_snps_vcfs, 
+                            calling.out.merged_indels_vcfs, 
                             create_faidx.out.ref_genome.map{it[1]})
 
     if (!params.debug) {
         cleanup(map_reads.out.bam,
                 bam_indexing.out.ind_bam, 
                 bam_cov_generation.out.coverage,
-                snp_calling_results.merged_snps_vcfs,
+                calling.out.merged_snps_vcfs,
                 generate_consensus_vcfs.out.done_signal)
     }
 }
