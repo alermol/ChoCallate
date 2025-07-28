@@ -63,8 +63,6 @@ def split_samplesheet(file, n):
 
 
 if __name__ == "__main__":
-    number_of_cpus = os.cpu_count()
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--samples_tsv', type=parser_resolve_path, default='samples.tsv')
     parser.add_argument('--outdir', type=str, default='ChoCallate_output')
@@ -92,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
     args = parser.parse_args()
 
-    os.mkdir(args.outdir)
+    Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
 
     diploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/diploid_calling.nf')
     polyploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/polyploid_calling.nf')

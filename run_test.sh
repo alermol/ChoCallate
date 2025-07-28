@@ -16,8 +16,6 @@ echo -e "${name}\t${read1}\t${read2}" > test_data/samples.tsv
     --outdir test_data/chocallate_test \
     --reference_genome test_data/arth_chr1.fasta
 
-rm -rf test_data/chocallate_test
-
 ./ChoCallate.py \
     --samples_tsv test_data/samples.tsv \
     --reference_index test_data/arth_chr1.fasta \
