@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--samples_tsv', type=parser_resolve_path, default='samples.tsv')
-    parser.add_argument('--outdir', type=parser_resolve_path, default='ChoCallate_output')
+    parser.add_argument('--outdir', type=str, default='ChoCallate_output')
     parser.add_argument('--reference_genome', type=parser_resolve_path, required=True)
     parser.add_argument('--reference_index', type=parser_resolve_path, required=True)
     parser.add_argument('--min_coverage', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=5)
@@ -91,6 +91,7 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
     args = parser.parse_args()
 
+    os.mkdir(args.outdir)
 
     diploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/diploid_calling.nf')
     polyploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/polyploid_calling.nf')
@@ -107,7 +108,7 @@ if __name__ == "__main__":
             f"""
             {polyploid_pipeline_path if args.ploidy > 2 else diploid_pipeline_path} \
                 --samples_tsv {str(c)} \
-                --outdir {args.outdir} \
+                --outdir {parser_resolve_path(args.outdir)} \
                 --reference_genome {args.reference_genome} \
                 --reference_index {args.reference_index} \
                 --min_coverage {args.min_coverage} \
