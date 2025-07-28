@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from subprocess import run
 import argparse
-from pathlib import Path
+import os
+import sys
 import tempfile
 from itertools import islice
-import sys
-import os
+from pathlib import Path
+from subprocess import run
 
 
 class RangeCheckAction(argparse.Action):
