@@ -9,7 +9,11 @@ import sys
 
 
 def parser_resolve_path(path):
-    return Path(path).resolve()
+    try:
+        full_path = Path(path).resolve(strict=True)
+    except FileNotFoundError:
+        sys.exit(f'ERROR! The file {path} does not exist. Emergency termination.')
+    return full_path
 
 
 def split_samplesheet(file, n):
@@ -29,10 +33,10 @@ def split_samplesheet(file, n):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--samples_tsv', type=str, default='samples.tsv')
-    parser.add_argument('--outdir', type=str, default='ChoCallate_output')
-    parser.add_argument('--reference_genome', type=parser_resolve_path) # required=True
-    parser.add_argument('--reference_index', type=parser_resolve_path) # required=True
+    parser.add_argument('--samples_tsv', type=parser_resolve_path, default='samples.tsv')
+    parser.add_argument('--outdir', type=parser_resolve_path, default='ChoCallate_output')
+    parser.add_argument('--reference_genome', type=parser_resolve_path, required=True)
+    parser.add_argument('--reference_index', type=parser_resolve_path, required=True)
     parser.add_argument('--min_coverage', type=int, default=5)
     parser.add_argument('--min_base_quality', type=int, default=20)
     parser.add_argument('--samtools_min_map_qual', type=int, default=10)
