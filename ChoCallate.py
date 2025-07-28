@@ -85,7 +85,8 @@ if __name__ == "__main__":
     parser.add_argument('--vardict_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--vardict_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--snver_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--cons_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--snps_cons_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--indels_cons_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--ploidy', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=2, default=2)
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
@@ -126,8 +127,9 @@ if __name__ == "__main__":
                 {"" if args.ploidy > 2 else f"--vardict_cpu {args.vardict_cpu}"} \
                 {"" if args.ploidy > 2 else f"--vardict_forks {args.vardict_forks}"} \
                 --snver_forks {args.snver_forks} \
-                --cons_forks {args.cons_forks} \
-                {f"--ploidy {args.ploidy}" if args.ploidy > 2 else ""}
+                --snps_cons_forks {args.snps_cons_forks} \
+                --indels_cons_forks {args.indels_cons_forks} \
+                {f"--ploidy {args.ploidy}" if args.ploidy > 2 else ""} \
                 {"--debug" if args.debug else ""}
                 """,
                 shell=True

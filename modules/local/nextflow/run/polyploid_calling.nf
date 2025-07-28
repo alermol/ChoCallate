@@ -17,18 +17,59 @@ params.bowtie2_forks = 1
 params.freebayes_forks = 1
 params.gatk4_forks = 1
 params.snver_forks = 1
-params.cons_forks = 1
+params.indels_cons_forks = 1
+params.snps_cons_forks = 1
 params.debug = false
 
+workflow calling {
+    take:
+    indexed_bam
+    coverage_file
+    ref_genome
+    ref_genome_dict
+
+    main:
+    freebayes_calling(indexed_bam, coverage_file, ref_genome)
+    gatk4_calling(indexed_bam, coverage_file, ref_genome, ref_genome_dict)
+    snver_calling(indexed_bam, coverage_file, ref_genome)
+
+    merged_snps_vcfs = gatk4_calling.out.snps_vcf
+        .join(freebayes_calling.out.snps_vcf)
+        .join(snver_calling.out.snps_vcf)
+        .map { sample, gatk, freebayes, snver ->
+            tuple(sample, gatk, freebayes, snver)
+        }
+    merged_indels_vcfs = gatk4_calling.out.indels_vcf
+        .join(freebayes_calling.out.indels_vcf)
+        .join(snver_calling.out.indels_vcf)
+        .map { sample, gatk, freebayes, snver ->
+            tuple(sample, gatk, freebayes, snver)
+        }
+
+    emit:
+    merged_snps_vcfs
+    merged_indels_vcfs
+}
+
+workflow generate_consenus_vcf {
+    take:
+    snp_vcfs
+    indel_vcfs
+    fai_index
+
+    main:
+    generate_consensus_snps(snp_vcfs, fai_index)
+    generate_consensus_indels(indel_vcfs, fai_index)
+}
 
 // Main workflow definition
 workflow {
     // Create channel from samples TSV file and parse into tuples
     Channel
-        .fromPath( params.samples_tsv )
-        .splitCsv( header: false, sep: '\t' )
-        .map { row -> tuple( row[0], file(row[1]), file(row[2]) ) }
-        .set { sample_run_ch }
+        .fromPath(params.samples_tsv)
+        .splitCsv( header: false, sep: '\t')
+        .map{row -> tuple( row[0], file(row[1]), file(row[2]))}
+        .set{sample_run_ch}
 
     // Define reference files
     ref_index = file(params.reference_index)
@@ -53,40 +94,15 @@ workflow {
     bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    freebayes_snps = freebayes_calling(bam_indexing.out.ind_bam, 
-                                      bam_cov_generation.out.coverage, 
-                                      create_faidx.out.ref_genome)
-    gatk4_snps = gatk4_calling(bam_indexing.out.ind_bam, 
-                              bam_cov_generation.out.coverage, 
-                              create_faidx.out.ref_genome,
-                              create_sequence_dictionary.out.gen_dict)
-    snver_snps = snver_calling(bam_indexing.out.ind_bam, 
-                              bam_cov_generation.out.coverage, 
-                              create_faidx.out.ref_genome)
+    calling(bam_indexing.out.ind_bam, 
+            bam_cov_generation.out.coverage, 
+            create_faidx.out.ref_genome, 
+            create_sequence_dictionary.out.gen_dict)
 
-    merged_snps_vcfs = gatk4_snps.snps_vcf
-        .join(freebayes_snps.snps_vcf)
-        .join(snver_snps.snps_vcf)
-        .map { sample, gatk, freebayes, snver ->
-            tuple(sample, gatk, freebayes, snver)
-        }
-    merged_indels_vcfs = gatk4_snps.indels_vcf
-        .join(freebayes_snps.indels_vcf)
-        .join(snver_snps.indels_vcf)
-        .map { sample, gatk, freebayes, snver ->
-            tuple(sample, gatk, freebayes, snver)
-        }
-    
-    generate_consensus_vcfs(merged_snps_vcfs, merged_indels_vcfs, create_faidx.out.ref_genome.map{it[1]})
-
-    if (!params.debug) {
-        cleanup(map_reads.out.bam,
-                bam_indexing.out.ind_bam,
-                bam_cov_generation.out.coverage,
-                merged_snps_vcfs,
-                generate_consensus_vcfs.out.done_signal)
-    }
-
+    // Generate final consensus
+    generate_consenus_vcf(calling.out.merged_snps_vcfs,
+                          calling.out.merged_indels_vcfs,
+                          create_faidx.out.ref_genome.map{it[1]})
 }
 
 // Cleanup temporary files after workflow completion
@@ -351,28 +367,66 @@ process snver_calling {
 
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 2 callers
-process generate_consensus_vcfs {
-    maxForks params.cons_forks
+process generate_consensus_snps {
+    maxForks params.snps_cons_forks
 
-    tag "${sample}-generate"
+    tag "${sample}-generate-SNP-consensus"
 
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
 
     input:
     tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3)
-    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3)
     path(ref_genome_fai)
 
     output:
     path("${sample}.snps.vcf.gz")
-    path("${sample}.indels.vcf.gz")
-    val true, emit: done_signal
 
     script:
     """
-    mkdir all_chrs_snps all_chrs_indels
-    for i in ${sample}.*_*; do tabix -C \${i}; done
+    mkdir all_chrs
+    for i in ${sample}.snps_*; do tabix -C \${i}; done
+    cut -f 1 ${ref_genome_fai} > chr_list
+    
+    while read r
+    do
+        for i in \$(ls ${sample}.snps_* | grep -v '.csi')
+    	do 
+    		bcftools view -r \${r} \${i} > \${r}.\${i}
+    	done
+    	process_snps_poly.py \
+            --vcf1 \${r}.${sample}.snps_gatk \
+            --vcf2 \${r}.${sample}.snps_freebayes \
+            --vcf3 \${r}.${sample}.snps_snver \
+            --sample ${sample} --chr \${r}
+    	rm \${r}.${sample}.snps_*
+        bgzip all_chrs/\${r}.vcf
+    done < chr_list
+    
+    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.snps.vcf.gz
+    """
+}
+
+
+process generate_consensus_indels {
+    maxForks params.indels_cons_forks
+
+    tag "${sample}-generate"
+
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
+
+    input:
+    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3)
+    path(ref_genome_fai)
+
+    output:
+    path("${sample}.indels.vcf.gz")
+
+    script:
+    """
+    mkdir all_chrs
+    for i in ${sample}.indels_*; do tabix -C \${i}; done
     cut -f 1 ${ref_genome_fai} > chr_list
     
     while read r
@@ -384,48 +438,14 @@ process generate_consensus_vcfs {
     	process_indels_poly.py \
             --vcf1 \${r}.${sample}.indels_gatk \
             --vcf2 \${r}.${sample}.indels_freebayes \
-            --vcf3 \${r}.${sample}.indels_snver\
+            --vcf3 \${r}.${sample}.indels_snver \
             --sample ${sample} --chr \${r}
-
-        for i in \$(ls ${sample}.snps_* | grep -v '.csi')
-    	do 
-    		bcftools view -r \${r} \${i} > \${r}.\${i}
-    	done
-    	process_snps_poly.py \
-            --vcf1 \${r}.${sample}.snps_gatk \
-            --vcf2 \${r}.${sample}.snps_freebayes \
-            --vcf3 \${r}.${sample}.snps_snver\
-            --sample ${sample} --chr \${r}
-    	rm \${r}.${sample}.*_*
-        bgzip all_chrs_snps/\${r}.vcf all_chrs_indels/\${r}.vcf
+    	rm \${r}.${sample}.indels_*
+        bgzip all_chrs/\${r}.vcf
     done < chr_list
-    
-    bcftools concat --naive-force -Oz all_chrs_snps/*.gz | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai}| \
-        bcftools sort -Oz -o ${sample}.snps.vcf.gz
-    bcftools concat --naive-force -Oz all_chrs_indels/*.gz | \
+
+    bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
     """
 }
-
-process cleanup {
-    maxForks 1
-
-    tag "${sample}-cleanup"
-
-    input:
-    path(tmp_bam)
-    tuple path(bam), path(index)
-    path(coverage)
-    tuple val(sample), path(snp_vcf1), path(snp_vcf2), path(snp_vcf3)
-    val(done_signal)
-
-
-    script:
-    """
-    for i in ${tmp_bam} ${bam} ${index} ${coverage} ${snp_vcf1} ${snp_vcf2} \
-        ${snp_vcf3}; do rm -r \$(dirname \$(realpath \${i}))/*; done
-    """
-}
-
