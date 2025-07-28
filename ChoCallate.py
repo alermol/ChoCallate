@@ -6,6 +6,37 @@ from pathlib import Path
 import tempfile
 from itertools import islice
 import sys
+import os
+
+
+class RangeCheckAction(argparse.Action):
+    def __init__(self,
+                 option_strings,
+                 dest,
+                 min_val=None,
+                 max_val=None,
+                 no_upper_limit=False,
+                 **kwargs):
+        super().__init__(option_strings, dest, **kwargs)
+        self.min_val = min_val
+        self.max_val = max_val
+        self.no_upper_limit = no_upper_limit
+
+    def __call__(self, parser, namespace, value, option_string=None):
+        ivalue = int(value)
+        if self.no_upper_limit == True:
+            self.max_val = None
+            if ((self.min_val is not None) and (ivalue < self.min_val)):
+                sys.exit(
+                    f"Argument {self.dest}: Invalid value: {value} (must be greater or equal to {self.min_val}). Emergency termination."
+                )
+        else:
+            if (self.min_val is not None and ivalue < self.min_val) or \
+               (self.max_val is not None and ivalue > self.max_val):
+                sys.exit(
+                    f"Argument {self.dest}: Invalid value: {value} (must be in range {self.min_val}-{self.max_val}). Emergency termination."
+                )
+        setattr(namespace, self.dest, ivalue)
 
 
 def parser_resolve_path(path):
@@ -32,33 +63,33 @@ def split_samplesheet(file, n):
 
 
 if __name__ == "__main__":
+    number_of_cpus = os.cpu_count()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--samples_tsv', type=parser_resolve_path, default='samples.tsv')
     parser.add_argument('--outdir', type=parser_resolve_path, default='ChoCallate_output')
     parser.add_argument('--reference_genome', type=parser_resolve_path, required=True)
     parser.add_argument('--reference_index', type=parser_resolve_path, required=True)
-    parser.add_argument('--min_coverage', type=int, default=5)
-    parser.add_argument('--min_base_quality', type=int, default=20)
-    parser.add_argument('--samtools_min_map_qual', type=int, default=10)
-    parser.add_argument('--min_snp_qual', type=int, default=20)
+    parser.add_argument('--min_coverage', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=5)
+    parser.add_argument('--min_base_quality', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
+    parser.add_argument('--samtools_min_map_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=10)
+    parser.add_argument('--min_snp_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
     parser.add_argument('--reads_type', type=str, default='pe', choices=['pe', 'se'])
     parser.add_argument('--reads_source', type=str, default='gbs', choices=['gbs', 'wgs'])
-    parser.add_argument('--bowtie2_cpu', type=int, default=10)
-    parser.add_argument('--bowtie2_forks', type=int, default=1)
-    parser.add_argument('--freebayes_forks', type=int, default=1)
-    parser.add_argument('--bcftools_cpu', type=int, default=1)
-    parser.add_argument('--bcftools_forks', type=int, default=1)
-    parser.add_argument('--gatk4_forks', type=int, default=1)
-    parser.add_argument('--vardict_cpu', type=int, default=1)
-    parser.add_argument('--vardict_forks', type=int, default=1)
-    parser.add_argument('--snver_forks', type=int, default=1)
-    parser.add_argument('--cons_forks', type=int, default=1)
-    parser.add_argument('--ploidy', type=int, default=2)
+    parser.add_argument('--bowtie2_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=10)
+    parser.add_argument('--bowtie2_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--freebayes_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--bcftools_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--bcftools_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--gatk4_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--vardict_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--vardict_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--snver_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--cons_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--ploidy', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=2, default=2)
     parser.add_argument('--debug', action='store_true', default=False)
-    parser.add_argument('--chunk_size', type=int, default=0)
+    parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
     args = parser.parse_args()
-    
-    # add validation of arguments
 
 
     diploid_pipeline_path = parser_resolve_path('modules/local/nextflow/run/diploid_calling.nf')
