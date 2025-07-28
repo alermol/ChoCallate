@@ -23,6 +23,42 @@ params.snver_forks = 1
 params.cons_forks = 1
 params.debug = false
 
+workflow calling {
+    take:
+    indexed_bam
+    coverage_file
+    ref_genome
+    ref_genome_dict
+
+    main:
+    freebayes_calling(indexed_bam, coverage_file, ref_genome)
+    bcftools_calling(indexed_bam, coverage_file, ref_genome)
+    gatk4_calling(indexed_bam, coverage_file, ref_genome, ref_genome_dict)
+    vardict_calling(indexed_bam, coverage_file, ref_genome)
+    snver_calling(indexed_bam, coverage_file, ref_genome)
+
+    merged_snps_vcfs = bcftools_calling.out.snps_vcf
+        .join(freebayes_calling.out.snps_vcf)
+        .join(gatk4_calling.out.snps_vcf)
+        .join(vardict_calling.out.snps_vcf)
+        .join(snver_calling.out.snps_vcf)
+        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
+        }
+    merged_indels_vcfs = bcftools_calling.out.indels_vcf
+        .join(freebayes_calling.out.indels_vcf)
+        .join(gatk4_calling.out.indels_vcf)
+        .join(vardict_calling.out.indels_vcf)
+        .join(snver_calling.out.indels_vcf)
+        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
+        }
+
+    emit:
+    merged_snps_vcfs
+    merged_indels_vcfs
+}
+
 // Main workflow definition
 workflow {
     // Create channel from samples TSV file and parse into tuples
@@ -55,47 +91,20 @@ workflow {
     bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    freebayes_snps = freebayes_calling(bam_indexing.out.ind_bam, 
-                                      bam_cov_generation.out.coverage, 
-                                      create_faidx.out.ref_genome)
-    bcftools_snps = bcftools_calling(bam_indexing.out.ind_bam, 
-                                    bam_cov_generation.out.coverage, 
-                                    create_faidx.out.ref_genome)
-    gatk4_snps = gatk4_calling(bam_indexing.out.ind_bam, 
-                              bam_cov_generation.out.coverage, 
-                              create_faidx.out.ref_genome,
-                              create_sequence_dictionary.out.gen_dict)
-    vardict_snps = vardict_calling(bam_indexing.out.ind_bam, 
+    snp_calling_results = calling(bam_indexing.out.ind_bam, 
                                   bam_cov_generation.out.coverage, 
-                                  create_faidx.out.ref_genome)
-    snver_snps = snver_calling(bam_indexing.out.ind_bam, 
-                              bam_cov_generation.out.coverage, 
-                              create_faidx.out.ref_genome)
+                                  create_faidx.out.ref_genome, 
+                                  create_sequence_dictionary.out.gen_dict)
 
-    merged_snps_vcfs = bcftools_snps.snps_vcf
-        .join(freebayes_snps.snps_vcf)
-        .join(gatk4_snps.snps_vcf)
-        .join(vardict_snps.snps_vcf)
-        .join(snver_snps.snps_vcf)
-        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-        }
-    merged_indels_vcfs = bcftools_snps.indels_vcf
-        .join(freebayes_snps.indels_vcf)
-        .join(gatk4_snps.indels_vcf)
-        .join(vardict_snps.indels_vcf)
-        .join(snver_snps.indels_vcf)
-        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-        }
-
-    generate_consensus_vcfs(merged_snps_vcfs, merged_indels_vcfs, create_faidx.out.ref_genome.map{it[1]})
+    generate_consensus_vcfs(snp_calling_results.merged_snps_vcfs, 
+                            snp_calling_results.merged_indels_vcfs, 
+                            create_faidx.out.ref_genome.map{it[1]})
 
     if (!params.debug) {
         cleanup(map_reads.out.bam,
                 bam_indexing.out.ind_bam, 
                 bam_cov_generation.out.coverage,
-                merged_snps_vcfs,
+                snp_calling_results.merged_snps_vcfs,
                 generate_consensus_vcfs.out.done_signal)
     }
 }
