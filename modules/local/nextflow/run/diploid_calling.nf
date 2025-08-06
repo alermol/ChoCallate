@@ -1,30 +1,32 @@
 #!/usr/bin/env nextflow
 
-// ChoCallate
-// Pipeline for SNV/INDEL calling using *Cho*rus of *Call*ers
+params.samples_tsv        = 'input.tsv'
+params.outdir             = 'ChoCallate_output'
 
-params.samples_tsv = 'input.tsv'
-params.outdir = 'ChoCallate_output'
-params.min_coverage = 5
-params.min_base_quality = 20
-params.samtools_min_map_qual = 10
-params.min_snp_qual = 20
-params.reads_type = 'pe' // se - single-end reads; pe - pair-end reads
-params.reads_source = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
-params.bowtie2_cpu = 10
-params.bowtie2_forks = 1
-params.freebayes_forks = 1
-params.bcftools_cpu = 1
-params.bcftools_forks = 1
-params.gatk4_forks = 1
-params.vardict_cpu = 1
-params.vardict_forks = 1
-params.snver_forks = 1
-params.indels_cons_forks = 1
-params.snps_cons_forks = 1
-params.debug = false
+params.min_coverage       = 5
+params.min_base_quality   = 20
+params.min_map_qual       = 10
+params.min_snp_qual       = 20
 
-workflow calling {
+params.reads_type         = 'pe' // se - single-end reads; pe - pair-end reads
+params.reads_source       = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
+
+params.bowtie2_cpu        = 10
+params.bcftools_cpu       = 1
+params.vardict_cpu        = 1
+
+params.bowtie2_forks      = 1
+params.freebayes_forks    = 1
+params.bcftools_forks     = 1
+params.gatk4_forks        = 1
+params.vardict_forks      = 1
+params.snver_forks        = 1
+params.indels_cons_forks  = 1
+params.snps_cons_forks    = 1
+
+params.debug              = false
+
+workflow CALLING {
     take:
     indexed_bam
     coverage_file
@@ -60,7 +62,7 @@ workflow calling {
     merged_indels_vcfs
 }
 
-workflow generate_consenus_vcf {
+workflow CONSENSUS_VCF_GENERATION {
     take:
     snp_vcfs
     indel_vcfs
@@ -89,7 +91,7 @@ workflow {
     create_sequence_dictionary(ref_genome)
 
     // Map reads to reference genome
-    map_reads(sample_run_ch, ref_index)
+    BOWTIE2_ALIGN(sample_run_ch, ref_index)
 
     // Left-align indels in BAM files
     left_align_indels(map_reads.out.bam, 
@@ -103,15 +105,15 @@ workflow {
     bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    calling(bam_indexing.out.ind_bam, 
+    CALLING(bam_indexing.out.ind_bam, 
             bam_cov_generation.out.coverage, 
             create_faidx.out.ref_genome, 
             create_sequence_dictionary.out.gen_dict)
 
     // Generate final consensus
-    generate_consenus_vcf(calling.out.merged_snps_vcfs,
-                          calling.out.merged_indels_vcfs,
-                          create_faidx.out.ref_genome.map{it[1]})
+    CONSENSUS_VCF_GENERATION(calling.out.merged_snps_vcfs,
+                             calling.out.merged_indels_vcfs,
+                             create_faidx.out.ref_genome.map{it[1]})
 }
 
 // Cleanup temporary files after workflow completion
@@ -131,7 +133,7 @@ process create_faidx {
     maxForks 1
     cpus 1
     
-    tag "${ref_genome}-faidx"
+    // tag "${ref_genome}"
 
     input:
     path(ref_genome)
@@ -149,7 +151,7 @@ process create_faidx {
 process create_sequence_dictionary {
     maxForks 1
 
-    tag "${ref_genome.baseName}-CreateSequenceDictionary"
+    // tag "${ref_genome.baseName}-CreateSequenceDictionary"
 
     input:
     path(ref_genome)
@@ -164,11 +166,11 @@ process create_sequence_dictionary {
 }
 
 // Process to map reads to reference genome
-process map_reads {
+process BOWTIE2_ALIGN {
     maxForks params.bowtie2_forks
     cpus params.bowtie2_cpu
 
-    tag "${sample_id}-bowtie2"
+    tag "${sample_id}"
     
     input:
     tuple val(sample_id), val(read1), val(read2)
@@ -181,14 +183,14 @@ process map_reads {
     if ( params.reads_type == 'pe' )
         """
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} | \
-            samtools view -@ ${task.cpus} -S -b -q ${params.samtools_min_map_qual} -F 4 - | \
+            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
         """
     else if ( params.reads_type == 'se' )
         """
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -U ${read1} | \
-            samtools view -@ ${task.cpus} -S -b -q ${params.samtools_min_map_qual} -F 4 - | \
+            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
         """
     else
@@ -200,7 +202,7 @@ process left_align_indels {
     cpus 1
     maxForks 1
 
-    tag "${bam.baseName}-LeftAlignIndels"
+    tag "${bam.baseName}"
 
     input:
     path(bam)
@@ -221,7 +223,7 @@ process bam_indexing {
     maxForks 1
     cpus 1
 
-    tag "${bam.baseName}-samtools"
+    tag "${bam.baseName}"
     
     input:
     path(bam)
@@ -240,7 +242,7 @@ process bam_cov_generation {
     cpus 1
     maxForks 1
     
-    tag "${bam.baseName}-coverage"
+    tag "${bam.baseName}"
 
     input:
     path(bam)
@@ -260,7 +262,7 @@ process bam_cov_generation {
 process freebayes_calling {
     maxForks params.freebayes_forks
 
-    tag "${bam.baseName}-freebayes"
+    tag "${bam.baseName}"
     
     input:
     tuple path(bam), path(bam_index)
@@ -311,7 +313,7 @@ process bcftools_calling {
     maxForks params.bcftools_forks
     cpus params.bcftools_cpu
     
-    tag "${bam.baseName}-bcftools"
+    tag "${bam.baseName}"
     
     input:
     tuple path(bam), path(bam_index)
@@ -341,7 +343,7 @@ process bcftools_calling {
 process gatk4_calling {
     maxForks params.gatk4_forks
 
-    tag "${bam.baseName}-gatk4"
+    tag "${bam.baseName}"
     
     input:
     tuple path(bam), path(bam_index)
@@ -372,7 +374,7 @@ process vardict_calling {
     maxForks params.vardict_forks
     cpus params.vardict_cpu
 
-    tag "${bam.baseName}-vardict"
+    tag "${bam.baseName}"
     
     input:
     tuple path(bam), path(bam_index)
@@ -402,7 +404,7 @@ process vardict_calling {
 process snver_calling {
     maxForks params.snver_forks
 
-    tag "${bam.baseName}-snver"
+    tag "${bam.baseName}"
     
     input:
     tuple path(bam), path(bam_index)
@@ -439,7 +441,7 @@ process snver_calling {
 process generate_consensus_snps {
     maxForks params.snps_cons_forks
 
-    tag "${sample}-generate-SNP-consensus"
+    tag "${sample}"
 
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
 
@@ -483,7 +485,7 @@ process generate_consensus_snps {
 process generate_consensus_indels {
     maxForks params.indels_cons_forks
 
-    tag "${sample}-generate"
+    tag "${sample}"
 
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
 

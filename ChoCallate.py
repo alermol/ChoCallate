@@ -70,7 +70,7 @@ if __name__ == "__main__":
     parser.add_argument('--reference_index', type=parser_resolve_path, required=True)
     parser.add_argument('--min_coverage', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=5)
     parser.add_argument('--min_base_quality', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
-    parser.add_argument('--samtools_min_map_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=10)
+    parser.add_argument('--min_map_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=10)
     parser.add_argument('--min_snp_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
     parser.add_argument('--reads_type', type=str, default='pe', choices=['pe', 'se'])
     parser.add_argument('--reads_source', type=str, default='gbs', choices=['gbs', 'wgs'])
@@ -112,7 +112,7 @@ if __name__ == "__main__":
                 --reference_index {args.reference_index} \
                 --min_coverage {args.min_coverage} \
                 --min_base_quality {args.min_base_quality} \
-                --samtools_min_map_qual {args.samtools_min_map_qual} \
+                --min_map_qual {args.min_map_qual} \
                 --min_snp_qual {args.min_snp_qual} \
                 --reads_type {args.reads_type} \
                 --reads_source {args.reads_source} \
