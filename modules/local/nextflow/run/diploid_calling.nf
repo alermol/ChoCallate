@@ -8,7 +8,7 @@ params.min_base_quality   = 20
 params.min_map_qual       = 10
 params.min_snp_qual       = 20
 
-params.reads_type         = 'pe' // se - single-end reads; pe - pair-end reads
+params.reads_type         = 'pe' // se - single-end reads; pe - pair-end reads, mx - se and pe reads
 params.reads_source       = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
 
 params.bowtie2_cpu        = 10
@@ -79,7 +79,7 @@ workflow {
     Channel
         .fromPath(params.samples_tsv)
         .splitCsv(header: false, sep: '\t')
-        .map{row -> tuple(row[0], file(row[1]), file(row[2]))}
+        .map{row -> tuple(row[0], file(row[1]), file(row[2]), file(row[3]))}
         .set{sample_run_ch}
 
     // Define reference files
@@ -94,7 +94,7 @@ workflow {
     BOWTIE2_ALIGN(sample_run_ch, ref_index)
 
     // Left-align indels in BAM files
-    left_align_indels(map_reads.out.bam, 
+    left_align_indels(BOWTIE2_ALIGN.out.bam, 
                       create_sequence_dictionary.out.gen_dict, 
                       create_faidx.out.ref_genome)
 
@@ -111,8 +111,8 @@ workflow {
             create_sequence_dictionary.out.gen_dict)
 
     // Generate final consensus
-    CONSENSUS_VCF_GENERATION(calling.out.merged_snps_vcfs,
-                             calling.out.merged_indels_vcfs,
+    CONSENSUS_VCF_GENERATION(CALLING.out.merged_snps_vcfs,
+                             CALLING.out.merged_indels_vcfs,
                              create_faidx.out.ref_genome.map{it[1]})
 }
 
@@ -173,7 +173,7 @@ process BOWTIE2_ALIGN {
     tag "${sample_id}"
     
     input:
-    tuple val(sample_id), val(read1), val(read2)
+    tuple val(sample_id), val(read1), val(read2), val(read3)
     val(ref_index)
 
     output:
@@ -193,8 +193,15 @@ process BOWTIE2_ALIGN {
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
         """
+    else if ( params.reads_type == 'mx' )
+        """
+        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} -U ${read3} | \
+            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
+            samtools fixmate -@ ${task.cpus} -m - - | \
+            samtools sort -@ ${task.cpus} -o ${sample_id}.bam
+        """
     else
-        error 'Invalid reads type: ${params.reads_type}. Available types: se, pe'
+        error 'Invalid reads type: ${params.reads_type}. Available types: se, pe, mx'
 }
 
 // Process to left-align indels in BAM files

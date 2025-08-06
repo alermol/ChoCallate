@@ -72,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument('--min_base_quality', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
     parser.add_argument('--min_map_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=10)
     parser.add_argument('--min_snp_qual', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=20)
-    parser.add_argument('--reads_type', type=str, default='pe', choices=['pe', 'se'])
+    parser.add_argument('--reads_type', type=str, default='pe', choices=['pe', 'se', 'mx'])
     parser.add_argument('--reads_source', type=str, default='gbs', choices=['gbs', 'wgs'])
     parser.add_argument('--bowtie2_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=10)
     parser.add_argument('--bowtie2_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)

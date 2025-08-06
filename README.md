@@ -73,7 +73,7 @@ sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 |--min_coverage|	5|	Minimum position coverage depth for SNP-calling| 🟢 | 🟢 |
 |--min_base_quality	|20	|Minimum base quality for SNP-calling| 🟢 | 🟢 |
 |--min_snp_qual	|20	|Minimum SNP quality| 🟢 | 🟢 |
-|--reads_type	|pe	|Reads type (pe for paired-end, se for single-end)| 🟢 | 🟢 |
+|--reads_type	|pe	|Reads type (pe for paired-end, se for single-end, mx for se and pe reads simultaneously)| 🟢 | 🟢 |
 |--reads_source	|gbs|	Data source (gbs for GBS or wgs for WGS)| 🟢 | 🟢 |
 |--bowtie2_cpu	|10	|Number of threads for Bowtie2| 🟢 | 🟢 |
 |--bowtie2_forks	|1	|Number of Bowtie2 processes running in parallel| 🟢 | 🟢 |
@@ -96,8 +96,8 @@ sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 ## 📂 Input Data Structure
 Example `samples.tsv`:    
 ```text
-sample1    /path/to/sample1_R1.fq.gz    /path/to/sample1_R2.fq.gz
-sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz
+sample1    /path/to/sample1_R1.fq.gz    /path/to/sample1_R2.fq.gz    /path/to/sample1_SE.fq.gz
+sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz    /path/to/sample2_SE.fq.gz
 ````
 
 **`samples.tsv` requirements**:
@@ -108,8 +108,12 @@ sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz
 - Reference genome in FASTA format
 - Bowtie2 index must be pre-built
 
-If `--reads_type se`, then the third column in `samples.tsv` must contain the same data as the second one.
+If `--reads_type se` or `--reads_type pe`, then the third column in `samples.tsv` could be any symbol.     
+If `--reads_type se`, then the third column in `samples.tsv` must contain the same data as the second one.     
+If `--reads_type mx`, then the third column in `samples.tsv` must contain path for single-end reads.
 
+⚠️ **Important Note**     
+Since ChoCallate uses Bowtie2 for alignment, it is possible to process multiple archives of reads simultaneously using comma-separated list. See the [Bowtie2 documentation](https://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#paired-inputs:~:text=BOWTIE2_INDEXES%20environment%20variable.-,%2D1%20%3Cm1%3E,bowtie2%20gets%20the%20reads%20from%20the%20%22standard%20in%22%20or%20%22stdin%22%20filehandle.,-%2D%2Dinterleaved) for details.
 
 ## 📊 Output
 The `outdir` will contain:
