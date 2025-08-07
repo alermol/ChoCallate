@@ -21,8 +21,10 @@ params.bcftools_forks     = 1
 params.gatk4_forks        = 1
 params.vardict_forks      = 1
 params.snver_forks        = 1
-params.indels_cons_forks  = 1
-params.snps_cons_forks    = 1
+params.cons_forks         = 1
+params.cons_cpus          = 5
+
+params.win_size           = 1000000
 
 params.debug              = false
 
@@ -34,25 +36,25 @@ workflow CALLING {
     ref_genome_dict
 
     main:
-    freebayes_calling(indexed_bam, coverage_file, ref_genome)
-    bcftools_calling(indexed_bam, coverage_file, ref_genome)
-    gatk4_calling(indexed_bam, coverage_file, ref_genome, ref_genome_dict)
-    vardict_calling(indexed_bam, coverage_file, ref_genome)
-    snver_calling(indexed_bam, coverage_file, ref_genome)
+    FREEBAYES(indexed_bam, coverage_file, ref_genome)
+    BCFTOOLS(indexed_bam, coverage_file, ref_genome)
+    GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict)
+    VARDICT(indexed_bam, coverage_file, ref_genome)
+    SNVER(indexed_bam, coverage_file, ref_genome)
 
-    merged_snps_vcfs = bcftools_calling.out.snps_vcf
-        .join(freebayes_calling.out.snps_vcf)
-        .join(gatk4_calling.out.snps_vcf)
-        .join(vardict_calling.out.snps_vcf)
-        .join(snver_calling.out.snps_vcf)
+    merged_snps_vcfs = BCFTOOLS.out.snps_vcf
+        .join(FREEBAYES.out.snps_vcf)
+        .join(GATK4.out.snps_vcf)
+        .join(VARDICT.out.snps_vcf)
+        .join(SNVER.out.snps_vcf)
         .map { sample, bcftools, freebayes, gatk, vardict, snver ->
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
-    merged_indels_vcfs = bcftools_calling.out.indels_vcf
-        .join(freebayes_calling.out.indels_vcf)
-        .join(gatk4_calling.out.indels_vcf)
-        .join(vardict_calling.out.indels_vcf)
-        .join(snver_calling.out.indels_vcf)
+    merged_indels_vcfs = BCFTOOLS.out.indels_vcf
+        .join(FREEBAYES.out.indels_vcf)
+        .join(GATK4.out.indels_vcf)
+        .join(VARDICT.out.indels_vcf)
+        .join(SNVER.out.indels_vcf)
         .map { sample, bcftools, freebayes, gatk, vardict, snver ->
             tuple(sample, bcftools, freebayes, gatk, vardict, snver)
         }
@@ -60,17 +62,6 @@ workflow CALLING {
     emit:
     merged_snps_vcfs
     merged_indels_vcfs
-}
-
-workflow CONSENSUS_VCF_GENERATION {
-    take:
-    snp_vcfs
-    indel_vcfs
-    fai_index
-
-    main:
-    generate_consensus_snps(snp_vcfs, fai_index)
-    generate_consensus_indels(indel_vcfs, fai_index)
 }
 
 // Main workflow definition
@@ -87,33 +78,33 @@ workflow {
     ref_genome = file(params.reference_genome)
 
     // Create reference genome index files
-    create_faidx(ref_genome)
-    create_sequence_dictionary(ref_genome)
+    CREATE_FAI_INDEX(ref_genome)
+    CREATE_SEQ_DICT(ref_genome)
 
     // Map reads to reference genome
-    BOWTIE2_ALIGN(sample_run_ch, ref_index)
+    BOWTIE2_MAPPING(sample_run_ch, ref_index)
 
     // Left-align indels in BAM files
-    left_align_indels(BOWTIE2_ALIGN.out.bam, 
-                      create_sequence_dictionary.out.gen_dict, 
-                      create_faidx.out.ref_genome)
+    LEFT_ALIGN_INDELS(BOWTIE2_MAPPING.out.bam, 
+                      CREATE_SEQ_DICT.out.gen_dict, 
+                      CREATE_FAI_INDEX.out.fai_index)
 
     // Index the aligned BAM files
-    bam_indexing(left_align_indels.out.lai_bam)
+    INDEXING_BAM(LEFT_ALIGN_INDELS.out.lai_bam)
 
     // Generate coverage information from BAM files
-    bam_cov_generation(bam_indexing.out.ind_bam.map{it[0]})
+    COVERAGE_GENERATION(INDEXING_BAM.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    CALLING(bam_indexing.out.ind_bam, 
-            bam_cov_generation.out.coverage, 
-            create_faidx.out.ref_genome, 
-            create_sequence_dictionary.out.gen_dict)
-
+    CALLING(INDEXING_BAM.out.ind_bam, 
+            COVERAGE_GENERATION.out.coverage, 
+            CREATE_FAI_INDEX.out.fai_index, 
+            CREATE_SEQ_DICT.out.gen_dict)
+    
     // Generate final consensus
-    CONSENSUS_VCF_GENERATION(CALLING.out.merged_snps_vcfs,
-                             CALLING.out.merged_indels_vcfs,
-                             create_faidx.out.ref_genome.map{it[1]})
+    GENERATE_CONSENSUS(CALLING.out.merged_snps_vcfs,
+                       CALLING.out.merged_indels_vcfs,
+                       CREATE_FAI_INDEX.out.fai_index.map{it[1]})
 }
 
 // Cleanup temporary files after workflow completion
@@ -129,17 +120,15 @@ workflow.onError {
 }
 
 // Process to create FASTA index file (for FreeBayes)
-process create_faidx {
+process CREATE_FAI_INDEX {
     maxForks 1
     cpus 1
-    
-    // tag "${ref_genome}"
 
     input:
     path(ref_genome)
 
     output:
-    tuple path("${ref_genome}"), path("${ref_genome}.fai"), emit: ref_genome
+    tuple path("${ref_genome}"), path("${ref_genome}.fai"), emit: fai_index
 
     script:
     """
@@ -148,10 +137,8 @@ process create_faidx {
 }
 
 // Process to create sequence dictionary (for GATK4)
-process create_sequence_dictionary {
+process CREATE_SEQ_DICT {
     maxForks 1
-
-    // tag "${ref_genome.baseName}-CreateSequenceDictionary"
 
     input:
     path(ref_genome)
@@ -166,7 +153,7 @@ process create_sequence_dictionary {
 }
 
 // Process to map reads to reference genome
-process BOWTIE2_ALIGN {
+process BOWTIE2_MAPPING {
     maxForks params.bowtie2_forks
     cpus params.bowtie2_cpu
 
@@ -205,7 +192,7 @@ process BOWTIE2_ALIGN {
 }
 
 // Process to left-align indels in BAM files
-process left_align_indels {
+process LEFT_ALIGN_INDELS {
     cpus 1
     maxForks 1
 
@@ -226,7 +213,7 @@ process left_align_indels {
 }
 
 // Process to index BAM files
-process bam_indexing {
+process INDEXING_BAM {
     maxForks 1
     cpus 1
 
@@ -245,7 +232,7 @@ process bam_indexing {
 }
 
 // Process to generate coverage information
-process bam_cov_generation {
+process COVERAGE_GENERATION {
     cpus 1
     maxForks 1
     
@@ -266,7 +253,7 @@ process bam_cov_generation {
 }
 
 // Process to call variants using FreeBayes
-process freebayes_calling {
+process FREEBAYES {
     maxForks params.freebayes_forks
 
     tag "${bam.baseName}"
@@ -316,7 +303,7 @@ process freebayes_calling {
 }
 
 // Process to call variants using bcftools
-process bcftools_calling {
+process BCFTOOLS {
     maxForks params.bcftools_forks
     cpus params.bcftools_cpu
     
@@ -347,7 +334,7 @@ process bcftools_calling {
 }
 
 // Process to call variants using GATK4
-process gatk4_calling {
+process GATK4 {
     maxForks params.gatk4_forks
 
     tag "${bam.baseName}"
@@ -377,7 +364,7 @@ process gatk4_calling {
 }
 
 // Process to call variants using VarDict
-process vardict_calling {
+process VARDICT {
     maxForks params.vardict_forks
     cpus params.vardict_cpu
 
@@ -408,7 +395,7 @@ process vardict_calling {
 }
 
 // Process to call variants using SNVer
-process snver_calling {
+process SNVER {
     maxForks params.snver_forks
 
     tag "${bam.baseName}"
@@ -445,90 +432,48 @@ process snver_calling {
 
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 3 callers
-process generate_consensus_snps {
-    maxForks params.snps_cons_forks
+process GENERATE_CONSENSUS {
+    maxForks params.cons_forks
+    cpus params.cons_cpus
 
     tag "${sample}"
 
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
-
-    input:
-    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3), path(snps_vcf4), path(snps_vcf5)
-    path(ref_genome_fai)
-
-    output:
-    path("${sample}.snps.vcf.gz")
-
-    script:
-    """
-    mkdir all_chrs
-    for i in ${sample}.snps_*; do tabix -C \${i}; done
-    cut -f 1 ${ref_genome_fai} > chr_list
-    
-    while read r
-    do
-        for i in \$(ls ${sample}.snps_* | grep -v '.csi')
-    	do 
-    		bcftools view -r \${r} \${i} > \${r}.\${i}
-    	done
-    	process_snps.py \
-            --vcf1 \${r}.${sample}.snps_bcftools \
-            --vcf2 \${r}.${sample}.snps_freebayes \
-            --vcf3 \${r}.${sample}.snps_gatk \
-            --vcf4 \${r}.${sample}.snps_vardict \
-            --vcf5 \${r}.${sample}.snps_snver \
-            --sample ${sample} --chr \${r}
-    	rm \${r}.${sample}.snps_*
-        bgzip all_chrs/\${r}.vcf
-    done < chr_list
-    
-    bcftools concat --naive-force -Oz all_chrs/*.gz | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
-        bcftools sort -Oz -o ${sample}.snps.vcf.gz
-    """
-}
-
-
-process generate_consensus_indels {
-    maxForks params.indels_cons_forks
-
-    tag "${sample}"
-
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
 
     input:
+    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3), path(snps_vcf4), path(snps_vcf5)
     tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3), path(indels_vcf4), path(indels_vcf5)
     path(ref_genome_fai)
 
     output:
+    path("${sample}.snps.vcf.gz")
     path("${sample}.indels.vcf.gz")
 
     script:
     """
-    mkdir all_chrs
-    for i in ${sample}.indels_*; do tabix -C \${i}; done
-    cut -f 1 ${ref_genome_fai} > chr_list
-    
-    while read r
-    do
-    	for i in \$(ls ${sample}.indels_* | grep -v '.csi')
-    	do 
-    		bcftools view -r \${r} \${i} > \${r}.\${i}
-    	done
-    	process_indels.py \
-            --vcf1 \${r}.${sample}.indels_bcftools \
-            --vcf2 \${r}.${sample}.indels_freebayes \
-            --vcf3 \${r}.${sample}.indels_gatk \
-            --vcf4 \${r}.${sample}.indels_vardict \
-            --vcf5 \${r}.${sample}.indels_snver \
-            --sample ${sample} --chr \${r}
-    	rm \${r}.${sample}.indels_*
-        bgzip all_chrs/\${r}.vcf
-    done < chr_list
+    awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
+    bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
 
+    mkdir all_chrs
+    
+    for i in ${sample}.snps_*; do tabix -C \${i}; done
+
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
+    
+    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.snps.vcf.gz
+
+    rm -r all_chrs/*
+
+
+    for i in ${sample}.indels_*; do tabix -C \${i}; done
+    
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
+    
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
     """
 }
-

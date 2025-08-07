@@ -3,11 +3,6 @@
 **ChoCallate** (**Cho**rus of **Call**ers) is an automated pipeline for calling single-nucleotide variants (SNVs) and indels (INDELs) using several variant callers. The pipeline consolidates results and applies a majority rule for final variant calling.
 
 ## 📋 Description
-<!-- 
-⚠️ **Important Notes**
-- **Diploid species**: The main pipeline `ChoCallate.nf` is optimized for diploid organisms. Some integrated callers (e.g., vardict, bcftools) assume diploidy by default
-- **Polyploid species**: For polyploid species, use the `polyChoCallate.nf` pipeline with explicit ploidy parameterization. VarDict and bcftools are not using in `polyChoCallate.nf`. -->
-
 
 **Key Features**
 - **Consensus-driven approach**: Combines results from 5 callers for diploid calling (FreeBayes, bcftools, GATK4, VarDict, SNVer) or 3 for polyploid calling (VarDict and bcftools are not support ploidy customization), using majority rule
@@ -80,8 +75,9 @@ sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 |--freebayes_forks	|1	|Number of freebayes processes running in parallel| 🟢 | 🟢 |
 |--gatk4_forks	|1	|Number of GATK4 processes running in parallel| 🟢 | 🟢 |
 |--snver_forks	|1	|Number of Snver processes running in parallel| 🟢 | 🟢 |
-|--snps_cons_forks	|1	|Number of SNPs consensus VCF generation processes running in parallel| 🟢 | 🟢 |
-|--indels_cons_forks	|1	|Number of INDELs consensus VCF sgeneration processes running in parallel| 🟢 | 🟢 |
+|--cons_forks	|1	|Number of consensus VCF generation processes running in parallel| 🟢 | 🟢 |
+|--cons_cpus	|5	|Number of CPUs for consensus VCF generation processes| 🟢 | 🟢 |
+|--win_size	|1000000	|Window size (in bp) for parallel consensus VCF generation| 🟢 | 🟢 |
 |--chunk_size	|0	|Chunk size for splitting the input file list. A value of 0 means file will not be split into chunks. For details, see the footnote below the table.| 🟢 | 🟢 |
 |--debug	|false	|If set, the working directory will not be deleted after the pipeline completes| 🟢 | 🟢 |
 |--bcftools_cpu	|1	|Number of threads for bcftools| 🟢 | 🔴 |

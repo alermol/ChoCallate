@@ -14,3 +14,5 @@ dependencies:
   - vardict-java=1.8.3
   - nextflow
   - bcftools>=1.20
+  - bedtools
+  - parallel
