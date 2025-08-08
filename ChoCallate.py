@@ -93,8 +93,7 @@ if __name__ == "__main__":
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
 
-    diploid_pipeline_path = Path(__file__).parent.joinpath('modules/local/nextflow/run/diploid_calling.nf')
-    polyploid_pipeline_path = Path(__file__).parent.joinpath('modules/local/nextflow/run/polyploid_calling.nf')
+    pipeline_path = Path(__file__).parent.joinpath('ChoCallate.nf')
 
     chunks = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
     if args.chunk_size == 0:
@@ -106,7 +105,7 @@ if __name__ == "__main__":
     for c in chunks:
         run(
             f"""
-            {polyploid_pipeline_path if args.ploidy > 2 else diploid_pipeline_path} \
+            {pipeline_path} \
                 --samples_tsv {str(c)} \
                 --outdir {parser_resolve_path(args.outdir)} \
                 --reference_genome {args.reference_genome} \

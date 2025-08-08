@@ -8,6 +8,8 @@ params.min_base_quality   = 20
 params.min_map_qual       = 10
 params.min_snp_qual       = 20
 
+params.ploidy             = 2
+
 params.reads_type         = 'pe' // se - single-end reads; pe - pair-end reads, mx - se and pe reads
 params.reads_source       = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
 
@@ -28,41 +30,63 @@ params.win_size           = 1000000
 
 params.debug              = false
 
+
 workflow CALLING {
     take:
     indexed_bam
     coverage_file
     ref_genome
     ref_genome_dict
+    ploidy
 
     main:
-    FREEBAYES(indexed_bam, coverage_file, ref_genome)
-    BCFTOOLS(indexed_bam, coverage_file, ref_genome)
-    GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict)
-    VARDICT(indexed_bam, coverage_file, ref_genome)
-    SNVER(indexed_bam, coverage_file, ref_genome)
+    if (ploidy == 2) {
+        FREEBAYES(indexed_bam, coverage_file, ref_genome, ploidy)
+        GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict, ploidy)
+        SNVER(indexed_bam, coverage_file, ref_genome, ploidy)
+        BCFTOOLS(indexed_bam, coverage_file, ref_genome, ploidy)
+        VARDICT(indexed_bam, coverage_file, ref_genome, ploidy)
 
-    merged_snps_vcfs = BCFTOOLS.out.snps_vcf
-        .join(FREEBAYES.out.snps_vcf)
-        .join(GATK4.out.snps_vcf)
-        .join(VARDICT.out.snps_vcf)
-        .join(SNVER.out.snps_vcf)
-        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-        }
-    merged_indels_vcfs = BCFTOOLS.out.indels_vcf
-        .join(FREEBAYES.out.indels_vcf)
-        .join(GATK4.out.indels_vcf)
-        .join(VARDICT.out.indels_vcf)
-        .join(SNVER.out.indels_vcf)
-        .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-            tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-        }
+        merged_snps_vcfs = BCFTOOLS.out.snps_vcf
+            .join(FREEBAYES.out.snps_vcf)
+            .join(GATK4.out.snps_vcf)
+            .join(VARDICT.out.snps_vcf)
+            .join(SNVER.out.snps_vcf)
+            .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+                tuple(sample, bcftools, freebayes, gatk, vardict, snver)
+            }
+        merged_indels_vcfs = BCFTOOLS.out.indels_vcf
+            .join(FREEBAYES.out.indels_vcf)
+            .join(GATK4.out.indels_vcf)
+            .join(VARDICT.out.indels_vcf)
+            .join(SNVER.out.indels_vcf)
+            .map { sample, bcftools, freebayes, gatk, vardict, snver ->
+                tuple(sample, bcftools, freebayes, gatk, vardict, snver)
+            }
+    } else {
+        FREEBAYES(indexed_bam, coverage_file, ref_genome, ploidy)
+        GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict, ploidy)
+        SNVER(indexed_bam, coverage_file, ref_genome, ploidy)
+
+        merged_snps_vcfs = GATK4.out.snps_vcf
+            .join(FREEBAYES.out.snps_vcf)
+            .join(SNVER.out.snps_vcf)
+            .map { sample, gatk, freebayes, snver ->
+                tuple(sample, gatk, freebayes, snver)
+            }
+        merged_indels_vcfs = GATK4.out.indels_vcf
+            .join(FREEBAYES.out.indels_vcf)
+            .join(SNVER.out.indels_vcf)
+            .map { sample, gatk, freebayes, snver ->
+                tuple(sample, gatk, freebayes, snver)
+            }
+    }
 
     emit:
     merged_snps_vcfs
     merged_indels_vcfs
 }
+
 
 // Main workflow definition
 workflow {
@@ -99,12 +123,20 @@ workflow {
     CALLING(INDEXING_BAM.out.ind_bam, 
             COVERAGE_GENERATION.out.coverage, 
             CREATE_FAI_INDEX.out.fai_index, 
-            CREATE_SEQ_DICT.out.gen_dict)
+            CREATE_SEQ_DICT.out.gen_dict,
+            params.ploidy)
     
     // Generate final consensus
-    GENERATE_CONSENSUS(CALLING.out.merged_snps_vcfs,
-                       CALLING.out.merged_indels_vcfs,
-                       CREATE_FAI_INDEX.out.fai_index.map{it[1]})
+    if (params.ploidy == 2) {
+        GENERATE_CONSENSUS_DIPLOID(CALLING.out.merged_snps_vcfs,
+                                   CALLING.out.merged_indels_vcfs,
+                                   CREATE_FAI_INDEX.out.fai_index.map{it[1]})
+    } else {
+        GENERATE_CONSENSUS_POLYPLOID(CALLING.out.merged_snps_vcfs,
+                                     CALLING.out.merged_indels_vcfs,
+                                     CREATE_FAI_INDEX.out.fai_index.map{it[1]})
+    }
+
 }
 
 // Cleanup temporary files after workflow completion
@@ -262,6 +294,7 @@ process FREEBAYES {
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
+    val(ploidy)
     
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_freebayes"), emit: snps_vcf
@@ -270,7 +303,7 @@ process FREEBAYES {
     script:
     if ( params.reads_source == 'gbs' )
         """
-        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels \
+        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels --ploidy ${ploidy} \
             --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
             --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
             --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
@@ -285,7 +318,7 @@ process FREEBAYES {
     
     else if ( params.reads_source == 'wgs' )
         """
-        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels \
+        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels --ploidy ${ploidy} \
             --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
             --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
             --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
@@ -313,6 +346,7 @@ process BCFTOOLS {
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
+    val(ploidy)
     
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_bcftools"), emit: snps_vcf
@@ -344,23 +378,39 @@ process GATK4 {
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     path(ref_genome_dict)
+    val(ploidy)
     
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_gatk"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_gatk"), emit: indels_vcf
     
     script:
-    """
-    gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
-    bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
+    if (ploidy == 2) {
+        """
+        gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
+        bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
-
-    bcftools view -v snps -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
     
-    bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
-    """
+        bcftools view -v snps -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
+        
+        bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
+        """
+    } else {
+        """
+        gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} -ERC BP_RESOLUTION -ploidy ${ploidy} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
+        bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
+        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
+        bcftools view -AA - | bcftools view --max-alleles 2 - | \
+        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
+        
+        bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
+        
+        bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
+        """
+    }
+
 }
 
 // Process to call variants using VarDict
@@ -374,6 +424,7 @@ process VARDICT {
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
+    val(ploidy)
     
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_vardict"), emit: snps_vcf
@@ -404,6 +455,7 @@ process SNVER {
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
+    val(ploidy)
     
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_snver"), emit: snps_vcf
@@ -415,7 +467,7 @@ process SNVER {
     
     samtools faidx reference.fasta
     
-    snver -i ${bam} -r reference.fasta -o ${bam.baseName} -l ${coverage} -bq ${params.min_base_quality}
+    snver -i ${bam} -r reference.fasta -o ${bam.baseName} -l ${coverage} -bq ${params.min_base_quality} -n ${ploidy}
     
     bcftools reheader -f reference.fasta.fai ${bam.baseName}.filter.vcf | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
@@ -432,7 +484,7 @@ process SNVER {
 
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 3 callers
-process GENERATE_CONSENSUS {
+process GENERATE_CONSENSUS_DIPLOID {
     maxForks params.cons_forks
     cpus params.cons_cpus
 
@@ -471,6 +523,53 @@ process GENERATE_CONSENSUS {
     for i in ${sample}.indels_*; do tabix -C \${i}; done
     
     parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
+    
+    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.indels.vcf.gz
+    """
+}
+
+
+process GENERATE_CONSENSUS_POLYPLOID {
+    maxForks params.cons_forks
+    cpus params.cons_cpus
+
+    tag "${sample}"
+
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
+
+    input:
+    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3)
+    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3)
+    path(ref_genome_fai)
+
+    output:
+    path("${sample}.snps.vcf.gz")
+    path("${sample}.indels.vcf.gz")
+
+    script:
+    """
+    awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
+    bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
+
+    mkdir all_chrs
+    
+    for i in ${sample}.snps_*; do tabix -C \${i}; done
+
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
+    
+    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools sort -Oz -o ${sample}.snps.vcf.gz
+
+    rm -r all_chrs/*
+
+
+    for i in ${sample}.indels_*; do tabix -C \${i}; done
+    
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
     
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
