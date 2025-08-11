@@ -1,35 +1,5 @@
 #!/usr/bin/env nextflow
 
-params.samples_tsv        = 'input.tsv'
-params.outdir             = 'ChoCallate_output'
-
-params.min_coverage       = 5
-params.min_base_quality   = 20
-params.min_map_qual       = 10
-params.min_snp_qual       = 20
-
-params.ploidy             = 2
-
-params.reads_type         = 'pe' // se - single-end reads; pe - pair-end reads, mx - se and pe reads
-params.reads_source       = 'gbs' // gbs - Genotyping-by-sequencing; wgs - Whole Genome Sequencing
-
-params.bowtie2_cpu        = 10
-params.bcftools_cpu       = 1
-params.vardict_cpu        = 1
-
-params.bowtie2_forks      = 1
-params.freebayes_forks    = 1
-params.bcftools_forks     = 1
-params.gatk4_forks        = 1
-params.vardict_forks      = 1
-params.snver_forks        = 1
-params.cons_forks         = 1
-params.cons_cpus          = 5
-
-params.win_size           = 1000000
-
-params.debug              = false
-
 
 workflow CALLING {
     take:
@@ -109,8 +79,8 @@ workflow {
     BOWTIE2_MAPPING(sample_run_ch, ref_index)
 
     // Left-align indels in BAM files
-    LEFT_ALIGN_INDELS(BOWTIE2_MAPPING.out.bam, 
-                      CREATE_SEQ_DICT.out.gen_dict, 
+    LEFT_ALIGN_INDELS(BOWTIE2_MAPPING.out.bam,
+                      CREATE_SEQ_DICT.out.gen_dict,
                       CREATE_FAI_INDEX.out.fai_index)
 
     // Index the aligned BAM files
@@ -120,12 +90,12 @@ workflow {
     COVERAGE_GENERATION(INDEXING_BAM.out.ind_bam.map{it[0]})
 
     // Call SNVs/INDELs using different callers
-    CALLING(INDEXING_BAM.out.ind_bam, 
-            COVERAGE_GENERATION.out.coverage, 
-            CREATE_FAI_INDEX.out.fai_index, 
+    CALLING(INDEXING_BAM.out.ind_bam,
+            COVERAGE_GENERATION.out.coverage,
+            CREATE_FAI_INDEX.out.fai_index,
             CREATE_SEQ_DICT.out.gen_dict,
             params.ploidy)
-    
+
     // Generate final consensus
     if (params.ploidy == 2) {
         GENERATE_CONSENSUS_DIPLOID(CALLING.out.merged_snps_vcfs,
@@ -174,10 +144,10 @@ process CREATE_SEQ_DICT {
 
     input:
     path(ref_genome)
-    
+
     output:
     path("${ref_genome.baseName}.dict"), emit: gen_dict
-    
+
     script:
     """
     gatk CreateSequenceDictionary -R ${ref_genome}
@@ -190,7 +160,7 @@ process BOWTIE2_MAPPING {
     cpus params.bowtie2_cpu
 
     tag "${sample_id}"
-    
+
     input:
     tuple val(sample_id), val(read1), val(read2), val(read3)
     val(ref_index)
@@ -234,10 +204,10 @@ process LEFT_ALIGN_INDELS {
     path(bam)
     path(genome_dictionary)
     tuple path(ref_genome), path(genome_fai)
-    
+
     output:
     path("${bam.baseName}.bam"), emit: lai_bam
-    
+
     script:
     """
     gatk LeftAlignIndels -I ${bam} -O ${bam.baseName}.bam -R ${ref_genome} -OBI false
@@ -250,13 +220,13 @@ process INDEXING_BAM {
     cpus 1
 
     tag "${bam.baseName}"
-    
+
     input:
     path(bam)
-    
+
     output:
     tuple path("${bam}"), path("${bam}.csi"), emit: ind_bam
-    
+
     script:
     """
     samtools index --csi --threads ${task.cpus} ${bam.baseName}.bam
@@ -267,7 +237,7 @@ process INDEXING_BAM {
 process COVERAGE_GENERATION {
     cpus 1
     maxForks 1
-    
+
     tag "${bam.baseName}"
 
     input:
@@ -289,17 +259,17 @@ process FREEBAYES {
     maxForks params.freebayes_forks
 
     tag "${bam.baseName}"
-    
+
     input:
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     val(ploidy)
-    
+
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_freebayes"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_freebayes"), emit: indels_vcf
-    
+
     script:
     if ( params.reads_source == 'gbs' )
         """
@@ -312,10 +282,10 @@ process FREEBAYES {
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
 
         bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
-        
+
         bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
-    
+
     else if ( params.reads_source == 'wgs' )
         """
         freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels --ploidy ${ploidy} \
@@ -327,10 +297,10 @@ process FREEBAYES {
             bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
 
         bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
-        
+
         bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
         """
-    
+
     else
         error 'Invalid reads source: ${params.reads_source}. Available sources: gbs, wgs'
 }
@@ -339,19 +309,19 @@ process FREEBAYES {
 process BCFTOOLS {
     maxForks params.bcftools_forks
     cpus params.bcftools_cpu
-    
+
     tag "${bam.baseName}"
-    
+
     input:
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     val(ploidy)
-    
+
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_bcftools"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_bcftools"), emit: indels_vcf
-    
+
     script:
     """
     bcftools mpileup -Ou --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 250 \
@@ -362,7 +332,7 @@ process BCFTOOLS {
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.bcftools
 
     bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_bcftools ${bam.baseName}.bcftools
-    
+
     bcftools view -v indels -Oz -o ${bam.baseName}.indels_bcftools ${bam.baseName}.bcftools
     """
 }
@@ -372,18 +342,18 @@ process GATK4 {
     maxForks params.gatk4_forks
 
     tag "${bam.baseName}"
-    
+
     input:
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     path(ref_genome_dict)
     val(ploidy)
-    
+
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_gatk"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_gatk"), emit: indels_vcf
-    
+
     script:
     if (ploidy == 2) {
         """
@@ -392,9 +362,9 @@ process GATK4 {
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
-    
+
         bcftools view -v snps -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
-        
+
         bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
         """
     } else {
@@ -404,9 +374,9 @@ process GATK4 {
         bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
         bcftools view -AA - | bcftools view --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
-        
+
         bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
-        
+
         bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
         """
     }
@@ -419,17 +389,17 @@ process VARDICT {
     cpus params.vardict_cpu
 
     tag "${bam.baseName}"
-    
+
     input:
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     val(ploidy)
-    
+
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_vardict"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_vardict"), emit: indels_vcf
-    
+
     script:
     """
     vardict-java -G ${ref_genome} -N ${bam.baseName} -b ${bam} -fisher -th ${task.cpus} \
@@ -440,7 +410,7 @@ process VARDICT {
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.vardict
 
     bcftools view -v snps -Oz -o ${bam.baseName}.snps_vardict ${bam.baseName}.vardict
-    
+
     bcftools view -v indels -Oz -o ${bam.baseName}.indels_vardict ${bam.baseName}.vardict
     """
 }
@@ -450,30 +420,30 @@ process SNVER {
     maxForks params.snver_forks
 
     tag "${bam.baseName}"
-    
+
     input:
     tuple path(bam), path(bam_index)
     path(coverage)
     tuple path(ref_genome), path(ref_genome_fai)
     val(ploidy)
-    
+
     output:
     tuple val("${bam.baseName}"), path("${bam.baseName}.snps_snver"), emit: snps_vcf
     tuple val("${bam.baseName}"), path("${bam.baseName}.indels_snver"), emit: indels_vcf
-    
+
     script:
     """
     ln -s ${ref_genome} reference.fasta
-    
+
     samtools faidx reference.fasta
-    
+
     snver -i ${bam} -r reference.fasta -o ${bam.baseName} -l ${coverage} -bq ${params.min_base_quality} -n ${ploidy}
-    
+
     bcftools reheader -f reference.fasta.fai ${bam.baseName}.filter.vcf | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
         bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Oz -o ${bam.baseName}.snps_snver
-        
+
     bcftools reheader -f reference.fasta.fai ${bam.baseName}.indel.filter.vcf | \
         bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
         bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
@@ -508,11 +478,11 @@ process GENERATE_CONSENSUS_DIPLOID {
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
 
     mkdir all_chrs
-    
+
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
     parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
-    
+
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
@@ -521,9 +491,9 @@ process GENERATE_CONSENSUS_DIPLOID {
 
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
-    
+
     parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
-    
+
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
@@ -555,13 +525,13 @@ process GENERATE_CONSENSUS_POLYPLOID {
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
 
     mkdir all_chrs
-    
+
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
     parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
-    
+
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
@@ -570,11 +540,11 @@ process GENERATE_CONSENSUS_POLYPLOID {
 
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
-    
+
     parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
-    
+
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
