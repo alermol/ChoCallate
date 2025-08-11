@@ -453,7 +453,7 @@ process SNVER {
 
 
 // Process to generate final consensus VCF from all callers using majority rule
-// Majority rule - variant is true if detected more than 3 callers
+// Majority rule - variant is true if detected more than 3 callers for diploid calling and 2 for polyploid calling
 process GENERATE_CONSENSUS_DIPLOID {
     maxForks params.cons_forks
     cpus params.cons_cpus
