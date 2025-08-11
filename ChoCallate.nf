@@ -559,8 +559,10 @@ process GENERATE_CONSENSUS_POLYPLOID {
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
     parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
+
+    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
     
-    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
 
@@ -570,8 +572,10 @@ process GENERATE_CONSENSUS_POLYPLOID {
     for i in ${sample}.indels_*; do tabix -C \${i}; done
     
     parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
+
+    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
     
-    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
     """

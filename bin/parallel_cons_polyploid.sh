@@ -11,7 +11,7 @@ mutation_type=$4
 region=$(echo $rc | sed 's/ /:/' | sed 's/ /-/')
 
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
-do 
+do
     bcftools view -r ${region} ${i} > ${rn}.${i}
 done
 
@@ -19,8 +19,8 @@ process_${mutation_type}_poly.py --vcf1 ${rn}.${sample_name}.${mutation_type}_ga
 
 
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
-do 
+do
     rm ${rn}.${i}
 done
 
-bgzip all_chrs/${rn}.vcf
+find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;
