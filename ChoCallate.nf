@@ -481,7 +481,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
 
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
@@ -492,7 +492,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "indels"' :::: genome_intervals.bed
 
     bcftools concat --naive-force -Oz all_chrs/*.gz | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
@@ -528,7 +528,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
 
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: snps
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
@@ -541,7 +541,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} {2} {3}' :::: genome_intervals.bed ::: ${sample} ::: indels
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "indels"' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
