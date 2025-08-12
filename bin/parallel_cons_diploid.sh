@@ -15,12 +15,35 @@ do
     bcftools view -r ${region} ${i} > ${rn}.${i}
 done
 
-process_${mutation_type}.py --vcf1 ${rn}.${sample_name}.${mutation_type}_bcftools --vcf2 ${rn}.${sample_name}.${mutation_type}_freebayes --vcf3 ${rn}.${sample_name}.${mutation_type}_gatk --vcf4 ${rn}.${sample_name}.${mutation_type}_vardict --vcf5 ${rn}.${sample_name}.${mutation_type}_snver --sample ${sample_name} --chr ${rn}
+bcftools view -r ${region} zero.vcf.gz > ${rn}.zero.vcf
+
+if [ ${mutation_type} == "snps" ]; then
+    process_snps.py \
+        --zero_vcf ${rn}.zero.vcf \
+        --vcf1 ${rn}.${sample_name}.snps_bcftools \
+        --vcf2 ${rn}.${sample_name}.snps_freebayes \
+        --vcf3 ${rn}.${sample_name}.snps_gatk \
+        --vcf4 ${rn}.${sample_name}.snps_vardict \
+        --vcf5 ${rn}.${sample_name}.snps_snver \
+        --sample ${sample_name} \
+        --chr ${rn}
+else
+    process_indels.py \
+        --vcf1 ${rn}.${sample_name}.indels_bcftools \
+        --vcf2 ${rn}.${sample_name}.indels_freebayes \
+        --vcf3 ${rn}.${sample_name}.indels_gatk \
+        --vcf4 ${rn}.${sample_name}.indels_vardict \
+        --vcf5 ${rn}.${sample_name}.indels_snver \
+        --sample ${sample_name} \
+        --chr ${rn}
+fi
 
 
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
 do
     rm ${rn}.${i}
 done
+
+rm ${rn}.zero.vcf
 
 find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;

@@ -104,7 +104,8 @@ workflow {
     if (params.ploidy == 2) {
         GENERATE_CONSENSUS_DIPLOID(CALLING.out.merged_snps_vcfs,
                                    CALLING.out.merged_indels_vcfs,
-                                   CREATE_FAI_INDEX.out.fai_index.map{it[1]})
+                                   CREATE_FAI_INDEX.out.fai_index.map{it[1]},
+                                   GENERATE_ZERO_VCF.out.zero_vcf)
     } else {
         GENERATE_CONSENSUS_POLYPLOID(CALLING.out.merged_snps_vcfs,
                                      CALLING.out.merged_indels_vcfs,
@@ -463,19 +464,19 @@ process GENERATE_ZERO_VCF {
     path(coverage_bed)
 
     output:
-    path("zero.vcf"), emit: zero_vcf
+    path("zero.vcf.gz"), emit: zero_vcf
 
     script:
     String genotype = (["0"] * params.ploidy).join("/")
     """
     bcftools mpileup -Ov --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 1 \
         --min-BQ ${params.min_base_quality} --regions-file ${coverage_bed} ${bam} | \
-        awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' > zero.vcf
+        awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' | \
+        awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
     """
 }
 
-// Process to generate final consensus VCF from all callers using majority rule
-// Majority rule - variant is true if detected more than 3 callers for diploid calling and 2 for polyploid calling
+// Process to generate final consensus VCF
 process GENERATE_CONSENSUS_DIPLOID {
     maxForks params.cons_forks
     cpus params.cons_cpus
