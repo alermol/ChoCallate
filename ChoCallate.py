@@ -89,6 +89,8 @@ if __name__ == "__main__":
     parser.add_argument('--ploidy', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=2, default=2)
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
+    parser.add_argument('--cons_type', type=str, default='mj', choices=['mj', 'n1', 'fc'],
+                        help='Consensus type: mj (majority rule), n1 (n-1 consensus), fc (full consensus)')
     args = parser.parse_args()
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
@@ -129,6 +131,7 @@ if __name__ == "__main__":
                 --cons_cpus {args.cons_cpus} \
                 --win_size {args.win_size} \
                 {f"--ploidy {args.ploidy}" if args.ploidy > 2 else ""} \
+                {f"--cons_type {args.cons_type}" if args.cons_type else ""} \
                 {"--debug" if args.debug else ""}
                 """,
                 shell=True

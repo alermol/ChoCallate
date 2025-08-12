@@ -6,7 +6,7 @@ rc=$1 # region coordinates
 rn=$2 # region number
 sample_name=$3
 mutation_type=$4
-
+cons_threshold=$5
 
 region=$(echo $rc | sed 's/ /:/' | sed 's/ /-/')
 
@@ -24,14 +24,16 @@ if [ ${mutation_type} == "snps" ]; then
         --vcf2 ${rn}.${sample_name}.snps_freebayes \
         --vcf3 ${rn}.${sample_name}.snps_snver \
         --sample ${sample_name} \
-        --chr ${rn}
+        --chr ${rn} \
+        --cons_threshold ${cons_threshold}
 else
     process_indels_poly.py \
         --vcf1 ${rn}.${sample_name}.indels_gatk \
         --vcf2 ${rn}.${sample_name}.indels_freebayes \
         --vcf3 ${rn}.${sample_name}.indels_snver \
         --sample ${sample_name} \
-        --chr ${rn}
+        --chr ${rn} \
+        --cons_threshold ${cons_threshold}
 fi
 
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')

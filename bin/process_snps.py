@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--vcf5', required=True, help='Path to VCF file 5')
     parser.add_argument('--sample', required=True, help='Sample name')
     parser.add_argument('--chr', required=True, help='Chromosome name')
+    parser.add_argument('--cons_threshold', type=int, help='Consensus threshold')
     args = parser.parse_args()
 
     conn = sqlite3.connect(':memory:')
@@ -96,13 +97,13 @@ def main():
         conn.commit()
 
     # Create a table for majority rule consensus calculation (excluding zero VCF)
-    cursor.execute('''
+    cursor.execute(f'''
         CREATE TABLE consensus_candidates AS
         SELECT chrom, pos, ref, alt, gt, COUNT(*) AS cnt
         FROM variants
         WHERE source IN (1, 2, 3, 4, 5) AND gt NOT LIKE '%.%'
         GROUP BY chrom, pos, ref, alt, gt
-        HAVING cnt >= 3
+        HAVING cnt >= {args.cons_threshold}
     ''')
 
     # Get the majority consensus for each position

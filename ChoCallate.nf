@@ -1,5 +1,9 @@
 #!/usr/bin/env nextflow
 
+def available_callers  = 'bcftools,gatk,freebayes,snver,vardict'
+
+include { getAvailableCallersCount } from './functions/utils.nf'
+include { getConsensusThreshold    } from './functions/utils.nf'
 
 workflow CALLING {
     take:
@@ -503,6 +507,7 @@ process GENERATE_CONSENSUS_DIPLOID {
     path("${sample}.indels.vcf.gz")
 
     script:
+    def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
     """
     awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
@@ -513,7 +518,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     tabix -C zero.vcf.gz
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
@@ -526,7 +531,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "indels"' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
@@ -557,6 +562,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
     path("${sample}.indels.vcf.gz")
 
     script:
+    def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
     """
     awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
@@ -567,7 +573,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
 
     tabix -C zero.vcf.gz
 
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
@@ -580,7 +586,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "indels"' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 

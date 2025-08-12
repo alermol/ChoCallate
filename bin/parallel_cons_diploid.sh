@@ -6,7 +6,7 @@ rc=$1 # region coordinates
 rn=$2 # region number
 sample_name=$3
 mutation_type=$4
-
+cons_threshold=$5
 
 region=$(echo $rc | sed 's/ /:/' | sed 's/ /-/')
 
@@ -26,7 +26,8 @@ if [ ${mutation_type} == "snps" ]; then
         --vcf4 ${rn}.${sample_name}.snps_vardict \
         --vcf5 ${rn}.${sample_name}.snps_snver \
         --sample ${sample_name} \
-        --chr ${rn}
+        --chr ${rn} \
+        --cons_threshold ${cons_threshold}
 else
     process_indels.py \
         --vcf1 ${rn}.${sample_name}.indels_bcftools \
@@ -35,7 +36,8 @@ else
         --vcf4 ${rn}.${sample_name}.indels_vardict \
         --vcf5 ${rn}.${sample_name}.indels_snver \
         --sample ${sample_name} \
-        --chr ${rn}
+        --chr ${rn} \
+        --cons_threshold ${cons_threshold}
 fi
 
 

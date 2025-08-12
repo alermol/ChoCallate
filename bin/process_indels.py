@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--vcf5', required=True, help='Path to VCF file 5')
     parser.add_argument('--sample', required=True, help='Sample name')
     parser.add_argument('--chr', required=True, help='Chromosome name')
+    parser.add_argument('--cons_threshold', type=int, default=3, help='Consensus threshold')
     args = parser.parse_args()
 
     conn = sqlite3.connect(':memory:')
@@ -107,7 +108,7 @@ def main():
         
         for row in results:
             chrom, pos, ref, alt, gt, cnt = row
-            if cnt >= 3 and '.' not in gt:
+            if cnt >= args.cons_threshold and '.' not in gt:
                 out.write('\t'.join([chrom, str(pos), '.', ref.upper(), alt, '.', '.', '.', 'GT', f"{gt}\n"]))
 
 if __name__ == "__main__":
