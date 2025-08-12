@@ -89,6 +89,10 @@ workflow {
     // Generate coverage information from BAM files
     COVERAGE_GENERATION(INDEXING_BAM.out.ind_bam.map{it[0]})
 
+    GENERATE_ZERO_VCF(INDEXING_BAM.out.ind_bam,
+                      CREATE_FAI_INDEX.out.fai_index,
+                      COVERAGE_GENERATION.out.coverage)
+
     // Call SNVs/INDELs using different callers
     CALLING(INDEXING_BAM.out.ind_bam,
             COVERAGE_GENERATION.out.coverage,
@@ -451,6 +455,24 @@ process SNVER {
     """
 }
 
+
+process GENERATE_ZERO_VCF {
+    input:
+    tuple path(bam), path(bam_index)
+    tuple path(ref_genome), path(ref_genome_fai)
+    path(coverage_bed)
+
+    output:
+    path("zero.vcf"), emit: zero_vcf
+
+    script:
+    String genotype = (["0"] * params.ploidy).join("/")
+    """
+    bcftools mpileup -Ov --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 1 \
+        --min-BQ ${params.min_base_quality} --regions-file ${coverage_bed} ${bam} | \
+        awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' > zero.vcf
+    """
+}
 
 // Process to generate final consensus VCF from all callers using majority rule
 // Majority rule - variant is true if detected more than 3 callers for diploid calling and 2 for polyploid calling
