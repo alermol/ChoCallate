@@ -458,6 +458,11 @@ process SNVER {
 
 
 process GENERATE_ZERO_VCF {
+    maxForks params.zero_vcf_forks
+    cpus params.zero_vcf_cpu
+
+    tag "${bam.baseName}"
+
     input:
     tuple path(bam), path(bam_index)
     tuple path(ref_genome), path(ref_genome_fai)
