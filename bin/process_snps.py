@@ -110,7 +110,7 @@ def main():
         SELECT chrom, pos, ref, alt, gt, cnt
         FROM (
             SELECT chrom, pos, ref, alt, gt, cnt,
-                   ROW_NUMBER() OVER (PARTITION BY chrom, pos ORDER BY cnt DESC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY chrom, pos ORDER BY cnt DESC, ref, alt, gt) AS rn
             FROM consensus_candidates
         ) t
         WHERE rn = 1

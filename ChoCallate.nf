@@ -109,7 +109,8 @@ workflow {
     } else {
         GENERATE_CONSENSUS_POLYPLOID(CALLING.out.merged_snps_vcfs,
                                      CALLING.out.merged_indels_vcfs,
-                                     CREATE_FAI_INDEX.out.fai_index.map{it[1]})
+                                     CREATE_FAI_INDEX.out.fai_index.map{it[1]},
+                                     GENERATE_ZERO_VCF.out.zero_vcf)
     }
 
 }
@@ -495,6 +496,7 @@ process GENERATE_CONSENSUS_DIPLOID {
     tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3), path(snps_vcf4), path(snps_vcf5)
     tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3), path(indels_vcf4), path(indels_vcf5)
     path(ref_genome_fai)
+    path(zero_vcf)
 
     output:
     path("${sample}.snps.vcf.gz")
@@ -509,9 +511,13 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
+    tabix -C zero.vcf.gz
+
     parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
 
-    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
+
+    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
 
@@ -522,7 +528,9 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "indels"' :::: genome_intervals.bed
 
-    bcftools concat --naive-force -Oz all_chrs/*.gz | \
+    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
+
+    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
     """
@@ -542,6 +550,7 @@ process GENERATE_CONSENSUS_POLYPLOID {
     tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3)
     tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3)
     path(ref_genome_fai)
+    path(zero_vcf)
 
     output:
     path("${sample}.snps.vcf.gz")
@@ -555,6 +564,8 @@ process GENERATE_CONSENSUS_POLYPLOID {
     mkdir all_chrs
 
     for i in ${sample}.snps_*; do tabix -C \${i}; done
+
+    tabix -C zero.vcf.gz
 
     parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "snps"' :::: genome_intervals.bed
 
