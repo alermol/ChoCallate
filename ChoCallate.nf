@@ -15,7 +15,7 @@ include { allEffectiveCallersPolyploidSuitable } from './functions/utils.nf'
 if (!allEffectiveCallersInAvailable(params.effective_callers, available_callers)) {
     exit 1
 } else {
-    println "All effective callers are in available callers: ${params.effective_callers}"
+    println "All effective callers are available"
 }
 
 if (effectiveCallersAtLeastThree(params.effective_callers) < min_callers_count) {
@@ -79,25 +79,18 @@ workflow {
                       CREATE_FAI_INDEX.out.fai_index,
                       COVERAGE_GENERATION.out.coverage)
 
+    // Call variants
     CALLING(INDEXING_BAM.out.ind_bam,
             CREATE_FAI_INDEX.out.fai_index,
             COVERAGE_GENERATION.out.coverage,
             params.ploidy,
             CREATE_SEQ_DICT.out.gen_dict)
 
-    // Generate final consensus
-    if (params.ploidy == 2) {
-        GENERATE_CONSENSUS_DIPLOID(CALLING.out.merged_snps_vcfs,
-                                   CALLING.out.merged_indels_vcfs,
-                                   CREATE_FAI_INDEX.out.fai_index.map{it[1]},
-                                   GENERATE_ZERO_VCF.out.zero_vcf)
-    } else {
-        GENERATE_CONSENSUS_POLYPLOID(CALLING.out.merged_snps_vcfs,
-                                     CALLING.out.merged_indels_vcfs,
-                                     CREATE_FAI_INDEX.out.fai_index.map{it[1]},
-                                     GENERATE_ZERO_VCF.out.zero_vcf)
-    }
-
+    // Generate final consensus VCF
+    GENERATE_CONSENSUS(CALLING.out.snps_vcf,
+                       CALLING.out.indels_vcf,
+                       CREATE_FAI_INDEX.out.fai_index.map{it[1]},
+                       GENERATE_ZERO_VCF.out.zero_vcf)
 }
 
 // Cleanup temporary files after workflow completion
@@ -239,7 +232,7 @@ process COVERAGE_GENERATION {
 
     script:
     """
-    samtools depth --threads ${task.cpus} ${bam} | \
+    samtools depth -J --threads ${task.cpus} ${bam} | \
         awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
         bedops --merge - > ${bam.baseName}.bed
     """
@@ -318,7 +311,7 @@ process CALLING {
 
 
 // Process to generate final consensus VCF
-process GENERATE_CONSENSUS_DIPLOID {
+process GENERATE_CONSENSUS {
     maxForks params.cons_forks
     cpus params.cons_cpus
 
@@ -328,8 +321,8 @@ process GENERATE_CONSENSUS_DIPLOID {
     publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
 
     input:
-    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3), path(snps_vcf4), path(snps_vcf5)
-    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3), path(indels_vcf4), path(indels_vcf5)
+    tuple val(sample), path("${sample}.snps_*.vcf.gz", arity: '3..*')
+    tuple val(sample), path("${sample}.indels_*.vcf.gz", arity: '3..*')
     path(ref_genome_fai)
     path(zero_vcf)
 
@@ -349,7 +342,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     tabix -C zero.vcf.gz
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
@@ -362,62 +355,7 @@ process GENERATE_CONSENSUS_DIPLOID {
 
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
-    parallel -j ${task.cpus} 'parallel_cons_diploid.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
-
-    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
-
-    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
-        bcftools sort -Oz -o ${sample}.indels.vcf.gz
-    """
-}
-
-
-process GENERATE_CONSENSUS_POLYPLOID {
-    maxForks params.cons_forks
-    cpus params.cons_cpus
-
-    tag "${sample}"
-
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
-
-    input:
-    tuple val(sample), path(snps_vcf1), path(snps_vcf2), path(snps_vcf3)
-    tuple val(sample), path(indels_vcf1), path(indels_vcf2), path(indels_vcf3)
-    path(ref_genome_fai)
-    path(zero_vcf)
-
-    output:
-    path("${sample}.snps.vcf.gz")
-    path("${sample}.indels.vcf.gz")
-
-    script:
-    def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
-    """
-    awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
-    bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
-
-    mkdir all_chrs
-
-    for i in ${sample}.snps_*; do tabix -C \${i}; done
-
-    tabix -C zero.vcf.gz
-
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
-
-    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
-
-    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
-        bcftools sort -Oz -o ${sample}.snps.vcf.gz
-
-    rm -r all_chrs/*
-
-
-    for i in ${sample}.indels_*; do tabix -C \${i}; done
-
-    parallel -j ${task.cpus} 'parallel_cons_polyploid.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
+    parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
 
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 

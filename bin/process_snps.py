@@ -13,15 +13,14 @@ def sort_gt(s):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--zero_vcf', required=True, help='Path to zero VCF')
-    parser.add_argument('--vcf1', required=True, help='Path to VCF file 1')
-    parser.add_argument('--vcf2', required=True, help='Path to VCF file 2')
-    parser.add_argument('--vcf3', required=True, help='Path to VCF file 3')
-    parser.add_argument('--vcf4', required=True, help='Path to VCF file 4')
-    parser.add_argument('--vcf5', required=True, help='Path to VCF file 5')
+    parser.add_argument('--vcfs', required=True, help='Comma-separated paths to VCF files')
     parser.add_argument('--sample', required=True, help='Sample name')
     parser.add_argument('--chr', required=True, help='Chromosome name')
     parser.add_argument('--cons_threshold', type=int, help='Consensus threshold')
     args = parser.parse_args()
+
+    # Split the comma-separated VCF paths into a list
+    vcf_paths = [path.strip() for path in args.vcfs.split(',') if path.strip()]
 
     conn = sqlite3.connect(':memory:')
     cursor = conn.cursor()
@@ -69,14 +68,9 @@ def main():
             ''', (chrom, pos, ref, alt, gt))
     conn.commit()
 
-    # Process other VCFs (VCF1-VCF5) - these will be used for majority rule consensus
-    other_vcfs = [
-        (1, args.vcf1),
-        (2, args.vcf2),
-        (3, args.vcf3),
-        (4, args.vcf4),
-        (5, args.vcf5)
-    ]
+    # Process other VCFs
+    # Create a list of (source_id, file_path) tuples dynamically
+    other_vcfs = [(i+1, vcf_path) for i, vcf_path in enumerate(vcf_paths)]
     
     for source_id, file_path in other_vcfs:
         with open(file_path) as f:
@@ -97,11 +91,14 @@ def main():
         conn.commit()
 
     # Create a table for majority rule consensus calculation (excluding zero VCF)
+    # Build the source list dynamically based on the number of VCFs
+    source_list = ','.join(map(str, range(1, len(vcf_paths) + 1)))
+    
     cursor.execute(f'''
         CREATE TABLE consensus_candidates AS
         SELECT chrom, pos, ref, alt, gt, COUNT(*) AS cnt
         FROM variants
-        WHERE source IN (1, 2, 3, 4, 5) AND gt NOT LIKE '%.%'
+        WHERE source IN ({source_list}) AND gt NOT LIKE '%.%'
         GROUP BY chrom, pos, ref, alt, gt
         HAVING cnt >= {args.cons_threshold}
     ''')
