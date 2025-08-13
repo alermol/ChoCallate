@@ -1,9 +1,12 @@
 #!/usr/bin/env nextflow
 
-def available_callers  = 'bcftools,gatk,freebayes,snver,vardict'
-def diploid_callers    = 'bcftools,gatk,freebayes,snver,vardict'
-def polyploid_callers  = 'gatk,freebayes,snver'
-def min_callers_count  = 3
+def available_callers         = 'bcftools,gatk,freebayes,snver,vardict'
+def diploid_callers           = 'bcftools,gatk,freebayes,snver,vardict'
+def polyploid_callers         = 'gatk,freebayes,snver'
+def default_diploid_callers   = 'bcftools,gatk,freebayes,snver,vardict'
+def default_polyploid_callers = 'gatk,freebayes,snver'
+def min_callers_count         = 3
+
 
 include { getAvailableCallersCount             } from './functions/utils.nf'
 include { getConsensusThreshold                } from './functions/utils.nf'
@@ -12,26 +15,45 @@ include { effectiveCallersAtLeastThree         } from './functions/utils.nf'
 include { allEffectiveCallersDiploidSuitable   } from './functions/utils.nf'
 include { allEffectiveCallersPolyploidSuitable } from './functions/utils.nf'
 
-if (!allEffectiveCallersInAvailable(params.effective_callers, available_callers)) {
+// Handle effective_callers parameter
+// If params.effective_callers has default value "-", then set of caller in default_diploid_callers or default_polyploid_callers will be taken as default for diploid and polyploid calling
+// If params.effective_callers have user-defined value, then it should be used
+def effective_callers
+if (params.effective_callers == "-") {
+    if (params.ploidy == 2) {
+        effective_callers = default_diploid_callers
+        println "Using default diploid callers: ${effective_callers}"
+    } else if (params.ploidy > 2) {
+        effective_callers = default_polyploid_callers
+        println "Using default polyploid callers: ${effective_callers}"
+    } else {
+        error "Invalid ploidy value: ${params.ploidy}. Ploidy must be 2 or greater."
+    }
+} else {
+    effective_callers = params.effective_callers
+    println "Using user-defined effective callers: ${effective_callers}"
+}
+
+if (!allEffectiveCallersInAvailable(effective_callers, available_callers)) {
     exit 1
 } else {
     println "All effective callers are available"
 }
 
-if (effectiveCallersAtLeastThree(params.effective_callers) < min_callers_count) {
-    println "The number of effective callers must be at least 3, however, you provided ${getAvailableCallersCount(params.effective_callers)}: ${params.effective_callers}"
+if (effectiveCallersAtLeastThree(effective_callers) < min_callers_count) {
+    println "The number of effective callers must be at least 3, however, you provided ${getAvailableCallersCount(effective_callers)}: ${effective_callers}"
     exit 1
 }
 
 if (params.ploidy == 2) {
-    if (allEffectiveCallersDiploidSuitable(params.effective_callers, diploid_callers)) {
-        println "All effective callers are suitable for diploid calling: ${params.effective_callers}"
+    if (allEffectiveCallersDiploidSuitable(effective_callers, diploid_callers)) {
+        println "All effective callers are suitable for diploid calling: ${effective_callers}"
     } else {
         exit 1
     }
 } else if (params.ploidy > 2) {
-    if (allEffectiveCallersPolyploidSuitable(params.effective_callers, polyploid_callers)) {
-        println "All effective callers are suitable for polyploid calling: ${params.effective_callers}"
+    if (allEffectiveCallersPolyploidSuitable(effective_callers, polyploid_callers)) {
+        println "All effective callers are suitable for polyploid calling: ${effective_callers}"
     } else {
         exit 1
     }
@@ -281,27 +303,27 @@ process CALLING {
     tuple val("${bam.baseName}"), path("*.indels_*.vcf.gz"), emit: indels_vcf
 
     script:
-    def parallel_cpus = getAvailableCallersCount(params.effective_callers)
+    def parallel_cpus = getAvailableCallersCount(effective_callers)
     """
     touch callers_commands.sh
 
-    if [[ ",${params.effective_callers}," == *"bcftools"* ]]; then
+    if [[ ",${effective_callers}," == *"bcftools"* ]]; then
         echo "bash ${projectDir}/bin/bcftools_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
     fi
 
-    if [[ ",${params.effective_callers}," == *"freebayes"* ]]; then
+    if [[ ",${effective_callers}," == *"freebayes"* ]]; then
         echo "bash ${projectDir}/bin/freebayes_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 
-    if [[ ",${params.effective_callers}," == *"gatk"* ]]; then
+    if [[ ",${effective_callers}," == *"gatk"* ]]; then
         echo "bash ${projectDir}/bin/gatk4_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 
-    if [[ ",${params.effective_callers}," == *"vardict"* ]]; then
+    if [[ ",${effective_callers}," == *"vardict"* ]]; then
         echo "bash ${projectDir}/bin/vardict_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
     fi
 
-    if [[ ",${params.effective_callers}," == *"snver"* ]]; then
+    if [[ ",${effective_callers}," == *"snver"* ]]; then
         echo "bash ${projectDir}/bin/snver_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 

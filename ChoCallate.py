@@ -89,8 +89,8 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
     parser.add_argument('--cons_type', type=str, default='mj', choices=['mj', 'n1', 'fc'],
                         help='Consensus type: mj (majority rule), n1 (n-1 consensus), fc (full consensus)')
-    parser.add_argument('--effective_callers', type=str, default='bcftools,freebayes,snver,vardict,gatk',
-                        help='Default effective callers: bcftools,freebayes,snver,vardict,gatk')
+    parser.add_argument('--effective_callers', type=str, default='-',
+                        help='Available callers: bcftools,freebayes,snver,vardict,gatk')
     args = parser.parse_args()
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
