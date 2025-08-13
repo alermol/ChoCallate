@@ -1,64 +1,46 @@
 #!/usr/bin/env nextflow
 
 def available_callers  = 'bcftools,gatk,freebayes,snver,vardict'
+def diploid_callers    = 'bcftools,gatk,freebayes,snver,vardict'
+def polyploid_callers  = 'gatk,freebayes,snver'
+def min_callers_count  = 3
 
-include { getAvailableCallersCount } from './functions/utils.nf'
-include { getConsensusThreshold    } from './functions/utils.nf'
+include { getAvailableCallersCount             } from './functions/utils.nf'
+include { getConsensusThreshold                } from './functions/utils.nf'
+include { allEffectiveCallersInAvailable       } from './functions/utils.nf'
+include { effectiveCallersAtLeastThree         } from './functions/utils.nf'
+include { allEffectiveCallersDiploidSuitable   } from './functions/utils.nf'
+include { allEffectiveCallersPolyploidSuitable } from './functions/utils.nf'
 
-workflow CALLING {
-    take:
-    indexed_bam
-    coverage_file
-    ref_genome
-    ref_genome_dict
-    ploidy
+if (!allEffectiveCallersInAvailable(params.effective_callers, available_callers)) {
+    exit 1
+} else {
+    println "All effective callers are in available callers: ${params.effective_callers}"
+}
 
-    main:
-    if (ploidy == 2) {
-        FREEBAYES(indexed_bam, coverage_file, ref_genome, ploidy)
-        GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict, ploidy)
-        SNVER(indexed_bam, coverage_file, ref_genome, ploidy)
-        BCFTOOLS(indexed_bam, coverage_file, ref_genome, ploidy)
-        VARDICT(indexed_bam, coverage_file, ref_genome, ploidy)
+if (effectiveCallersAtLeastThree(params.effective_callers) < min_callers_count) {
+    println "The number of effective callers must be at least 3, however, you provided ${getAvailableCallersCount(params.effective_callers)}: ${params.effective_callers}"
+    exit 1
+}
 
-        merged_snps_vcfs = BCFTOOLS.out.snps_vcf
-            .join(FREEBAYES.out.snps_vcf)
-            .join(GATK4.out.snps_vcf)
-            .join(VARDICT.out.snps_vcf)
-            .join(SNVER.out.snps_vcf)
-            .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-                tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-            }
-        merged_indels_vcfs = BCFTOOLS.out.indels_vcf
-            .join(FREEBAYES.out.indels_vcf)
-            .join(GATK4.out.indels_vcf)
-            .join(VARDICT.out.indels_vcf)
-            .join(SNVER.out.indels_vcf)
-            .map { sample, bcftools, freebayes, gatk, vardict, snver ->
-                tuple(sample, bcftools, freebayes, gatk, vardict, snver)
-            }
+if (params.ploidy == 2) {
+    if (allEffectiveCallersDiploidSuitable(params.effective_callers, diploid_callers)) {
+        println "All effective callers are suitable for diploid calling: ${params.effective_callers}"
     } else {
-        FREEBAYES(indexed_bam, coverage_file, ref_genome, ploidy)
-        GATK4(indexed_bam, coverage_file, ref_genome, ref_genome_dict, ploidy)
-        SNVER(indexed_bam, coverage_file, ref_genome, ploidy)
-
-        merged_snps_vcfs = GATK4.out.snps_vcf
-            .join(FREEBAYES.out.snps_vcf)
-            .join(SNVER.out.snps_vcf)
-            .map { sample, gatk, freebayes, snver ->
-                tuple(sample, gatk, freebayes, snver)
-            }
-        merged_indels_vcfs = GATK4.out.indels_vcf
-            .join(FREEBAYES.out.indels_vcf)
-            .join(SNVER.out.indels_vcf)
-            .map { sample, gatk, freebayes, snver ->
-                tuple(sample, gatk, freebayes, snver)
-            }
+        exit 1
     }
+} else if (params.ploidy > 2) {
+    if (allEffectiveCallersPolyploidSuitable(params.effective_callers, polyploid_callers)) {
+        println "All effective callers are suitable for polyploid calling: ${params.effective_callers}"
+    } else {
+        exit 1
+    }
+}
 
-    emit:
-    merged_snps_vcfs
-    merged_indels_vcfs
+if (params.debug) {
+    println "Debug mode is enabled"
+} else {
+    println "Debug mode is disabled"
 }
 
 
@@ -97,12 +79,11 @@ workflow {
                       CREATE_FAI_INDEX.out.fai_index,
                       COVERAGE_GENERATION.out.coverage)
 
-    // Call SNVs/INDELs using different callers
     CALLING(INDEXING_BAM.out.ind_bam,
-            COVERAGE_GENERATION.out.coverage,
             CREATE_FAI_INDEX.out.fai_index,
-            CREATE_SEQ_DICT.out.gen_dict,
-            params.ploidy)
+            COVERAGE_GENERATION.out.coverage,
+            params.ploidy,
+            CREATE_SEQ_DICT.out.gen_dict)
 
     // Generate final consensus
     if (params.ploidy == 2) {
@@ -264,203 +245,6 @@ process COVERAGE_GENERATION {
     """
 }
 
-// Process to call variants using FreeBayes
-process FREEBAYES {
-    maxForks params.freebayes_forks
-
-    tag "${bam.baseName}"
-
-    input:
-    tuple path(bam), path(bam_index)
-    path(coverage)
-    tuple path(ref_genome), path(ref_genome_fai)
-    val(ploidy)
-
-    output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_freebayes"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_freebayes"), emit: indels_vcf
-
-    script:
-    if ( params.reads_source == 'gbs' )
-        """
-        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels --ploidy ${ploidy} \
-            --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
-            --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
-            --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
-            bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-            bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
-            bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
-
-        bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
-
-        bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
-        """
-
-    else if ( params.reads_source == 'wgs' )
-        """
-        freebayes --fasta-reference ${ref_genome} --targets ${coverage} --dont-left-align-indels --ploidy ${ploidy} \
-            --use-best-n-alleles 4 --min-alternate-qsum ${params.min_base_quality} --hwe-priors-off --no-population-priors \
-            --allele-balance-priors-off --min-base-quality ${params.min_base_quality} \
-            --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam ${bam} --limit-coverage 250 | \
-            bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-            bcftools view --min-alleles 2 --max-alleles 2 - | bcftools annotate --force -x INFO,FORMAT - | \
-            bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.freebayes
-
-        bcftools view -v snps -Oz -o ${bam.baseName}.snps_freebayes ${bam.baseName}.freebayes
-
-        bcftools view -v indels -Oz -o ${bam.baseName}.indels_freebayes ${bam.baseName}.freebayes
-        """
-
-    else
-        error 'Invalid reads source: ${params.reads_source}. Available sources: gbs, wgs'
-}
-
-// Process to call variants using bcftools
-process BCFTOOLS {
-    maxForks params.bcftools_forks
-    cpus params.bcftools_cpu
-
-    tag "${bam.baseName}"
-
-    input:
-    tuple path(bam), path(bam_index)
-    path(coverage)
-    tuple path(ref_genome), path(ref_genome_fai)
-    val(ploidy)
-
-    output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_bcftools"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_bcftools"), emit: indels_vcf
-
-    script:
-    """
-    bcftools mpileup -Ou --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 250 \
-        --min-BQ ${params.min_base_quality} --regions-file ${coverage} ${bam} | \
-        bcftools call -Ov --multiallelic-caller --threads ${task.cpus} | \
-        bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools view --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.bcftools
-
-    bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_bcftools ${bam.baseName}.bcftools
-
-    bcftools view -v indels -Oz -o ${bam.baseName}.indels_bcftools ${bam.baseName}.bcftools
-    """
-}
-
-// Process to call variants using GATK4
-process GATK4 {
-    maxForks params.gatk4_forks
-
-    tag "${bam.baseName}"
-
-    input:
-    tuple path(bam), path(bam_index)
-    path(coverage)
-    tuple path(ref_genome), path(ref_genome_fai)
-    path(ref_genome_dict)
-    val(ploidy)
-
-    output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_gatk"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_gatk"), emit: indels_vcf
-
-    script:
-    if (ploidy == 2) {
-        """
-        gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
-        bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
-        bcftools view -AA --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
-
-        bcftools view -v snps -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
-
-        bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
-        """
-    } else {
-        """
-        gatk HaplotypeCaller -I ${bam} -R ${ref_genome} -mbq ${params.min_base_quality} -O ${bam.baseName}.gatk1 -L ${coverage} -ERC BP_RESOLUTION -ploidy ${ploidy} --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
-        bcftools filter ${bam.baseName}.gatk1 -e'QUAL<${params.min_snp_qual}' | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools sort - | \
-        bcftools view -AA - | bcftools view --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.gatk
-
-        bcftools view -V indels,mnps,bnd,other -Oz -o ${bam.baseName}.snps_gatk ${bam.baseName}.gatk
-
-        bcftools view -v indels -Oz -o ${bam.baseName}.indels_gatk ${bam.baseName}.gatk
-        """
-    }
-
-}
-
-// Process to call variants using VarDict
-process VARDICT {
-    maxForks params.vardict_forks
-    cpus params.vardict_cpu
-
-    tag "${bam.baseName}"
-
-    input:
-    tuple path(bam), path(bam_index)
-    path(coverage)
-    tuple path(ref_genome), path(ref_genome_fai)
-    val(ploidy)
-
-    output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_vardict"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_vardict"), emit: indels_vcf
-
-    script:
-    """
-    vardict-java -G ${ref_genome} -N ${bam.baseName} -b ${bam} -fisher -th ${task.cpus} \
-        -VS SILENT --nosv -k 0 -q ${params.min_base_quality} -c 1 -S 2 -E 3 -g 4 ${coverage} | \
-        var2vcf_valid.pl -q ${params.min_base_quality} -N ${bam.baseName} -E | \
-        bcftools reheader -f ${ref_genome_fai} - | bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Ov -o ${bam.baseName}.vardict
-
-    bcftools view -v snps -Oz -o ${bam.baseName}.snps_vardict ${bam.baseName}.vardict
-
-    bcftools view -v indels -Oz -o ${bam.baseName}.indels_vardict ${bam.baseName}.vardict
-    """
-}
-
-// Process to call variants using SNVer
-process SNVER {
-    maxForks params.snver_forks
-
-    tag "${bam.baseName}"
-
-    input:
-    tuple path(bam), path(bam_index)
-    path(coverage)
-    tuple path(ref_genome), path(ref_genome_fai)
-    val(ploidy)
-
-    output:
-    tuple val("${bam.baseName}"), path("${bam.baseName}.snps_snver"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("${bam.baseName}.indels_snver"), emit: indels_vcf
-
-    script:
-    """
-    ln -s ${ref_genome} reference.fasta
-
-    samtools faidx reference.fasta
-
-    snver -i ${bam} -r reference.fasta -o ${bam.baseName} -l ${coverage} -bq ${params.min_base_quality} -n ${ploidy}
-
-    bcftools reheader -f reference.fasta.fai ${bam.baseName}.filter.vcf | \
-        bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Oz -o ${bam.baseName}.snps_snver
-
-    bcftools reheader -f reference.fasta.fai ${bam.baseName}.indel.filter.vcf | \
-        bcftools filter -e'QUAL<${params.min_snp_qual}' - | \
-        bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-        bcftools norm --fasta-ref ${ref_genome} --atom-overlaps '.' --atomize -Oz -o ${bam.baseName}.indels_snver
-    """
-}
-
 
 process GENERATE_ZERO_VCF {
     maxForks params.zero_vcf_forks
@@ -485,6 +269,53 @@ process GENERATE_ZERO_VCF {
         awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
     """
 }
+
+process CALLING {
+    maxForks 1
+    cpus 1
+
+    tag "${bam.baseName}"
+
+    input:
+    tuple path(bam), path(bam_index)
+    tuple path(ref_genome), path(ref_genome_fai)
+    path(coverage_bed)
+    val(ploidy)
+    path(ref_genome_dict)
+
+    output:
+    tuple val("${bam.baseName}"), path("*.snps_*.vcf.gz"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("*.indels_*.vcf.gz"), emit: indels_vcf
+
+    script:
+    def parallel_cpus = getAvailableCallersCount(params.effective_callers)
+    """
+    touch callers_commands.sh
+
+    if [[ ",${params.effective_callers}," == *"bcftools"* ]]; then
+        echo "bash ${projectDir}/bin/bcftools_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
+    fi
+
+    if [[ ",${params.effective_callers}," == *"freebayes"* ]]; then
+        echo "bash ${projectDir}/bin/freebayes_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+    fi
+
+    if [[ ",${params.effective_callers}," == *"gatk"* ]]; then
+        echo "bash ${projectDir}/bin/gatk4_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+    fi
+
+    if [[ ",${params.effective_callers}," == *"vardict"* ]]; then
+        echo "bash ${projectDir}/bin/vardict_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
+    fi
+
+    if [[ ",${params.effective_callers}," == *"snver"* ]]; then
+        echo "bash ${projectDir}/bin/snver_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+    fi
+
+    parallel -j ${parallel_cpus} '{}' :::: callers_commands.sh
+    """
+}
+
 
 // Process to generate final consensus VCF
 process GENERATE_CONSENSUS_DIPLOID {

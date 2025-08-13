@@ -76,13 +76,11 @@ if __name__ == "__main__":
     parser.add_argument('--reads_source', type=str, default='gbs', choices=['gbs', 'wgs'])
     parser.add_argument('--bowtie2_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=10)
     parser.add_argument('--bowtie2_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--freebayes_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--bcftools_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--bcftools_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--gatk4_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--calling_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--zero_vcf_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--zero_vcf_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--vardict_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--vardict_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
-    parser.add_argument('--snver_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
+    parser.add_argument('--bcftools_cpu', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--cons_forks', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=1)
     parser.add_argument('--cons_cpus', type=int, action=RangeCheckAction, min_val=1, max_val=os.cpu_count(), default=5)
     parser.add_argument('--win_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=1, default=1000000)
@@ -91,6 +89,8 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', type=int, action=RangeCheckAction, no_upper_limit=True, min_val=0, default=0)
     parser.add_argument('--cons_type', type=str, default='mj', choices=['mj', 'n1', 'fc'],
                         help='Consensus type: mj (majority rule), n1 (n-1 consensus), fc (full consensus)')
+    parser.add_argument('--effective_callers', type=str, default='bcftools,freebayes,snver,vardict,gatk',
+                        help='Default effective callers: bcftools,freebayes,snver,vardict,gatk')
     args = parser.parse_args()
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
@@ -120,16 +120,13 @@ if __name__ == "__main__":
                 --reads_source {args.reads_source} \
                 --bowtie2_cpu {args.bowtie2_cpu} \
                 --bowtie2_forks {args.bowtie2_forks} \
-                --freebayes_forks {args.freebayes_forks} \
+                --zero_vcf_forks {args.zero_vcf_forks} \
                 {"" if args.ploidy > 2 else f"--bcftools_cpu {args.bcftools_cpu}"} \
-                {"" if args.ploidy > 2 else f"--bcftools_forks {args.bcftools_forks}"} \
-                --gatk4_forks {args.gatk4_forks} \
                 {"" if args.ploidy > 2 else f"--vardict_cpu {args.vardict_cpu}"} \
-                {"" if args.ploidy > 2 else f"--vardict_forks {args.vardict_forks}"} \
-                --snver_forks {args.snver_forks} \
                 --cons_forks {args.cons_forks} \
                 --cons_cpus {args.cons_cpus} \
                 --win_size {args.win_size} \
+                --effective_callers {args.effective_callers} \
                 {f"--ploidy {args.ploidy}" if args.ploidy > 2 else ""} \
                 {f"--cons_type {args.cons_type}" if args.cons_type else ""} \
                 {"--debug" if args.debug else ""}
