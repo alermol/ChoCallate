@@ -59,3 +59,463 @@ def allEffectiveCallersPolyploidSuitable(String effective_callers, String polypl
     return true
 }
 
+// =============================================================================
+// INPUT VALIDATION AND PARAMETER SANITY CHECKS
+// =============================================================================
+
+// Validate file existence and readability
+def validateFile(String filePath, String fileType) {
+    if (!filePath) {
+        return [valid: false, error: "${fileType} path is not specified"]
+    }
+    
+    def file = new File(filePath)
+    if (!file.exists()) {
+        return [valid: false, error: "${fileType} file does not exist: ${filePath}"]
+    }
+    
+    if (!file.canRead()) {
+        return [valid: false, error: "${fileType} file is not readable: ${filePath}"]
+    }
+    
+    if (file.length() == 0) {
+        return [valid: false, error: "${fileType} file is empty: ${filePath}"]
+    }
+    
+    return [valid: true, file: file]
+}
+
+// Validate TSV file format and content
+def validateTSVFile(String filePath) {
+    def fileValidation = validateFile(filePath, "Samples TSV")
+    if (!fileValidation.valid) {
+        return fileValidation
+    }
+    
+    def file = fileValidation.file
+    // Read file content as string first to preserve tab characters
+    def content = file.text
+    def lines = content.split('\n')
+    
+
+    
+    if (lines.size() < 1) {
+        return [valid: false, error: "Samples TSV file must contain at least 1 sample line"]
+    }
+    
+    // No header - all lines are sample data
+    def startIndex = 0
+    
+    // Validate sample lines
+    for (int i = startIndex; i < lines.size(); i++) {
+        def line = lines[i].trim()
+        if (line.isEmpty()) continue
+        
+        def columns = line.split('\t')
+        if (columns.size() < 4) {
+            return [valid: false, error: "Sample line ${i+1} has insufficient columns: ${columns.size()} < 4. Expected: sample_id, read1, read2, read3"]
+        }
+        
+        // Check sample ID
+        if (!columns[0] || columns[0].trim().isEmpty()) {
+            return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
+        }
+        
+        // Check read files
+        for (int j = 1; j < 4; j++) {
+            if (columns[j] && !columns[j].trim().isEmpty()) {
+                def readFile = new File(columns[j])
+                if (!readFile.exists()) {
+                    return [valid: false, error: "Read file does not exist in line ${i+1}, column ${j+1}: ${columns[j]}"]
+                }
+            }
+        }
+    }
+    
+    def sampleCount = lines.size() - startIndex
+    if (sampleCount < 1) {
+        return [valid: false, error: "No valid sample lines found in TSV file"]
+    }
+    
+    return [valid: true, file: file, sampleCount: sampleCount]
+}
+
+// Validate reference genome file
+def validateReferenceGenome(String filePath) {
+    def fileValidation = validateFile(filePath, "Reference genome")
+    if (!fileValidation.valid) {
+        return fileValidation
+    }
+    
+    def file = fileValidation.file
+    def fileName = file.getName().toLowerCase()
+    
+    // Check file extension
+    if (!fileName.endsWith('.fasta') && !fileName.endsWith('.fa') && !fileName.endsWith('.fna')) {
+        return [valid: false, error: "Reference genome must be a FASTA file (.fasta, .fa, or .fna): ${filePath}"]
+    }
+    
+    // Check if it's a valid FASTA file
+    def firstLine = file.withReader { reader ->
+        reader.readLine()
+    }
+    
+    if (!firstLine || !firstLine.startsWith('>')) {
+        return [valid: false, error: "Reference genome file is not a valid FASTA file (does not start with '>'): ${filePath}"]
+    }
+    
+    return [valid: true, file: file]
+}
+
+// Validate Bowtie2 index files
+def validateBowtie2Index(String indexPath) {
+	if (!indexPath) {
+		return [valid: false, error: "Bowtie2 index path is not specified"]
+	}
+
+	def pathObj = new File(indexPath)
+	def indexDir = pathObj.isDirectory() ? pathObj : pathObj.getParentFile()
+	if (!indexDir || !indexDir.exists()) {
+		return [valid: false, error: "Bowtie2 index directory does not exist: ${indexPath}"]
+	}
+
+	// Try to infer the index prefix from the provided path
+	def name = pathObj.isDirectory() ? null : pathObj.getName()
+	def prefixGuess = null
+	if (name) {
+		// Remove known suffix patterns to get the prefix base
+		prefixGuess = name.replaceAll(/(\.rev\.(1|2)\.(bt2|bt2l)|\.(1|2|3|4)\.(bt2|bt2l))$/, '')
+		if (!prefixGuess || prefixGuess == name) {
+			// If no suffix matched, assume the provided name is already the prefix
+			prefixGuess = name
+		}
+	}
+
+	// Helper to check existence of forward index set for a given prefix and extension
+	def forwardSetExists = { String prefix, String ext ->
+		[1,2,3,4].every { n -> new File(indexDir, "${prefix}.${n}.${ext}").exists() }
+	}
+
+	def found = false
+	def usedPrefix = null
+	def usedExt = null
+
+	if (prefixGuess) {
+		// Check for either bt2l or bt2 forward sets
+		for (ext in ['bt2l','bt2']) {
+			if (forwardSetExists(prefixGuess, ext)) {
+				found = true
+				usedPrefix = prefixGuess
+				usedExt = ext
+				break
+			}
+		}
+	}
+
+	// If not found and no explicit prefix provided (directory or non-matching file),
+	// attempt to discover any valid prefix in the directory by scanning files
+	if (!found) {
+		def files = indexDir.listFiles() ?: []
+		// Collect candidate prefixes from files matching .1.bt2(l)
+		def candidates = files.collect { f -> f.getName() }
+			.findAll { it ==~ /.+\.1\.(bt2|bt2l)$/ }
+			.collect { it.replaceAll(/\.1\.(bt2|bt2l)$/, '') }
+		// Check candidates
+		for (cand in candidates) {
+			for (ext in ['bt2l','bt2']) {
+				if (forwardSetExists(cand, ext)) {
+					found = true
+					usedPrefix = cand
+					usedExt = ext
+					break
+				}
+			}
+			if (found) break
+		}
+	}
+
+	if (!found) {
+		return [
+			valid: false,
+			error: "Bowtie2 index validation failed in '${indexDir}'. Expected forward index files '.1..4' with extension '.bt2' or '.bt2l' for a common prefix. Reverse index files are optional."]
+	}
+
+	// Build the list of discovered forward index files for reporting
+	def indexFiles = [1,2,3,4].collect { n -> new File(indexDir, "${usedPrefix}.${n}.${usedExt}") }
+	return [valid: true, indexDir: indexDir, indexFiles: indexFiles, prefix: usedPrefix, ext: usedExt]
+}
+
+// Validate numeric parameters with ranges
+def validateNumericParameter(Number value, String paramName, Number minValue, Number maxValue = null) {
+    if (value == null) {
+        return [valid: false, error: "${paramName} is not specified"]
+    }
+    
+    if (value < minValue) {
+        return [valid: false, error: "${paramName} (${value}) is below minimum value (${minValue})"]
+    }
+    
+    if (maxValue != null && value > maxValue) {
+        return [valid: false, error: "${paramName} (${value}) is above maximum value (${maxValue})"]
+    }
+    
+    return [valid: true, value: value]
+}
+
+// Validate CPU and resource parameters
+def validateCPUParameter(Number value, String paramName) {
+    def maxCPUs = Runtime.runtime.availableProcessors()
+    return validateNumericParameter(value, paramName, 1, maxCPUs)
+}
+
+// Validate fork parameters
+def validateForkParameter(Number value, String paramName) {
+    def maxCPUs = Runtime.runtime.availableProcessors()
+    def maxForks = (maxCPUs > 1) ? (maxCPUs - 1) : 1
+    return validateNumericParameter(value, paramName, 1, maxForks)
+}
+
+// Validate quality threshold parameters
+def validateQualityParameter(Number value, String paramName, Number maxValue) {
+    return validateNumericParameter(value, paramName, 0, maxValue) // Quality scores typically 0-maxValue
+}
+
+// Validate ploidy parameter
+def validatePloidy(Number ploidy) {
+    if (ploidy == null) {
+        return [valid: false, error: "Ploidy is not specified"]
+    }
+    
+    if (ploidy < 2) {
+        return [valid: false, error: "Ploidy (${ploidy}) must be 2 or greater"]
+    }
+    
+    return [valid: true, value: ploidy]
+}
+
+// Validate reads type parameter
+def validateReadsType(String readsType) {
+    def validTypes = ['se', 'pe', 'mx']
+    if (!readsType || !validTypes.contains(readsType)) {
+        return [valid: false, error: "Invalid reads_type: ${readsType}. Valid options: ${validTypes.join(', ')}"]
+    }
+    return [valid: true, value: readsType]
+}
+
+// Validate reads source parameter
+def validateReadsSource(String readsSource) {
+    def validSources = ['gbs', 'wgs']
+    if (!readsSource || !validSources.contains(readsSource)) {
+        return [valid: false, error: "Invalid reads_source: ${readsSource}. Valid options: ${validSources.join(', ')}"]
+    }
+    return [valid: true, value: readsSource]
+}
+
+// Validate consensus type parameter
+def validateConsensusType(String consType) {
+    def validTypes = ['mj', 'n1', 'fc']
+    if (!consType || !validTypes.contains(consType)) {
+        return [valid: false, error: "Invalid cons_type: ${consType}. Valid options: ${validTypes.join(', ')}"]
+    }
+    return [valid: true, value: consType]
+}
+
+// Validate logging parameters
+def validateLogLevel(String logLevel) {
+    def validLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
+    if (!logLevel || !validLevels.contains(logLevel.toUpperCase())) {
+        return [valid: false, error: "Invalid log_level: ${logLevel}. Valid options: ${validLevels.join(', ')}"]
+    }
+    return [valid: true, value: logLevel.toUpperCase()]
+}
+
+def validateLogFormat(String logFormat) {
+    def validFormats = ['json', 'text', 'both']
+    if (!logFormat || !validFormats.contains(logFormat.toLowerCase())) {
+        return [valid: false, error: "Invalid log_format: ${logFormat}. Valid options: ${validFormats.join(', ')}"]
+    }
+    return [valid: true, value: logFormat.toLowerCase()]
+}
+
+// Validate window size parameter
+def validateWindowSize(Number winSize) {
+    if (winSize == null) {
+        return [valid: false, error: "Window size is not specified"]
+    }
+    
+    if (winSize < 1000000) {
+        return [valid: false, error: "Window size (${winSize}) is too small. Minimum: 1000000 bp"]
+    }
+    
+    if (winSize > 10000000) {
+        return [valid: false, error: "Window size (${winSize}) is too large. Maximum: 10000000 bp"]
+    }
+    
+    return [valid: true, value: winSize]
+}
+
+// Validate chunk size parameter
+def validateChunkSize(Number chunkSize) {
+    if (chunkSize == null) {
+        return [valid: false, error: "Chunk size is not specified"]
+    }
+    
+    if (chunkSize < 0) {
+        return [valid: false, error: "Chunk size (${chunkSize}) cannot be negative"]
+    }
+    
+    return [valid: true, value: chunkSize]
+}
+
+// Comprehensive parameter validation function
+def validateAllParameters(Map params) {
+    def errors = []
+    def warnings = []
+    
+    // File validations
+    def samplesValidation = validateTSVFile(params.samples_tsv)
+    if (!samplesValidation.valid) {
+        errors << samplesValidation.error
+    }
+    
+    def refGenomeValidation = validateReferenceGenome(params.reference_genome)
+    if (!refGenomeValidation.valid) {
+        errors << refGenomeValidation.error
+    }
+    
+    def refIndexValidation = validateBowtie2Index(params.reference_index)
+    if (!refIndexValidation.valid) {
+        errors << refIndexValidation.error
+    }
+    
+    // Numeric parameter validations
+    def ploidyValidation = validatePloidy(params.ploidy)
+    if (!ploidyValidation.valid) {
+        errors << ploidyValidation.error
+    }
+    
+    def minCoverageValidation = validateQualityParameter(params.min_coverage, "min_coverage", 10000000)
+    if (!minCoverageValidation.valid) {
+        errors << minCoverageValidation.error
+    }
+    
+    def minBaseQualityValidation = validateQualityParameter(params.min_base_quality, "min_base_quality", 10000000)
+    if (!minBaseQualityValidation.valid) {
+        errors << minBaseQualityValidation.error
+    }
+    
+    def minMapQualValidation = validateQualityParameter(params.min_map_qual, "min_map_qual", 10000000)
+    if (!minMapQualValidation.valid) {
+        errors << minMapQualValidation.error
+    }
+    
+    def minSnpQualValidation = validateQualityParameter(params.min_snp_qual, "min_snp_qual", 10000000)
+    if (!minSnpQualValidation.valid) {
+        errors << minSnpQualValidation.error
+    }
+    
+    // CPU and resource validations
+    def bowtie2CpuValidation = validateCPUParameter(params.bowtie2_cpu, "bowtie2_cpu")
+    if (!bowtie2CpuValidation.valid) {
+        errors << bowtie2CpuValidation.error
+    }
+    
+    def bcftoolsCpuValidation = validateCPUParameter(params.bcftools_cpu, "bcftools_cpu")
+    if (!bcftoolsCpuValidation.valid) {
+        errors << bcftoolsCpuValidation.error
+    }
+    
+    def vardictCpuValidation = validateCPUParameter(params.vardict_cpu, "vardict_cpu")
+    if (!vardictCpuValidation.valid) {
+        errors << vardictCpuValidation.error
+    }
+    
+    def zeroVcfCpuValidation = validateCPUParameter(params.zero_vcf_cpu, "zero_vcf_cpu")
+    if (!zeroVcfCpuValidation.valid) {
+        errors << zeroVcfCpuValidation.error
+    }
+    
+    def consCpusValidation = validateCPUParameter(params.cons_cpus, "cons_cpus")
+    if (!consCpusValidation.valid) {
+        errors << consCpusValidation.error
+    }
+    
+    // Fork validations
+    def bowtie2ForksValidation = validateForkParameter(params.bowtie2_forks, "bowtie2_forks")
+    if (!bowtie2ForksValidation.valid) {
+        errors << bowtie2ForksValidation.error
+    }
+    
+    def callingForksValidation = validateForkParameter(params.calling_forks, "calling_forks")
+    if (!callingForksValidation.valid) {
+        errors << callingForksValidation.error
+    }
+    
+    def zeroVcfForksValidation = validateForkParameter(params.zero_vcf_forks, "zero_vcf_forks")
+    if (!zeroVcfForksValidation.valid) {
+        errors << zeroVcfForksValidation.error
+    }
+    
+    def consForksValidation = validateForkParameter(params.cons_forks, "cons_forks")
+    if (!consForksValidation.valid) {
+        errors << consForksValidation.error
+    }
+    
+    // String parameter validations
+    def readsTypeValidation = validateReadsType(params.reads_type)
+    if (!readsTypeValidation.valid) {
+        errors << readsTypeValidation.error
+    }
+    
+    def readsSourceValidation = validateReadsSource(params.reads_source)
+    if (!readsSourceValidation.valid) {
+        errors << readsSourceValidation.error
+    }
+    
+    def consTypeValidation = validateConsensusType(params.cons_type)
+    if (!consTypeValidation.valid) {
+        errors << consTypeValidation.error
+    }
+    
+    // Other numeric validations
+    def winSizeValidation = validateWindowSize(params.win_size)
+    if (!winSizeValidation.valid) {
+        errors << winSizeValidation.error
+    }
+    
+    def chunkSizeValidation = validateChunkSize(params.chunk_size)
+    if (!chunkSizeValidation.valid) {
+        errors << chunkSizeValidation.error
+    }
+    
+    // Logging parameter validations
+    if (params.log_level) {
+        def logLevelValidation = validateLogLevel(params.log_level)
+        if (!logLevelValidation.valid) {
+            errors << logLevelValidation.error
+        }
+    }
+    
+    if (params.log_format) {
+        def logFormatValidation = validateLogFormat(params.log_format)
+        if (!logFormatValidation.valid) {
+            errors << logFormatValidation.error
+        }
+    }
+    
+    // Warnings for potentially problematic configurations
+    if (params.min_coverage < 2) {
+        warnings << "min_coverage (${params.min_coverage}) is very low. This may result in many false positive variants."
+    }
+    
+    if (params.min_base_quality < 5) {
+        warnings << "min_base_quality (${params.min_base_quality}) is low. This may result in poor quality variant calls."
+    }
+    
+    if (params.win_size > 5000000) {
+        warnings << "win_size (${params.win_size}) is very large. This may impact memory usage and processing time."
+    }
+    
+    return [valid: errors.isEmpty(), errors: errors, warnings: warnings]
+}
+

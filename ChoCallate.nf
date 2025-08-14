@@ -8,12 +8,30 @@ def default_polyploid_callers = 'gatk,freebayes,snver'
 def min_callers_count         = 3
 
 
-include { getAvailableCallersCount             } from './functions/utils.nf'
-include { getConsensusThreshold                } from './functions/utils.nf'
-include { allEffectiveCallersInAvailable       } from './functions/utils.nf'
-include { effectiveCallersAtLeastThree         } from './functions/utils.nf'
-include { allEffectiveCallersDiploidSuitable   } from './functions/utils.nf'
-include { allEffectiveCallersPolyploidSuitable } from './functions/utils.nf'
+include { 
+    getAvailableCallersCount; 
+    getConsensusThreshold; 
+    allEffectiveCallersInAvailable; 
+    effectiveCallersAtLeastThree; 
+    allEffectiveCallersDiploidSuitable; 
+    allEffectiveCallersPolyploidSuitable;
+    validateAllParameters;
+    validateTSVFile;
+    validateReferenceGenome;
+    validateBowtie2Index;
+    validatePloidy;
+    validateReadsType;
+    validateReadsSource;
+    validateConsensusType;
+    validateLogLevel;
+    validateLogFormat;
+    validateWindowSize;
+    validateChunkSize;
+    validateCPUParameter;
+    validateForkParameter;
+    validateQualityParameter;
+    validateNumericParameter
+} from './functions/utils.nf'
 
 // Include logging module
 include { 
@@ -36,6 +54,111 @@ include {
 
 // Initialize logging
 initLogging()
+
+// =============================================================================
+// INPUT VALIDATION AND PARAMETER SANITY CHECKS
+// =============================================================================
+
+logInfo("Starting input validation and parameter sanity checks")
+
+// Validate all parameters comprehensively
+def validationResult = validateAllParameters(params)
+
+if (!validationResult.valid) {
+    logError("Input validation failed", [
+        validation: "comprehensive_parameter_validation",
+        error_count: validationResult.errors.size(),
+        errors: validationResult.errors
+    ])
+    
+    // Log each error individually for clarity
+    validationResult.errors.each { error ->
+        logError("Validation error", [error: error])
+    }
+    
+    error "Input validation failed with ${validationResult.errors.size()} error(s). Please fix the issues above and try again."
+}
+
+// Log warnings if any
+if (validationResult.warnings.size() > 0) {
+    logWarn("Parameter warnings detected", [
+        validation: "parameter_warnings",
+        warning_count: validationResult.warnings.size(),
+        warnings: validationResult.warnings
+    ])
+    
+    validationResult.warnings.each { warning ->
+        logWarn("Parameter warning", [warning: warning])
+    }
+}
+
+logInfo("Input validation completed successfully", [
+    validation: "comprehensive_parameter_validation",
+    parameters_validated: true,
+    warnings_count: validationResult.warnings.size()
+])
+
+// Validate output directory
+def outdir = new File(params.outdir)
+if (!outdir.exists()) {
+    try {
+        outdir.mkdirs()
+        logInfo("Output directory created", [
+            validation: "output_directory_creation",
+            directory: params.outdir
+        ])
+    } catch (Exception e) {
+        logError("Failed to create output directory", [
+            validation: "output_directory_creation",
+            directory: params.outdir,
+            error: e.message
+        ])
+        error "Failed to create output directory: ${params.outdir}. Error: ${e.message}"
+    }
+} else if (!outdir.canWrite()) {
+    logError("Output directory is not writable", [
+        validation: "output_directory_permissions",
+        directory: params.outdir
+    ])
+    error "Output directory is not writable: ${params.outdir}"
+} else {
+    logInfo("Output directory validation passed", [
+        validation: "output_directory_permissions",
+        directory: params.outdir,
+        writable: true
+    ])
+}
+
+// Validate specific file types individually for detailed logging
+def samplesValidation = validateTSVFile(params.samples_tsv)
+if (samplesValidation.valid) {
+    logInfo("Samples TSV validation passed", [
+        validation: "samples_tsv_format",
+        file: params.samples_tsv,
+        sample_count: samplesValidation.sampleCount
+    ])
+}
+
+def refGenomeValidation = validateReferenceGenome(params.reference_genome)
+if (refGenomeValidation.valid) {
+    logInfo("Reference genome validation passed", [
+        validation: "reference_genome_format",
+        file: params.reference_genome
+    ])
+}
+
+def refIndexValidation = validateBowtie2Index(params.reference_index)
+if (refIndexValidation.valid) {
+    logInfo("Bowtie2 index validation passed", [
+        validation: "bowtie2_index_format",
+        index_directory: params.reference_index,
+        index_files_count: refIndexValidation.indexFiles.size()
+    ])
+}
+
+// =============================================================================
+// EXISTING CALLER VALIDATION (ENHANCED WITH LOGGING)
+// =============================================================================
 
 // Handle effective_callers parameter
 // If params.effective_callers has default value "-", then set of caller in default_diploid_callers or default_polyploid_callers will be taken as default for diploid and polyploid calling
