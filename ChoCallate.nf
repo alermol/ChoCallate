@@ -312,9 +312,6 @@ process CREATE_FAI_INDEX {
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process completed - FASTA index created"
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 // Process to create sequence dictionary (for GATK4)
@@ -341,9 +338,6 @@ process CREATE_SEQ_DICT {
     echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Process completed - Sequence dictionary created"
     echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 // Process to map reads to reference genome
@@ -407,9 +401,6 @@ process BOWTIE2_MAPPING {
         """
     else
         error 'Invalid reads type: ${params.reads_type}. Available types: se, pe, mx'
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 // Process to left-align indels in BAM files
@@ -441,9 +432,6 @@ process LEFT_ALIGN_INDELS {
     echo "[\$(date -Iseconds)] [INFO] [LEFT_ALIGN_INDELS] [${bamName}] Process completed - Indels left-aligned"
     echo "[\$(date -Iseconds)] [INFO] [LEFT_ALIGN_INDELS] [${bamName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 // Process to index BAM files
@@ -473,9 +461,6 @@ process INDEXING_BAM {
     echo "[\$(date -Iseconds)] [INFO] [INDEXING_BAM] [${bamName}] Process completed - BAM file indexed"
     echo "[\$(date -Iseconds)] [INFO] [INDEXING_BAM] [${bamName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 // Process to generate coverage information
@@ -507,9 +492,6 @@ process COVERAGE_GENERATION {
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Process completed - Coverage BED file created"
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 
@@ -545,9 +527,6 @@ process GENERATE_ZERO_VCF {
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Process completed - Zero VCF created"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
 
 process CALLING {
@@ -612,10 +591,6 @@ process CALLING {
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Process completed - Variant calling finished"
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
-}
 
 
 // Process to generate final consensus VCF
@@ -686,7 +661,4 @@ process GENERATE_CONSENSUS {
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Performance: completed successfully"
     """
-    
-    // Note: Shell-level logging is already implemented in the script above
-    // Nextflow-level logging can be added later if needed
 }
