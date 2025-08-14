@@ -7,23 +7,25 @@ import tempfile
 from itertools import islice
 from pathlib import Path
 from subprocess import run
+from typing import List, Optional, Union, Any
 
 
 class RangeCheckAction(argparse.Action):
     def __init__(self,
-                 option_strings,
-                 dest,
-                 min_val=None,
-                 max_val=None,
-                 no_upper_limit=False,
-                 **kwargs):
+                 option_strings: List[str],
+                 dest: str,
+                 min_val: Optional[int] = None,
+                 max_val: Optional[int] = None,
+                 no_upper_limit: bool = False,
+                 **kwargs: Any) -> None:
         super().__init__(option_strings, dest, **kwargs)
-        self.min_val = min_val
-        self.max_val = max_val
-        self.no_upper_limit = no_upper_limit
+        self.min_val: Optional[int] = min_val
+        self.max_val: Optional[int] = max_val
+        self.no_upper_limit: bool = no_upper_limit
 
-    def __call__(self, parser, namespace, value, option_string=None):
-        ivalue = int(value)
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, 
+                 value: str, option_string: Optional[str] = None) -> None:
+        ivalue: int = int(value)
         if self.no_upper_limit == True:
             self.max_val = None
             if ((self.min_val is not None) and (ivalue < self.min_val)):
@@ -39,23 +41,23 @@ class RangeCheckAction(argparse.Action):
         setattr(namespace, self.dest, ivalue)
 
 
-def parser_resolve_path(path):
+def parser_resolve_path(path: str) -> Path:
     try:
-        full_path = Path(path).resolve(strict=True)
+        full_path: Path = Path(path).resolve(strict=True)
     except FileNotFoundError:
         sys.exit(f'ERROR! The file {path} does not exist. Emergency termination.')
     return full_path
 
 
-def split_samplesheet(file, n):
-    chunk_files = []
+def split_samplesheet(file: Union[str, Path], n: int) -> List[Path]:
+    chunk_files: List[Path] = []
     with tempfile.TemporaryDirectory(delete=False) as tmpdir, open(file) as samplesheet:
         tmpdir = Path(tmpdir)
-        lines = samplesheet.readlines()
+        lines: List[str] = samplesheet.readlines()
         it = iter(lines)
         lines = [list(islice(it, n)) for _ in range((len(lines) + n - 1) // n)]
         for cid, chunk in enumerate(lines, start=1):
-            filename = tmpdir.joinpath(f'{Path(file).name}.{cid}')
+            filename: Path = tmpdir.joinpath(f'{Path(file).name}.{cid}')
             chunk_files.append(filename)
             with open(filename, 'w') as chunk_file:
                 chunk_file.write("".join(chunk))
@@ -63,7 +65,7 @@ def split_samplesheet(file, n):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument('--samples_tsv', type=parser_resolve_path, default='samples.tsv')
     parser.add_argument('--outdir', type=str, default='ChoCallate_output')
     parser.add_argument('--reference_genome', type=parser_resolve_path, required=True)
@@ -91,13 +93,13 @@ if __name__ == "__main__":
                         help='Consensus type: mj (majority rule), n1 (n-1 consensus), fc (full consensus)')
     parser.add_argument('--effective_callers', type=str, default='-',
                         help='Available callers: bcftools,freebayes,snver,vardict,gatk')
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
     Path.mkdir(Path(args.outdir), parents=True, exist_ok=True)
 
-    pipeline_path = Path(__file__).parent.joinpath('ChoCallate.nf')
+    pipeline_path: Path = Path(__file__).parent.joinpath('ChoCallate.nf')
 
-    chunks = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
+    chunks: List[Path] = [args.samples_tsv] if args.chunk_size == 0 else split_samplesheet(args.samples_tsv, args.chunk_size)
     if args.chunk_size == 0:
         print('The input file will be processed as a single file.')
     else:
