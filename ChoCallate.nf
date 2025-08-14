@@ -15,6 +15,28 @@ include { effectiveCallersAtLeastThree         } from './functions/utils.nf'
 include { allEffectiveCallersDiploidSuitable   } from './functions/utils.nf'
 include { allEffectiveCallersPolyploidSuitable } from './functions/utils.nf'
 
+// Include logging module
+include { 
+    initLogging; 
+    logInfo; 
+    logWarn; 
+    logError; 
+    logDebug; 
+    logProcessStart; 
+    logProcessComplete; 
+    logProcessError; 
+    logWorkflowStart; 
+    logWorkflowComplete; 
+    logWorkflowError;
+    logPerformance;
+    logResourceUsage;
+    logFileOperation;
+    logValidation
+} from './functions/logging.nf'
+
+// Initialize logging
+initLogging()
+
 // Handle effective_callers parameter
 // If params.effective_callers has default value "-", then set of caller in default_diploid_callers or default_polyploid_callers will be taken as default for diploid and polyploid calling
 // If params.effective_callers have user-defined value, then it should be used
@@ -22,58 +44,71 @@ def effective_callers
 if (params.effective_callers == "-") {
     if (params.ploidy == 2) {
         effective_callers = default_diploid_callers
-        println "Using default diploid callers: ${effective_callers}"
+        logInfo("Using default diploid callers", [callers: effective_callers])
     } else if (params.ploidy > 2) {
         effective_callers = default_polyploid_callers
-        println "Using default polyploid callers: ${effective_callers}"
+        logInfo("Using default polyploid callers", [callers: effective_callers])
     } else {
+        logError("Invalid ploidy value", [ploidy: params.ploidy, error: "Ploidy must be 2 or greater"])
         error "Invalid ploidy value: ${params.ploidy}. Ploidy must be 2 or greater."
     }
 } else {
     effective_callers = params.effective_callers
-    println "Using user-defined effective callers: ${effective_callers}"
+    logInfo("Using user-defined effective callers", [callers: effective_callers])
 }
 
 if (!allEffectiveCallersInAvailable(effective_callers, available_callers)) {
+    logError("Validation failed", [validation: "effective_callers_availability", callers: effective_callers, available: available_callers])
     exit 1
 } else {
-    println "All effective callers are available"
+    logInfo("Validation passed", [validation: "effective_callers_availability", callers: effective_callers])
 }
 
 if (effectiveCallersAtLeastThree(effective_callers) < min_callers_count) {
-    println "The number of effective callers must be at least 3, however, you provided ${getAvailableCallersCount(effective_callers)}: ${effective_callers}"
+    logError("Validation failed", [
+        validation: "minimum_callers_count", 
+        required: min_callers_count, 
+        provided: getAvailableCallersCount(effective_callers), 
+        callers: effective_callers
+    ])
     exit 1
 }
 
 if (params.ploidy == 2) {
     if (allEffectiveCallersDiploidSuitable(effective_callers, diploid_callers)) {
-        println "All effective callers are suitable for diploid calling: ${effective_callers}"
+        logInfo("Validation passed", [validation: "diploid_callers_suitability", callers: effective_callers])
     } else {
+        logError("Validation failed", [validation: "diploid_callers_suitability", callers: effective_callers, suitable: diploid_callers])
         exit 1
     }
 } else if (params.ploidy > 2) {
     if (allEffectiveCallersPolyploidSuitable(effective_callers, polyploid_callers)) {
-        println "All effective callers are suitable for polyploid calling: ${effective_callers}"
+        logInfo("Validation passed", [validation: "polyploid_callers_suitability", callers: effective_callers])
     } else {
+        logError("Validation failed", [validation: "polyploid_callers_suitability", callers: effective_callers, suitable: polyploid_callers])
         exit 1
     }
 }
 
 if (params.debug) {
-    println "Debug mode is enabled"
+    logInfo("Debug mode enabled")
 } else {
-    println "Debug mode is disabled"
+    logInfo("Debug mode disabled")
 }
 
 
 // Main workflow definition
 workflow {
+    logWorkflowStart()
+    
     // Create channel from samples TSV file and parse into tuples
     Channel
         .fromPath(params.samples_tsv)
         .splitCsv(header: false, sep: '\t')
         .map{row -> tuple(row[0], file(row[1]), file(row[2]), file(row[3]))}
         .set{sample_run_ch}
+    
+    logInfo("Sample channel created", [samples_count: "processing"])
 
     // Define reference files
     ref_index = file(params.reference_index)
@@ -117,14 +152,16 @@ workflow {
 
 // Cleanup temporary files after workflow completion
 workflow.onComplete {
+    logWorkflowComplete()
     def workDir = workflow.workDir ? file(workflow.workDir) : null
     if (workDir?.exists() && !params.debug) {
         workDir.deleteDir()
-        }
+        logInfo("Workflow cleanup completed", [action: "cleanup", workDir: workDir.toString()])
+    }
 }
 
 workflow.onError {
-    println "Error: ChoCallate execution stopped with the following message: ${workflow.errorMessage}"
+    logWorkflowError(workflow.errorMessage)
 }
 
 // Process to create FASTA index file (for FreeBayes)
@@ -139,9 +176,22 @@ process CREATE_FAI_INDEX {
     tuple path("${ref_genome}"), path("${ref_genome}.fai"), emit: fai_index
 
     script:
+    def startTime = System.currentTimeMillis()
+    def refName = ref_genome.getName()
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process started - Creating FASTA index"
+    
     samtools faidx --threads ${task.cpus} ${ref_genome}
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process completed - FASTA index created"
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 // Process to create sequence dictionary (for GATK4)
@@ -155,9 +205,22 @@ process CREATE_SEQ_DICT {
     path("${ref_genome.baseName}.dict"), emit: gen_dict
 
     script:
+    def startTime = System.currentTimeMillis()
+    def refName = ref_genome.getName()
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Process started - Creating sequence dictionary"
+    
     gatk CreateSequenceDictionary -R ${ref_genome}
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Process completed - Sequence dictionary created"
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 // Process to map reads to reference genome
@@ -175,28 +238,55 @@ process BOWTIE2_MAPPING {
     path("${sample_id}.tmp_bam"), emit: bam
 
     script:
+    def startTime = System.currentTimeMillis()
+    def readsType = params.reads_type
+    
     if ( params.reads_type == 'pe' )
         """
+        # Log process start
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
+            
+        # Log process completion and performance
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'se' )
         """
+        # Log process start
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -U ${read1} | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.tmp_bam
+            
+        # Log process completion and performance
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'mx' )
         """
+        # Log process start
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} -U ${read3} | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
             samtools sort -@ ${task.cpus} -o ${sample_id}.bam
+            
+        # Log process completion and performance
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else
         error 'Invalid reads type: ${params.reads_type}. Available types: se, pe, mx'
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 // Process to left-align indels in BAM files
@@ -215,9 +305,22 @@ process LEFT_ALIGN_INDELS {
     path("${bam.baseName}.bam"), emit: lai_bam
 
     script:
+    def startTime = System.currentTimeMillis()
+    def bamName = bam.getName()
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [LEFT_ALIGN_INDELS] [${bamName}] Process started - Left-aligning indels"
+    
     gatk LeftAlignIndels -I ${bam} -O ${bam.baseName}.bam -R ${ref_genome} -OBI false
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [LEFT_ALIGN_INDELS] [${bamName}] Process completed - Indels left-aligned"
+    echo "[\$(date -Iseconds)] [INFO] [LEFT_ALIGN_INDELS] [${bamName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 // Process to index BAM files
@@ -234,9 +337,22 @@ process INDEXING_BAM {
     tuple path("${bam}"), path("${bam}.csi"), emit: ind_bam
 
     script:
+    def startTime = System.currentTimeMillis()
+    def bamName = bam.getName()
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [INDEXING_BAM] [${bamName}] Process started - Indexing BAM file"
+    
     samtools index --csi --threads ${task.cpus} ${bam.baseName}.bam
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [INDEXING_BAM] [${bamName}] Process completed - BAM file indexed"
+    echo "[\$(date -Iseconds)] [INFO] [INDEXING_BAM] [${bamName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 // Process to generate coverage information
@@ -253,11 +369,24 @@ process COVERAGE_GENERATION {
     path("${bam.baseName}.bed"), emit: coverage
 
     script:
+    def startTime = System.currentTimeMillis()
+    def bamName = bam.getName()
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Process started - Generating coverage information"
+    
     samtools depth -J --threads ${task.cpus} ${bam} | \
         awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
         bedops --merge - > ${bam.baseName}.bed
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Process completed - Coverage BED file created"
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 
@@ -276,13 +405,26 @@ process GENERATE_ZERO_VCF {
     path("zero.vcf.gz"), emit: zero_vcf
 
     script:
+    def startTime = System.currentTimeMillis()
+    def bamName = bam.getName()
     String genotype = (["0"] * params.ploidy).join("/")
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Process started - Generating zero VCF"
+    
     bcftools mpileup -Ov --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 1 \
         --min-BQ ${params.min_base_quality} --regions-file ${coverage_bed} ${bam} | \
         awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' | \
         awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Process completed - Zero VCF created"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 process CALLING {
@@ -303,32 +445,53 @@ process CALLING {
     tuple val("${bam.baseName}"), path("*.indels_*.vcf.gz"), emit: indels_vcf
 
     script:
+    def startTime = System.currentTimeMillis()
+    def bamName = bam.getName()
     def parallel_cpus = getAvailableCallersCount(effective_callers)
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Process started - Running variant callers"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Using callers: ${effective_callers}"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Parallel CPUs: ${parallel_cpus}"
+    
     touch callers_commands.sh
 
     if [[ ",${effective_callers}," == *"bcftools"* ]]; then
         echo "bash ${projectDir}/bin/bcftools_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added bcftools caller command"
     fi
 
     if [[ ",${effective_callers}," == *"freebayes"* ]]; then
         echo "bash ${projectDir}/bin/freebayes_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added freebayes caller command"
     fi
 
     if [[ ",${effective_callers}," == *"gatk"* ]]; then
         echo "bash ${projectDir}/bin/gatk4_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added GATK4 caller command"
     fi
 
     if [[ ",${effective_callers}," == *"vardict"* ]]; then
         echo "bash ${projectDir}/bin/vardict_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added VarDict caller command"
     fi
 
     if [[ ",${effective_callers}," == *"snver"* ]]; then
         echo "bash ${projectDir}/bin/snver_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added SNVer caller command"
     fi
 
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Executing ${parallel_cpus} callers in parallel"
     parallel -j ${parallel_cpus} '{}' :::: callers_commands.sh
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Process completed - Variant calling finished"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
 
 
@@ -353,13 +516,21 @@ process GENERATE_CONSENSUS {
     path("${sample}.indels.vcf.gz")
 
     script:
+    def startTime = System.currentTimeMillis()
     def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
+    
     """
+    # Log process start
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process started - Generating consensus VCFs"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Consensus threshold: ${cons_threshold}"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Window size: ${params.win_size}"
+    
     awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
 
     mkdir all_chrs
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing SNPs..."
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
     tabix -C zero.vcf.gz
@@ -372,9 +543,10 @@ process GENERATE_CONSENSUS {
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] SNPs consensus VCF created"
     rm -r all_chrs/*
 
-
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing indels..."
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
@@ -384,5 +556,14 @@ process GENERATE_CONSENSUS {
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
+        
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus VCF created"
+    
+    # Log process completion and performance
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Performance: completed successfully"
     """
+    
+    // Note: Shell-level logging is already implemented in the script above
+    // Nextflow-level logging can be added later if needed
 }
