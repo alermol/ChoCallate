@@ -354,18 +354,7 @@ def validateWindowSize(Number winSize) {
     return [valid: true, value: winSize]
 }
 
-// Validate chunk size parameter
-def validateChunkSize(Number chunkSize) {
-    if (chunkSize == null) {
-        return [valid: false, error: "Chunk size is not specified"]
-    }
-    
-    if (chunkSize < 0) {
-        return [valid: false, error: "Chunk size (${chunkSize}) cannot be negative"]
-    }
-    
-    return [valid: true, value: chunkSize]
-}
+
 
 // Comprehensive parameter validation function
 def validateAllParameters(Map params) {
@@ -481,11 +470,6 @@ def validateAllParameters(Map params) {
     def winSizeValidation = validateWindowSize(params.win_size)
     if (!winSizeValidation.valid) {
         errors << winSizeValidation.error
-    }
-    
-    def chunkSizeValidation = validateChunkSize(params.chunk_size)
-    if (!chunkSizeValidation.valid) {
-        errors << chunkSizeValidation.error
     }
     
     // Logging parameter validations

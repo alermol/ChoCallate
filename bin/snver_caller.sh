@@ -89,3 +89,8 @@ log_message "INFO" "Process completed - SNPs and indels VCFs generated"
 log_message "INFO" "Performance: ${DURATION} seconds"
 log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.vcf.gz, ${BAM_BASENAME}.indels_snver.vcf.gz"
 
+# Clean up temporary files
+log_message "INFO" "Cleaning up temporary files"
+rm -f reference.fasta reference.fasta.fai "${BAM_BASENAME}.filter.vcf" "${BAM_BASENAME}.indel.filter.vcf" 2>/dev/null || true
+log_message "INFO" "Temporary files cleaned up"
+

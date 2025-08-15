@@ -60,3 +60,8 @@ log_message "INFO" "Process completed - SNPs and indels extracted"
 log_message "INFO" "Performance: ${DURATION} seconds"
 log_message "INFO" "Output files: ${BAM_BASENAME}.snps_vardict.vcf.gz, ${BAM_BASENAME}.indels_vardict.vcf.gz"
 
+# Clean up temporary files
+log_message "INFO" "Cleaning up temporary files"
+rm -f "${BAM_BASENAME}.vardict.vcf.gz" 2>/dev/null || true
+log_message "INFO" "Temporary files cleaned up"
+

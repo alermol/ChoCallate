@@ -73,10 +73,28 @@ fi
 log_message "INFO" "Cleaning up temporary files"
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
 do
-    rm ${rn}.${i}
+    if [ -e "${rn}.${i}" ]; then
+        rm "${rn}.${i}"
+        if [ $? -eq 0 ]; then
+            log_message "DEBUG" "Removed temporary file: ${rn}.${i}"
+        else
+            log_message "ERROR" "Failed to remove temporary file: ${rn}.${i}"
+        fi
+    else
+        log_message "DEBUG" "Temporary file not found (already removed?): ${rn}.${i}"
+    fi
 done
 
-rm ${rn}.zero.vcf
+if [ -e "${rn}.zero.vcf" ]; then
+    rm -f "${rn}.zero.vcf"
+    if [ $? -eq 0 ]; then
+        log_message "DEBUG" "Removed temporary file: ${rn}.zero.vcf"
+    else
+        log_message "ERROR" "Failed to remove temporary file: ${rn}.zero.vcf"
+    fi
+else
+    log_message "DEBUG" "Temporary file not found (already removed?): ${rn}.zero.vcf"
+fi
 
 # Compress output VCFs
 log_message "INFO" "Compressing output VCFs"
