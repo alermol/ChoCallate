@@ -607,10 +607,6 @@ process CALLING {
     rm -f "${ref_genome}" 2>/dev/null || true
     rm -f "${ref_genome_fai}" 2>/dev/null || true
     rm -f "${ref_genome_dict}" 2>/dev/null || true
-    rm -f "${bam.baseName}.raw.vcf" 2>/dev/null || true
-    rm -f "${bam.baseName}.indel.raw.vcf" 2>/dev/null || true
-    rm -f "${bam.baseName}.failed.log" 2>/dev/null || true
-    rm -f "${bam.baseName}.gatk1.vcf.gz.csi" 2>/dev/null || true
 
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] callers_commands.sh, input files, and intermediate files removed"
 
@@ -686,8 +682,8 @@ process GENERATE_CONSENSUS {
 
     rm -rf all_chrs 2>/dev/null || true
 
-    rm -f "${sample}.snps_"*.vcf.gz 2>/dev/null || true
-    rm -f "${sample}.indels_"*.vcf.gz 2>/dev/null || true
+    rm -f "${sample}.snps_"*.vcf.gz "${sample}.snps_"*.vcf.gz.csi 2>/dev/null || true
+    rm -f "${sample}.indels_"*.vcf.gz "${sample}.indels_"*.vcf.gz.csi 2>/dev/null || true
 
     rm -f zero.vcf.gz zero.vcf.gz.csi 2>/dev/null || true
 

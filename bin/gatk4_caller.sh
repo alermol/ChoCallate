@@ -32,7 +32,7 @@ START_TIME=$(date +%s)
 
 # Run GATK4 HaplotypeCaller with appropriate parameters based on ploidy
 log_message "INFO" "Running GATK4 HaplotypeCaller"
-gatk HaplotypeCaller -I "$BAM_FILE" -R "$REF_GENOME" -mbq "$MIN_BASE_QUALITY" -O "${BAM_BASENAME}.gatk1.vcf.gz" -L "$COVERAGE_FILE" -ploidy "$PLOIDY" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE
+gatk HaplotypeCaller -I "$BAM_FILE" -R "$REF_GENOME" -mbq "$MIN_BASE_QUALITY" -O "${BAM_BASENAME}.gatk1.vcf.gz" -L "$COVERAGE_FILE" -ploidy "$PLOIDY" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false
 
 if [ $? -eq 0 ]; then
     log_message "INFO" "GATK4 HaplotypeCaller completed successfully"

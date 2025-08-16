@@ -91,6 +91,6 @@ log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.vcf.gz, ${BAM_BASEN
 
 # Clean up temporary files
 log_message "INFO" "Cleaning up temporary files"
-rm -f reference.fasta reference.fasta.fai "${BAM_BASENAME}.filter.vcf" "${BAM_BASENAME}.indel.filter.vcf" 2>/dev/null || true
+rm -f reference.fasta reference.fasta.fai "${BAM_BASENAME}.raw.vcf" "${BAM_BASENAME}.filter.vcf" "${BAM_BASENAME}.indel.filter.vcf" "${BAM_BASENAME}.indel.raw.vcf" "${BAM_BASENAME}.failed.log" 2>/dev/null || true
 log_message "INFO" "Temporary files cleaned up"
 
