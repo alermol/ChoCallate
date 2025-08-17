@@ -1,10 +1,7 @@
 #!/bin/bash
 
-# SNVer variant caller script
-
 set -e
 
-# Input parameters
 BAM_FILE="$1"
 COVERAGE_FILE="$2"
 REF_GENOME="$3"
@@ -12,14 +9,12 @@ PLOIDY="$4"
 MIN_BASE_QUALITY="$5"
 MIN_SNP_QUAL="$6"
 
-# Validate required parameters
 if [ $# -ne 6 ]; then
     echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL>"
     echo "Error: Expected 6 parameters, got $#"
     exit 1
 fi
 
-# Validate that required files exist
 if [ ! -f "$BAM_FILE" ]; then
     echo "Error: BAM file '$BAM_FILE' not found"
     exit 1
@@ -35,10 +30,8 @@ if [ ! -f "$REF_GENOME" ]; then
     exit 1
 fi
 
-# Extract base name from BAM file
 BAM_BASENAME=$(basename "$BAM_FILE" .bam)
 
-# Logging function
 log_message() {
     local level="$1"
     local message="$2"
@@ -46,14 +39,10 @@ log_message() {
     echo "[${timestamp}] [${level}] [SNVER_CALLER] [${BAM_BASENAME}] ${message}"
 }
 
-# Log process start
-log_message "INFO" "Process started - SNVer variant calling"
-log_message "INFO" "Parameters: BAM=${BAM_FILE}, REF=${REF_GENOME}, PLOIDY=${PLOIDY}, MIN_BQ=${MIN_BASE_QUALITY}, MIN_QUAL=${MIN_SNP_QUAL}"
+log_message "INFO" "Process started - SNVer variant calling (ploidy=${PLOIDY}, min_qual=${MIN_SNP_QUAL})"
 
-# Record start time
 START_TIME=$(date +%s)
 
-# Create symbolic link to reference genome and index it
 log_message "INFO" "Creating symbolic link to reference genome and indexing"
 ln -sf "$REF_GENOME" reference.fasta
 samtools faidx reference.fasta
@@ -65,7 +54,6 @@ else
     exit 1
 fi
 
-# Run SNVer variant calling
 log_message "INFO" "Running SNVer variant calling"
 snver -i "$BAM_FILE" -r reference.fasta -o "$BAM_BASENAME" -l "$COVERAGE_FILE" -bq "$MIN_BASE_QUALITY" -n "$PLOIDY"
 
@@ -76,38 +64,32 @@ else
     exit 1
 fi
 
-# Process SNPs VCF
 log_message "INFO" "Processing SNPs VCF"
 
-# Step 1: Reheader SNPs VCF
 bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools reheader for SNPs failed"
     exit 1
 fi
 
-# Step 2: Filter SNPs by quality
 bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools filter for SNPs failed"
     exit 1
 fi
 
-# Step 3: Annotate and remove INFO/FORMAT fields for SNPs
 bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools annotate for SNPs failed"
     exit 1
 fi
 
-# Step 4: Filter for biallelic SNPs
 bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view (allele filter) for SNPs failed"
     exit 1
 fi
 
-# Step 5: Normalize SNPs
 bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.snps_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools norm for SNPs failed"
@@ -116,38 +98,32 @@ fi
 
 log_message "INFO" "SNPs VCF processing completed successfully"
 
-# Process indels VCF
 log_message "INFO" "Processing indels VCF"
 
-# Step 1: Reheader indels VCF
 bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools reheader for indels failed"
     exit 1
 fi
 
-# Step 2: Filter indels by quality
 bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools filter for indels failed"
     exit 1
 fi
 
-# Step 3: Annotate and remove INFO/FORMAT fields for indels
 bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools annotate for indels failed"
     exit 1
 fi
 
-# Step 4: Filter for biallelic indels
 bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view (allele filter) for indels failed"
     exit 1
 fi
 
-# Step 5: Normalize indels
 bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.indels_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools norm for indels failed"
@@ -156,7 +132,6 @@ fi
 
 log_message "INFO" "Indels VCF processing completed successfully"
 
-# Generate final compressed output files
 log_message "INFO" "Generating final compressed output files"
 bcftools view -Ov "${BAM_BASENAME}.snps_snver.bcf" | bgzip > "${BAM_BASENAME}.snps_snver.vcf.gz"
 if [ $? -ne 0 ]; then
@@ -172,10 +147,8 @@ fi
 
 log_message "INFO" "Final compressed output files generated successfully"
 
-# Calculate duration and log completion
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
-log_message "INFO" "Process completed - SNPs and indels VCFs generated"
-log_message "INFO" "Performance: ${DURATION} seconds"
+log_message "INFO" "Process completed - SNPs and indels VCFs generated (${DURATION}s)"
 log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.vcf.gz, ${BAM_BASENAME}.indels_snver.vcf.gz"

@@ -10,7 +10,6 @@ cons_threshold=$5
 
 region=$(echo $rc | sed 's/ /:/' | sed 's/ /-/')
 
-# Logging function
 log_message() {
     local level=$1
     local message=$2
@@ -18,26 +17,19 @@ log_message() {
     echo "[${timestamp}] [${level}] [CONSENSUS_GENERATION] [${sample_name}:${rn}] ${message}"
 }
 
-# Log process start
-log_message "INFO" "Process started - Consensus generation for ${mutation_type}"
-log_message "INFO" "Parameters: region=${region}, threshold=${cons_threshold}, sample=${sample_name}"
+log_message "INFO" "Process started - Consensus generation for ${mutation_type} (threshold=${cons_threshold})"
 
-# Record start time
 START_TIME=$(date +%s)
 
-# Extract region-specific VCFs
-log_message "INFO" "Extracting region-specific VCFs"
+log_message "INFO" "Extracting region-specific VCFs for region ${region}"
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
 do
     bcftools view -r ${region} ${i} > ${rn}.${i}
-    log_message "DEBUG" "Extracted region ${region} from ${i}"
 done
 
-# Extract region-specific zero VCF
 log_message "INFO" "Extracting region-specific zero VCF"
 bcftools view -r ${region} zero.vcf.gz > ${rn}.zero.vcf
 
-# Process based on mutation type
 if [ ${mutation_type} == "snps" ]; then
     log_message "INFO" "Processing SNPs consensus"
     process_snps.py \
@@ -69,40 +61,22 @@ else
     fi
 fi
 
-# Cleanup temporary files
 log_message "INFO" "Cleaning up temporary files"
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
 do
     if [ -e "${rn}.${i}" ]; then
         rm "${rn}.${i}"
-        if [ $? -eq 0 ]; then
-            log_message "DEBUG" "Removed temporary file: ${rn}.${i}"
-        else
-            log_message "ERROR" "Failed to remove temporary file: ${rn}.${i}"
-        fi
-    else
-        log_message "DEBUG" "Temporary file not found (already removed?): ${rn}.${i}"
     fi
 done
 
 if [ -e "${rn}.zero.vcf" ]; then
     rm -f "${rn}.zero.vcf"
-    if [ $? -eq 0 ]; then
-        log_message "DEBUG" "Removed temporary file: ${rn}.zero.vcf"
-    else
-        log_message "ERROR" "Failed to remove temporary file: ${rn}.zero.vcf"
-    fi
-else
-    log_message "DEBUG" "Temporary file not found (already removed?): ${rn}.zero.vcf"
 fi
 
-# Compress output VCFs
 log_message "INFO" "Compressing output VCFs"
 find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;
 
-# Calculate duration and log completion
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
-log_message "INFO" "Process completed - Consensus generated for region ${region}"
-log_message "INFO" "Performance: ${DURATION} seconds"
+log_message "INFO" "Process completed - Consensus generated for region ${region} (${DURATION}s)"

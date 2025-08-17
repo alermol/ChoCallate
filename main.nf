@@ -356,7 +356,6 @@ process CREATE_FAI_INDEX {
     samtools faidx --threads ${task.cpus} ${ref_genome}
     
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process completed - FASTA index created"
-    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Performance: completed successfully"
     """
 }
 
@@ -377,11 +376,9 @@ process CREATE_SEQ_DICT {
     
     gatk CreateSequenceDictionary -R ${ref_genome}
 
-    echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Removing input file: ${ref_genome}"
     rm -f ${ref_genome} 2>/dev/null || true
     
     echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Process completed - Sequence dictionary created"
-    echo "[\$(date -Iseconds)] [INFO] [CREATE_SEQ_DICT] [${refName}] Performance: completed successfully"
     """
 }
 
@@ -407,10 +404,10 @@ process PREPARE_BAM {
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
 
-        # Create subfolder for intermediate files
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
 
-        # Use input val parameters directly, do not symlink
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
@@ -419,36 +416,29 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
         gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder conditionally
         if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
             rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
         fi
 
-        # Remove input read files after mapping conditionally
         if [ "${params.cleanup_input_symlinks}" = "true" ]; then
             rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
         fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'se' )
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
 
-        # Create subfolder for intermediate files
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
 
-        # Use input val parameters directly, do not symlink
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -U "${read1}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
@@ -457,36 +447,29 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
         gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder conditionally
         if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
             rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
         fi
 
-        # Remove input read files after mapping conditionally
         if [ "${params.cleanup_input_symlinks}" = "true" ]; then
             rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
         fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'mx' )
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
 
-        # Create subfolder for intermediate files
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
 
-        # Use input val parameters directly, do not symlink
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
         bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" -U "${read3}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
@@ -495,27 +478,20 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
         gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder conditionally
         if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
             rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
         fi
 
-        # Remove input read files after mapping conditionally
         if [ "${params.cleanup_input_symlinks}" = "true" ]; then
             rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
-        else
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
         fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else
         error 'Invalid reads type: ${params.reads_type}. Available types: se, pe, mx'
@@ -537,42 +513,35 @@ process COVERAGE_GENERATION {
     """
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Process started - Generating coverage information"
     
-    # Create subfolder for intermediate files
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Creating intermediate subfolder for coverage generation"
     mkdir -p "${bam.baseName}_coverage_gen"
     cd "${bam.baseName}_coverage_gen"
     
-    # Create symlinks to input files
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
     
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Running samtools depth with min coverage ${params.min_coverage}"
     samtools depth -J --threads ${task.cpus} input.bam | \
         awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
         bedops --merge - > ${bam.baseName}.bed
     
-    # Move final output to parent directory
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Moving final output to parent directory"
     mv ${bam.baseName}.bed ../${bam.baseName}.bed
     
-    # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder conditionally
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
         rm -rf "${bam.baseName}_coverage_gen"
-        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Removed intermediate subfolder"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Cleaned up intermediate subfolder"
     fi
 
-    # Remove input files after completion conditionally
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
         rm -f "${bam}" "${bam_index}" 2>/dev/null || true
-        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Removed input files"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Cleaned up input files"
     fi
     
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Process completed - Coverage BED file created"
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -596,46 +565,39 @@ process GENERATE_ZERO_VCF {
     """
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process started - Generating zero VCF"
     
-    # Create subfolder for intermediate files
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Creating intermediate subfolder for zero VCF generation"
     mkdir -p "${bam.baseName}_zero_vcf_gen"
     cd "${bam.baseName}_zero_vcf_gen"
     
-    # Create symlinks to input files
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
     ln -sf "../${ref_genome}" ref_genome.fasta
     ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
     ln -sf "../${coverage_bed}" coverage.bed
     
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Running bcftools mpileup with min base quality ${params.min_base_quality}"
     bcftools mpileup -Ov --count-orphans --fasta-ref ref_genome.fasta --threads ${task.cpus} --max-depth 1 \
         --min-BQ ${params.min_base_quality} --regions-file coverage.bed input.bam | \
         awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' | \
         awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
 
-    # Move final output to parent directory
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Moving final output to parent directory"
     mv zero.vcf.gz ../zero.vcf.gz
     
-    # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder conditionally
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
         rm -rf "${bam.baseName}_zero_vcf_gen"
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Removed intermediate subfolder"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Cleaned up intermediate subfolder"
     fi
 
-    # Remove input files after completion conditionally
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
         rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" 2>/dev/null || true
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Removed input files"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Cleaned up input files"
     fi
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process completed - Zero VCF created"
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -664,11 +626,11 @@ process CALLING {
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Using callers: ${effective_callers}"
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Parallel CPUs: ${parallel_cpus}"
     
-    # Create subfolder for intermediate files
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Creating intermediate subfolder for variant calling"
     mkdir -p "${bam.baseName}_calling"
     cd "${bam.baseName}_calling"
     
-    # Create symlinks to input files
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
     ln -sf "../${ref_genome}" ref_genome.fasta
@@ -706,31 +668,23 @@ process CALLING {
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Executing ${parallel_cpus} callers in parallel"
     parallel -j ${parallel_cpus} '{}' :::: callers_commands.sh
     
-    # Move final outputs to parent directory
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Moving final outputs to parent directory"
     mv *.snps_*.vcf.gz ../
     mv *.indels_*.vcf.gz ../
     
-    # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder conditionally
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
         rm -rf "${bam.baseName}_calling"
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Removed intermediate subfolder"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Cleaned up intermediate subfolder"
     fi
 
-    # Remove input files after completion conditionally
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
         rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" "${ref_genome_dict}" 2>/dev/null || true
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Removed input files"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Cleaned up input files"
     fi
     
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Process completed - Variant calling finished"
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -761,15 +715,15 @@ process GENERATE_CONSENSUS {
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Consensus threshold: ${cons_threshold}"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Window size: ${params.win_size}"
     
-    # Create subfolder for intermediate files
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating intermediate subfolder for consensus generation"
     mkdir -p "${sample}_consensus_gen"
     cd "${sample}_consensus_gen"
     
-    # Create symlinks to input files
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to input files"
     ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
     ln -sf "../${zero_vcf}" zero.vcf.gz
     
-    # Create symlinks to VCF files
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to VCF files"
     for vcf in ../${sample}.snps_*.vcf.gz; do
         ln -sf "\$vcf" "\$(basename \$vcf)"
     done
@@ -784,14 +738,19 @@ process GENERATE_CONSENSUS {
     mkdir all_chrs
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing SNPs..."
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing SNP VCF files with tabix"
     for i in ${sample}.snps_*; do tabix -C \${i}; done
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing zero VCF with tabix"
     tabix -C zero.vcf.gz
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Running consensus generation for SNPs in parallel (${task.cpus} threads)"
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated VCF files for concatenation"
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting SNP consensus VCFs"
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
@@ -800,43 +759,39 @@ process GENERATE_CONSENSUS {
     rm -r all_chrs/*
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing indels..."
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing indel VCF files with tabix"
     for i in ${sample}.indels_*; do tabix -C \${i}; done
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Running consensus generation for indels in parallel (${task.cpus} threads)"
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated indel VCF files for concatenation"
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting indel consensus VCFs"
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
         
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus VCF created"
     
-    # Move final outputs to parent directory
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Moving final outputs to parent directory"
     mv ${sample}.snps.vcf.gz ../${sample}.snps.vcf.gz
     mv ${sample}.indels.vcf.gz ../${sample}.indels.vcf.gz
     
-    # Return to parent directory
     cd ..
-    
-    # Clean up intermediate subfolder conditionally
+
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
         rm -rf "${sample}_consensus_gen"
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Removed intermediate subfolder"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Cleaned up intermediate subfolder"
     fi
 
-    # Remove input files after completion conditionally
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
         rm -f "${ref_genome_fai}" "${zero_vcf}" "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz 2>/dev/null || true
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Removed input files"
-    else
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Preserved input files (cleanup_input_symlinks = false)"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Cleaned up input files"
     fi
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Performance: completed successfully"
     """
 }
 
@@ -870,11 +825,11 @@ process CLEANUP_SAMPLE_TEMP {
             local target
             target=\$(realpath "\${f}")
             if [ -e "\$target" ]; then
-                rm -f "\$target" && log_msg "INFO" "Removed symlink target: \$target"
+                rm -f "\$target" && log_msg "INFO" "Cleaned up symlink target: \$target"
             fi
-            rm -f "\$f" && log_msg "INFO" "Removed symlink: \$f"
+            rm -f "\$f" && log_msg "INFO" "Cleaned up symlink: \$f"
         elif [ -e "\$f" ]; then
-            rm -f "\$f" && log_msg "INFO" "Removed file: \$f"
+            rm -f "\$f" && log_msg "INFO" "Cleaned up file: \$f"
         fi
     }
 
@@ -891,27 +846,22 @@ process CLEANUP_SAMPLE_TEMP {
     if [ "${cleanup_intermediate_bam}" = "true" ]; then
         [ -e "${bam}" ] && remove_file_follow_symlink "${bam}"
         [ -e "${bam_index}" ] && remove_file_follow_symlink "${bam_index}"
-        log_msg "INFO" "Removed BAM and BAM index files"
-    else
-        log_msg "INFO" "Preserved BAM and BAM index files (cleanup_intermediate_bam = false)"
+        log_msg "INFO" "Cleaned up BAM files"
     fi
 
     [ -e "${coverage_bed}" ] && remove_file_follow_symlink "${coverage_bed}"
-
     [ -e "${zero_vcf}" ] && remove_file_follow_symlink "${zero_vcf}"
 
     if [ "${cleanup_intermediate_vcf}" = "true" ]; then
         for vcf in "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz; do
             [ -e "\$vcf" ] && remove_file_follow_symlink "\$vcf"
         done
-        log_msg "INFO" "Removed consensus VCFs"
-    else
-        log_msg "INFO" "Preserved consensus VCFs (cleanup_intermediate_vcf = false)"
+        log_msg "INFO" "Cleaned up consensus VCFs"
     fi
 
     for symlink in ./*; do
         if [ -L "\$symlink" ]; then
-            rm -f "\$symlink" && log_msg "INFO" "Removed symlink in current directory: \$symlink"
+            rm -f "\$symlink" && log_msg "INFO" "Cleaned up symlink in current directory: \$symlink"
         fi
     done
 

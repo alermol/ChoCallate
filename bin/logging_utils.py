@@ -37,18 +37,15 @@ class ChoCallateLogger:
         self.log_format = log_format
         self.start_time = time.time()
         
-        # Configure logging
         self.logger = logging.getLogger(script_name)
         self.logger.setLevel(getattr(logging, log_level.upper()))
         
-        # Create formatters
         self.json_formatter = logging.Formatter()
         self.text_formatter = logging.Formatter(
             '%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
             datefmt='%Y-%m-%dT%H:%M:%S'
         )
         
-        # Add console handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, log_level.upper()))
         
@@ -59,7 +56,6 @@ class ChoCallateLogger:
         
         self.logger.addHandler(console_handler)
         
-        # Add file handler if specified
         if log_file:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             file_handler = logging.FileHandler(log_file)
@@ -67,7 +63,6 @@ class ChoCallateLogger:
             file_handler.setFormatter(self.json_formatter)
             self.logger.addHandler(file_handler)
         
-        # Log initialization
         self.info("Logger initialized", {
             "script": script_name,
             "sample": sample_id,
@@ -91,7 +86,6 @@ class ChoCallateLogger:
         if self.log_format == "json":
             return json.dumps(log_entry)
         else:
-            # Text format
             parts = [
                 f"[{log_entry['timestamp']}]",
                 f"[{log_entry['level']}]",
@@ -207,21 +201,3 @@ def setup_logger(script_name: str,
         log_file=log_file
     )
 
-
-# Example usage
-if __name__ == "__main__":
-    # Example of how to use the logger
-    logger = setup_logger("example_script", "sample_001", "DEBUG")
-    
-    logger.info("Starting example script")
-    logger.debug("Debug information", {"param1": "value1", "param2": "value2"})
-    
-    try:
-        # Simulate some work
-        time.sleep(1)
-        logger.info("Work completed successfully")
-    except Exception as e:
-        logger.error("Work failed", {"error": str(e)})
-    
-    logger.log_performance({"operations": 10, "files_processed": 5})
-    logger.info("Example completed")
