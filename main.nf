@@ -224,7 +224,7 @@ workflow {
     ref_genome = file(params.reference_genome)
 
     CREATE_FAI_INDEX(ref_genome)
-    CREATE_SEQ_DICT(ref_genome)
+    CREATE_SEQ_DICT(CREATE_FAI_INDEX.out.fai_index.collect{it[0]})
 
     PREPARE_BAM(sample_run_ch,
                 CREATE_SEQ_DICT.out.gen_dict,
@@ -245,7 +245,7 @@ workflow {
 
     GENERATE_CONSENSUS(CALLING.out.snps_vcf,
                        CALLING.out.indels_vcf,
-                       CREATE_FAI_INDEX.out.fai_index.map{it[1]},
+                       CREATE_FAI_INDEX.out.fai_index.collect{it[1]},
                        GENERATE_ZERO_VCF.out.zero_vcf)
     
     if (params.enable_sample_cleanup && !params.debug) {
@@ -345,15 +345,25 @@ process CREATE_FAI_INDEX {
     path(ref_genome)
 
     output:
-    tuple path("${ref_genome}"), path("${ref_genome}.fai"), emit: fai_index
+    tuple path("${ref_genome.baseName}.fasta"), path("${ref_genome.baseName}.fasta.fai"), emit: fai_index
 
     script:
     def refName = ref_genome.getName()
+    def isGzipped = refName.endsWith('.gz')
     
     """
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process started - Creating FASTA index"
     
-    samtools faidx --threads ${task.cpus} ${ref_genome}
+    if [[ "$isGzipped" == "true" ]]; then
+        echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Detected gzipped reference genome, creating ungzipped version"
+        gunzip -c ${ref_genome} > ${ref_genome.baseName}.fasta
+        echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Ungzipped version created"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Reference genome is uncompressed"
+    fi
+    
+    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Creating FASTA index"
+    samtools faidx --threads ${task.cpus} ${ref_genome.baseName}.fasta
     
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process completed - FASTA index created"
     """
@@ -398,11 +408,9 @@ process PREPARE_BAM {
     tuple path("${sample_id}.bam"), path("${sample_id}.bam.csi"), emit: bam
 
     script:
-    def readsType = params.reads_type
-
     if ( params.reads_type == 'pe' )
         """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
@@ -433,7 +441,7 @@ process PREPARE_BAM {
         """
     else if ( params.reads_type == 'se' )
         """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
@@ -464,7 +472,7 @@ process PREPARE_BAM {
         """
     else if ( params.reads_type == 'mx' )
         """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
+        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
         mkdir -p "${sample_id}_bam_prep"
@@ -642,27 +650,22 @@ process CALLING {
 
     if [[ ",${effective_callers}," == *"bcftools"* ]]; then
         echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added bcftools caller command"
     fi
 
     if [[ ",${effective_callers}," == *"freebayes"* ]]; then
         echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added freebayes caller command"
     fi
 
     if [[ ",${effective_callers}," == *"gatk"* ]]; then
         echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added GATK4 caller command"
     fi
 
     if [[ ",${effective_callers}," == *"vardict"* ]]; then
         echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added VarDict caller command"
     fi
 
     if [[ ",${effective_callers}," == *"snver"* ]]; then
         echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added SNVer caller command"
     fi
 
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Executing ${parallel_cpus} callers in parallel"

@@ -1,10 +1,8 @@
-// Function to get the number of available callers
 def getAvailableCallersCount(String available_callers) {
     def callersList = available_callers.split(/\s*,\s*/).findAll { it }
     return callersList.size()
 }
 
-// Function to get the consensus threshold based on the consensus type
 def getConsensusThreshold(String cons_type, String available_callers) {
     if (cons_type == 'mj') {
         return getAvailableCallersCount(available_callers).intdiv(2) + 1
@@ -17,7 +15,6 @@ def getConsensusThreshold(String cons_type, String available_callers) {
     }
 }
 
-// Function to check if all effective callers are in the available callers
 def allEffectiveCallersInAvailable(String effective_callers, String available_callers) {
     def effList = effective_callers.split(/\s*,\s*/).findAll { it }
     def availList = available_callers.split(/\s*,\s*/).findAll { it }
@@ -29,13 +26,11 @@ def allEffectiveCallersInAvailable(String effective_callers, String available_ca
     return true
 }
 
-// Function to check if the number of effective callers is at least three
 def effectiveCallersAtLeastThree(String effective_callers) {
     def effList = effective_callers.split(/\s*,\s*/).findAll { it }
     return effList.size()
 }
 
-// Function to check if all effective callers are suitable for diploid calling when ploidy == 2
 def allEffectiveCallersDiploidSuitable(String effective_callers, String diploid_callers) {
     def effList = effective_callers.split(/\s*,\s*/).findAll { it }
     def dipList = diploid_callers.split(/\s*,\s*/).findAll { it }
@@ -47,7 +42,6 @@ def allEffectiveCallersDiploidSuitable(String effective_callers, String diploid_
     return true
 }
 
-// Function to check if all effective callers are suitable for polyploid calling
 def allEffectiveCallersPolyploidSuitable(String effective_callers, String polyploid_callers) {
     def effList = effective_callers.split(/\s*,\s*/).findAll { it }
     def polyList = polyploid_callers.split(/\s*,\s*/).findAll { it }
@@ -59,11 +53,7 @@ def allEffectiveCallersPolyploidSuitable(String effective_callers, String polypl
     return true
 }
 
-// =============================================================================
-// INPUT VALIDATION AND PARAMETER SANITY CHECKS
-// =============================================================================
 
-// Validate file existence and readability
 def validateFile(String filePath, String fileType) {
     if (!filePath) {
         return [valid: false, error: "${fileType} path is not specified"]
@@ -85,7 +75,6 @@ def validateFile(String filePath, String fileType) {
     return [valid: true, file: file]
 }
 
-// Validate TSV file format and content
 def validateTSVFile(String filePath) {
     def fileValidation = validateFile(filePath, "Samples TSV")
     if (!fileValidation.valid) {
@@ -140,7 +129,6 @@ def validateTSVFile(String filePath) {
     return [valid: true, file: file, sampleCount: sampleCount]
 }
 
-// Validate reference genome file
 def validateReferenceGenome(String filePath) {
     def fileValidation = validateFile(filePath, "Reference genome")
     if (!fileValidation.valid) {
@@ -150,14 +138,26 @@ def validateReferenceGenome(String filePath) {
     def file = fileValidation.file
     def fileName = file.getName().toLowerCase()
     
-    // Check file extension
-    if (!fileName.endsWith('.fasta') && !fileName.endsWith('.fa') && !fileName.endsWith('.fna')) {
-        return [valid: false, error: "Reference genome must be a FASTA file (.fasta, .fa, or .fna): ${filePath}"]
+    // Check file extension (including gzipped versions)
+    if (!fileName.endsWith('.fasta') && !fileName.endsWith('.fa') && !fileName.endsWith('.fna') && 
+        !fileName.endsWith('.fasta.gz') && !fileName.endsWith('.fa.gz') && !fileName.endsWith('.fna.gz')) {
+        return [valid: false, error: "Reference genome must be a FASTA file (.fasta, .fa, .fna) or gzipped FASTA (.fasta.gz, .fa.gz, .fna.gz): ${filePath}"]
     }
     
     // Check if it's a valid FASTA file
-    def firstLine = file.withReader { reader ->
-        reader.readLine()
+    def firstLine
+    if (fileName.endsWith('.gz')) {
+        // For gzipped files, use gzip reader
+        firstLine = file.withReader { reader ->
+            new java.util.zip.GZIPInputStream(reader).withReader { gzReader ->
+                gzReader.readLine()
+            }
+        }
+    } else {
+        // For uncompressed files, read directly
+        firstLine = file.withReader { reader ->
+            reader.readLine()
+        }
     }
     
     if (!firstLine || !firstLine.startsWith('>')) {
@@ -167,7 +167,6 @@ def validateReferenceGenome(String filePath) {
     return [valid: true, file: file]
 }
 
-// Validate Bowtie2 index files
 def validateBowtie2Index(String indexPath) {
 	if (!indexPath) {
 		return [valid: false, error: "Bowtie2 index path is not specified"]
@@ -245,7 +244,6 @@ def validateBowtie2Index(String indexPath) {
 	return [valid: true, indexDir: indexDir, indexFiles: indexFiles, prefix: usedPrefix, ext: usedExt]
 }
 
-// Validate numeric parameters with ranges
 def validateNumericParameter(Number value, String paramName, Number minValue, Number maxValue = null) {
     if (value == null) {
         return [valid: false, error: "${paramName} is not specified"]
@@ -262,25 +260,21 @@ def validateNumericParameter(Number value, String paramName, Number minValue, Nu
     return [valid: true, value: value]
 }
 
-// Validate CPU and resource parameters
 def validateCPUParameter(Number value, String paramName) {
     def maxCPUs = Runtime.runtime.availableProcessors()
     return validateNumericParameter(value, paramName, 1, maxCPUs)
 }
 
-// Validate fork parameters
 def validateForkParameter(Number value, String paramName) {
     def maxCPUs = Runtime.runtime.availableProcessors()
     def maxForks = (maxCPUs > 1) ? (maxCPUs - 1) : 1
     return validateNumericParameter(value, paramName, 1, maxForks)
 }
 
-// Validate quality threshold parameters
 def validateQualityParameter(Number value, String paramName, Number maxValue) {
     return validateNumericParameter(value, paramName, 0, maxValue) // Quality scores typically 0-maxValue
 }
 
-// Validate ploidy parameter
 def validatePloidy(Number ploidy) {
     if (ploidy == null) {
         return [valid: false, error: "Ploidy is not specified"]
@@ -293,7 +287,6 @@ def validatePloidy(Number ploidy) {
     return [valid: true, value: ploidy]
 }
 
-// Validate reads type parameter
 def validateReadsType(String readsType) {
     def validTypes = ['se', 'pe', 'mx']
     if (!readsType || !validTypes.contains(readsType)) {
@@ -302,7 +295,6 @@ def validateReadsType(String readsType) {
     return [valid: true, value: readsType]
 }
 
-// Validate reads source parameter
 def validateReadsSource(String readsSource) {
     def validSources = ['gbs', 'wgs']
     if (!readsSource || !validSources.contains(readsSource)) {
@@ -311,7 +303,6 @@ def validateReadsSource(String readsSource) {
     return [valid: true, value: readsSource]
 }
 
-// Validate consensus type parameter
 def validateConsensusType(String consType) {
     def validTypes = ['mj', 'n1', 'fc']
     if (!consType || !validTypes.contains(consType)) {
@@ -320,7 +311,6 @@ def validateConsensusType(String consType) {
     return [valid: true, value: consType]
 }
 
-// Validate logging parameters
 def validateLogLevel(String logLevel) {
     def validLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
     if (!logLevel || !validLevels.contains(logLevel.toUpperCase())) {
@@ -337,7 +327,6 @@ def validateLogFormat(String logFormat) {
     return [valid: true, value: logFormat.toLowerCase()]
 }
 
-// Validate window size parameter
 def validateWindowSize(Number winSize) {
     if (winSize == null) {
         return [valid: false, error: "Window size is not specified"]
@@ -356,7 +345,6 @@ def validateWindowSize(Number winSize) {
 
 
 
-// Comprehensive parameter validation function
 def validateAllParameters(Map params) {
     def errors = []
     def warnings = []
