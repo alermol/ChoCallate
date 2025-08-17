@@ -147,9 +147,9 @@ def validateReferenceGenome(String filePath) {
     // Check if it's a valid FASTA file
     def firstLine
     if (fileName.endsWith('.gz')) {
-        // For gzipped files, use gzip reader
-        firstLine = file.withReader { reader ->
-            new java.util.zip.GZIPInputStream(reader).withReader { gzReader ->
+        // For gzipped files, use gzip input stream
+        firstLine = file.withInputStream { inputStream ->
+            new java.util.zip.GZIPInputStream(inputStream).withReader { gzReader ->
                 gzReader.readLine()
             }
         }
