@@ -14,7 +14,8 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **🔧 Flexible input support**: Compatible with GBS (Genotyping-by-Sequencing) and WGS data
 - **⚡ Parallel processing**: Efficient parallel execution for optimal performance
 - **🎛️ Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
-- **📈 Comprehensive logging**: Detailed execution tracking and performance monitoring
+- **📈 Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
+- **🧹 Smart cleanup**: Configurable cleanup options with debug mode preservation
 
 ## 🚀 Quick Start
 
@@ -40,13 +41,19 @@ bash run_test.sh
 bash cleanup.sh
 ```
 
+**Note**: The test script expects test data in the `test_data/` directory with the following structure:
+- `arth_chr1.fasta.gz` - Reference genome
+- `test_reads_R1.fq.gz` - Paired-end read 1
+- `test_reads_R2.fq.gz` - Paired-end read 2  
+- `test_reads_SE.fq.gz` - Single-end reads
+
 ### 3. Basic Usage
 
 ```bash
 nextflow run main.nf \
     --reference_genome /path/to/reference.fasta \
     --reference_index /path/to/reference_index \
-    --samples_tsv samples.tsv
+    --samples_tsv /path/to/samples.tsv
 ```
 
 ## 🏗️ Pipeline Architecture
@@ -61,31 +68,17 @@ nextflow run main.nf \
 | **SNVer** | ✅ | ✅ | Statistical variant calling |
 | **VarDict** | ✅ | ❌ | Advanced variant detection |
 
-### Workflow Steps
+### Workflow Scheme
 
-```mermaid
-graph TD
-    A[Input Reads] --> B[Bowtie2 Alignment]
-    B --> C[Quality Filtering]
-    C --> D[Parallel Variant Calling]
-    
-    D --> D1[bcftools]
-    D --> D2[GATK4]
-    D --> D3[FreeBayes]
-    D --> D4[SNVer]
-    D --> D5[VarDict]
+![ChoCallate Pipeline Scheme](ChoCallate_scheme.png)
 
-    D1 --> E[Final VCF Output]
-    D2 --> E[Final VCF Output]
-    D3 --> E[Final VCF Output]
-    D4 --> E[Final VCF Output]
-    D5 --> E[Final VCF Output]
-```
 
-1. **🔍 Alignment**: Bowtie2-based read alignment with quality filtering
-2. **📊 Variant Calling**: Parallel execution of selected variant callers
-3. **🤝 Consensus Generation**: Merges results using configurable consensus rules
-4. **📤 Output**: Final compressed VCF files for SNPs and INDELs
+1. **🔍 Alignment**: Bowtie2-based read alignment with quality filtering and BAM preparation
+2. **📊 Coverage Analysis**: Generate coverage information for targeted variant calling
+3. **🎯 Zero VCF Generation**: Create baseline VCF with all covered positions
+4. **📊 Variant Calling**: Parallel execution of selected variant callers
+5. **🤝 Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
+6. **📤 Output**: Final compressed VCF files for SNPs and INDELs
 
 ## ⚙️ Configuration
 
@@ -93,16 +86,15 @@ graph TD
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--reference_genome` | ✅ | - | Reference genome in FASTA format (must not be gzipped) |
+| `--reference_genome` | ✅ | - | Reference genome in FASTA format (supports gzipped) |
 | `--reference_index` | ✅ | - | Bowtie2 index prefix for the reference genome |
-| `--samples_tsv` | ✅ | `samples.tsv` | TSV file with sample information |
+| `--samples_tsv` | ✅ | `input.tsv` | TSV file with sample information |
 
 ### Input/Output Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--outdir` | `ChoCallate_output` | Output directory for results |
-
 
 ### Quality and Filtering Parameters
 
@@ -159,6 +151,8 @@ graph TD
 | `--cleanup_intermediate_subfolders` | `true` | Remove intermediate subfolders (false in debug mode) |
 | `--cleanup_input_symlinks` | `true` | Remove symlinks to input files (false in debug mode) |
 
+**Note**: The actual default values are dynamically set based on debug mode. When `--debug` is false (production mode), cleanup is enabled. When `--debug` is true, cleanup is disabled to preserve intermediate files for analysis.
+
 ### Logging Parameters
 
 | Parameter | Default | Choices | Description |
@@ -177,7 +171,13 @@ graph TD
 - **`n1` (N-1 Consensus)**: Variant is called if n-1 callers identify it (where n is total number of callers)
 - **`fc` (Full Consensus)**: Variant is called only if all callers identify it
 
+### Consensus Implementation
 
+The consensus generation uses a sophisticated approach:
+- **Zero VCF Integration**: All covered positions from the zero VCF are included in the final output
+- **SQLite Processing**: Python scripts use SQLite databases for efficient variant comparison and consensus calculation
+- **Window-based Processing**: Genomic regions are processed in parallel using configurable window sizes
+- **Quality Filtering**: Variants are filtered based on quality scores and caller agreement
 
 ### Automatic Caller Selection
 
@@ -190,11 +190,17 @@ When `--effective_callers` is set to `-` (default), ChoCallate automatically sel
 ```bash
 # Diploid species (default)
 nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
     --ploidy 2 \
     --cons_type mj
 
 # Polyploid species
 nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
     --ploidy 4 \
     --cons_type n1 \
     --effective_callers gatk,freebayes,snver
@@ -217,9 +223,14 @@ sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz    /path/to/sa
 - **`--reads_type se`**: Single-end reads (column 2)
 - **`--reads_type mx`**: Mixed reads (columns 2 & 3 for PE, column 4 for SE)
 
+**File Format Support**:
+- Input reads: `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
+- Reference genome: `.fasta`, `.fa`, `.fna` (compressed or uncompressed)
+- Output VCFs: `.vcf.gz` (bgzipped)
+
 ### Reference Requirements
 
-- **Format**: Uncompressed FASTA
+- **Format**: FASTA (supports both compressed and uncompressed)
 - **Index**: Pre-built Bowtie2 index
 - **Path**: Absolute paths recommended
 
@@ -233,7 +244,7 @@ ChoCallate_output/
 ├── sample2/
 │   ├── sample2.snps.vcf.gz
 │   └── sample2.indels.vcf.gz
-├── ChoCallate_error.log          # Error log for the entire pipeline
+├── ChoCallate_errors.log         # Error log for the entire pipeline
 ├── ChoCallate.log                # Main log file for the pipeline
 ├── pipeline_report.html          # Pipeline summary report (HTML)
 ├── timeline_report.html          # Timeline of process execution (HTML)
@@ -246,6 +257,9 @@ ChoCallate_output/
 
 ```bash
 nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
     --min_coverage 10 \
     --min_base_quality 30 \
     --min_map_qual 20 \
@@ -256,6 +270,9 @@ nextflow run main.nf \
 
 ```bash
 nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
     --bowtie2_cpu 16 \
     --cons_cpus 8 \
     --win_size 2000000
@@ -269,6 +286,30 @@ For large genomes or high read counts, adjust memory allocation:
 # Replace N with desired RAM in GB
 sed -i 's/-Xmx1g/-XmxNg/' $CONDA_PREFIX/bin/snver
 sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
+```
+
+## 🏗️ Project Structure
+
+```
+ChoCallate/
+├── main.nf                      # Main Nextflow pipeline script
+├── nextflow.config              # Pipeline configuration
+├── functions/                   # Utility functions
+│   ├── utils.nf                 # Parameter validation functions
+│   └── logging.nf               # Logging utilities
+├── bin/                         # Variant caller scripts
+│   ├── bcftools_caller.sh       # BCFtools variant calling
+│   ├── gatk4_caller.sh          # GATK4 variant calling
+│   ├── freebayes_caller.sh      # FreeBayes variant calling
+│   ├── snver_caller.sh          # SNVer variant calling
+│   ├── vardict_caller.sh        # VarDict variant calling
+│   ├── consensus_generation.sh  # Consensus generation script
+│   ├── process_snps.py          # Python script for SNPs consensus
+│   ├── process_indels.py        # Python script for indels consensus
+│   └── logging_utils.py         # Python logging utilities
+├── run_test.sh                  # Test execution script
+├── cleanup.sh                   # Test cleanup script
+└── README.md                    # This file
 ```
 
 ## 🛠️ Dependencies
@@ -303,12 +344,15 @@ All dependencies are managed via Conda:
 - **Parallel processing**: Efficient parallel execution of variant callers
 - **Multi-threading**: Configurable CPU allocation per process
 - **Fork-based parallelism**: Multiple parallel instances for I/O intensive tasks
+- **Window-based consensus**: Parallel processing of genomic regions
 
 ### Memory Management
 
 - **Streaming consensus**: Efficient memory usage for large datasets
 - **Intermediate cleanup**: Automatic removal of temporary files
 - **Memory optimization**: Efficient memory usage for large datasets
+- **SQLite-based consensus**: Fast in-memory database operations using Python scripts
+- **Window-based processing**: Parallel processing of genomic regions for memory efficiency
 
 ## 🐛 Troubleshooting
 
@@ -316,19 +360,41 @@ All dependencies are managed via Conda:
 
 1. **Memory errors**: Increase memory allocation for SNVer/VarDict
 2. **Disk space**: Monitor available disk space for intermediate files
-3. **Reference format**: Ensure FASTA is uncompressed
+3. **Reference format**: FASTA can be compressed or uncompressed
 4. **Path issues**: Use absolute paths for input files
 
 ### Debug Mode
 
 ```bash
 nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
     --debug \
     --log_level DEBUG
 ```
 
 Debug mode preserves all intermediate files for analysis.
 
+### Cleanup Options
+
+```bash
+# Disable cleanup for debugging
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
+    --enable_sample_cleanup false \
+    --debug
+
+# Custom cleanup configuration
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv samples.tsv \
+    --cleanup_intermediate_bam false \
+    --cleanup_intermediate_vcf true
+```
 
 
 ## 📄 Citation
@@ -345,6 +411,97 @@ Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline* [Computer 
   year = {2025}
 }
 ```
+
+## 🗺️ Development Roadmap
+
+ChoCallate is actively developed with a clear vision for future enhancements. Here's our roadmap for upcoming versions:
+
+#### New Germline Variant Callers
+- **DeepVariant**: Google's deep learning-based variant caller
+- **Strelka2  (Germline mode)**: Illumina's somatic variant caller
+
+#### Somatic Variant Callers
+- **VarScan2**: Robust somatic mutation and copy number alteration caller
+- **LoFreq**: Sensitive detection of low-frequency somatic variants
+- **Lancet**: Micro-assembly-based somatic variant caller
+- **Strelka2 (Somatic mode)**: Accurate somatic SNV and indel detection
+- **VarDict (Somatic mode)**: Sensitive detection of somatic variants using VarDict's tumor/normal workflow
+
+#### Long-Read Variant Callers
+- **Clair3**: Deep learning-based variant caller optimized for ONT and PacBio reads
+- **PEPPER-Margin-DeepVariant**: End-to-end pipeline for long-read variant calling
+- **Medaka**: ONT-specific variant calling and consensus polishing
+- **Longshot**: Accurate variant calling for diploid genomes from long reads
+- **Sniffles**: Structural variant detection from long-read sequencing data
+- **NanoCaller**: Deep learning-based variant caller for Oxford Nanopore and PacBio reads
+
+#### New Short Read Mapping Tools (including RNA-seq mapping tools)
+- **BWA-MEM2**: Fast and memory-efficient read aligner for short reads
+- **Minimap2**: Versatile mapper for short reads and spliced alignment
+- **HISAT2**: Graph-based aligner for RNA-seq and DNA-seq data
+- **STAR**: Ultrafast RNA-seq aligner for spliced reads
+- **SOAP2**: Ultrafast and accurate short read aligner for next-generation sequencing data
+- **Subread**: High-performance read aligner for short DNA sequencing reads
+
+#### Long-Read Mapping Tools
+- **Minimap2**: Versatile and fast aligner for long reads (ONT, PacBio) and spliced alignment
+- **BLASR**: PacBio-specific long-read aligner for mapping single-molecule sequencing reads
+- **GraphMap2**: Sensitive and accurate mapper for nanopore and PacBio reads
+- **NGMLR**: Next-generation mapper for long reads, optimized for structural variant detection
+- **LRA**: Long Read Aligner for high-accuracy mapping of long reads
+- **Winnowmap2**: Repeat-aware long-read mapper for ONT and PacBio data
+- **pathMap**: Long-read aligner for complex genomes and repetitive regions
+- **DALIGNER**: Efficient local alignment tool for long noisy reads
+- **MHAP**: MinHash Alignment Process, fast and scalable long-read overlapper for assembly
+
+#### AI-Powered Features
+- **Smart Caller Selection**: ML-based automatic consensus generation
+- **Quality Prediction**: AI-powered variant quality assessment
+- **False Positive Reduction**: Machine learning for improved precision
+
+#### Containerized Solution
+- **Docker/Singularity Support**: Develop and maintain official Docker and Singularity containers for ChoCallate and all dependencies
+- **Reproducible Environments**: Ensure consistent, reproducible pipeline execution across platforms
+- **Container Registry**: Publish and update containers on Docker Hub and other registries
+- **Documentation**: Provide clear instructions for running ChoCallate in containerized environments
+
+
+### 🛠️ Development Priorities
+
+1. **Performance Optimization**: Implement advanced strategies to significantly reduce pipeline runtime
+2. **Error Handling**: Improved error recovery and user feedback
+3. **New Variant Callers**: Integration of cutting-edge tools
+4. **Quality Metrics**: Enhanced quality assessment and reporting
+5. **Format Support**: Additional input/output format compatibility
+6. **Testing**: Comprehensive test suite and validation
+
+### 🤝 Contributing to Development
+
+We welcome contributions from the community! Here's how you can help:
+
+#### Development Areas
+- **Core Pipeline**: Nextflow workflow optimization
+- **Variant Callers**: Integration of new variant calling tools
+- **Consensus Algorithms**: Improved consensus generation methods
+- **Quality Control**: Enhanced quality assessment tools
+- **Documentation**: User guides and technical documentation
+
+#### Getting Started
+1. Fork the repository
+2. Create a feature branch
+3. Implement your changes
+4. Add tests and documentation
+5. Submit a pull request
+
+### 📊 Community Feedback
+
+Your input shapes our development priorities! We regularly collect feedback through:
+- **GitHub Issues**: Bug reports and feature requests
+- **User Surveys**: Annual user experience surveys
+- **Community Calls**: Monthly development discussions
+- **Scientific Conferences**: Presentations and workshops
+
+---
 
 ## 📜 License
 
