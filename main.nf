@@ -55,7 +55,10 @@ logInfo("Cleanup configuration loaded", [
     enable_sample_cleanup: params.enable_sample_cleanup,
     cleanup_intermediate_bam: params.cleanup_intermediate_bam,
     cleanup_intermediate_vcf: params.cleanup_intermediate_vcf,
-    note: "Work directory always persists. Sample-level cleanup performed in production mode to clean intermediate files."
+    cleanup_intermediate_subfolders: params.cleanup_intermediate_subfolders,
+    cleanup_input_symlinks: params.cleanup_input_symlinks,
+    debug_mode: params.debug,
+    note: "Work directory always persists. In debug mode, all intermediate files are preserved. In production mode, sample-level cleanup is performed."
 ])
 
 logInfo("Starting input validation and parameter sanity checks")
@@ -419,11 +422,21 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder
-        rm -rf "${sample_id}_bam_prep"
+        # Clean up intermediate subfolder conditionally
+        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+            rm -rf "${sample_id}_bam_prep"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        fi
 
-        # Remove input read files after mapping
-        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+        # Remove input read files after mapping conditionally
+        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+        fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
@@ -447,11 +460,21 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder
-        rm -rf "${sample_id}_bam_prep"
+        # Clean up intermediate subfolder conditionally
+        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+            rm -rf "${sample_id}_bam_prep"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        fi
 
-        # Remove input read files after mapping
-        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+        # Remove input read files after mapping conditionally
+        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+        fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
@@ -475,11 +498,21 @@ process PREPARE_BAM {
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        # Clean up intermediate subfolder
-        rm -rf "${sample_id}_bam_prep"
+        # Clean up intermediate subfolder conditionally
+        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+            rm -rf "${sample_id}_bam_prep"
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed intermediate subfolder"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+        fi
 
-        # Remove input read files after mapping
-        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+        # Remove input read files after mapping conditionally
+        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removed input files"
+        else
+            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Preserved input files (cleanup_input_symlinks = false)"
+        fi
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
@@ -522,11 +555,21 @@ process COVERAGE_GENERATION {
     # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder
-    rm -rf "${bam.baseName}_coverage_gen"
+    # Clean up intermediate subfolder conditionally
+    if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+        rm -rf "${bam.baseName}_coverage_gen"
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Removed intermediate subfolder"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+    fi
 
-    # Remove input files after completion
-    rm -f "${bam}" "${bam_index}" 2>/dev/null || true
+    # Remove input files after completion conditionally
+    if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+        rm -f "${bam}" "${bam_index}" 2>/dev/null || true
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Removed input files"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+    fi
     
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Process completed - Coverage BED file created"
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Performance: completed successfully"
@@ -575,11 +618,21 @@ process GENERATE_ZERO_VCF {
     # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder
-    rm -rf "${bam.baseName}_zero_vcf_gen"
+    # Clean up intermediate subfolder conditionally
+    if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+        rm -rf "${bam.baseName}_zero_vcf_gen"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Removed intermediate subfolder"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+    fi
 
-    # Remove input files after completion
-    rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" 2>/dev/null || true
+    # Remove input files after completion conditionally
+    if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+        rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" 2>/dev/null || true
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Removed input files"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+    fi
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process completed - Zero VCF created"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Performance: completed successfully"
@@ -660,11 +713,21 @@ process CALLING {
     # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder
-    rm -rf "${bam.baseName}_calling"
+    # Clean up intermediate subfolder conditionally
+    if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+        rm -rf "${bam.baseName}_calling"
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Removed intermediate subfolder"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+    fi
 
-    # Remove input files after completion
-    rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" "${ref_genome_dict}" 2>/dev/null || true
+    # Remove input files after completion conditionally
+    if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+        rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" "${ref_genome_dict}" 2>/dev/null || true
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Removed input files"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Preserved input files (cleanup_input_symlinks = false)"
+    fi
     
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Process completed - Variant calling finished"
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Performance: completed successfully"
@@ -756,11 +819,21 @@ process GENERATE_CONSENSUS {
     # Return to parent directory
     cd ..
     
-    # Clean up intermediate subfolder (this removes all intermediate files automatically)
-    rm -rf "${sample}_consensus_gen"
+    # Clean up intermediate subfolder conditionally
+    if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
+        rm -rf "${sample}_consensus_gen"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Removed intermediate subfolder"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Preserved intermediate subfolder (cleanup_intermediate_subfolders = false)"
+    fi
 
-    # Remove input files after completion
-    rm -f "${ref_genome_fai}" "${zero_vcf}" "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz 2>/dev/null || true
+    # Remove input files after completion conditionally
+    if [ "${params.cleanup_input_symlinks}" = "true" ]; then
+        rm -f "${ref_genome_fai}" "${zero_vcf}" "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz 2>/dev/null || true
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Removed input files"
+    else
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Preserved input files (cleanup_input_symlinks = false)"
+    fi
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Performance: completed successfully"
