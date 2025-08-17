@@ -399,76 +399,88 @@ process PREPARE_BAM {
 
     script:
     def readsType = params.reads_type
-    
+
     if ( params.reads_type == 'pe' )
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
-        
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} | \
+
+        # Create subfolder for intermediate files
+        mkdir -p "${sample_id}_bam_prep"
+
+        # Use input val parameters directly, do not symlink
+        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}.primary.bam
+            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing intermediate primary BAM"
-        rm -f ${sample_id}.primary.bam
+        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing input files: reads and reference"
-        rm -f ${ref_genome} ${genome_dictionary} $ref_genome 2>/dev/null || true
-            
+        # Clean up intermediate subfolder
+        rm -rf "${sample_id}_bam_prep"
+
+        # Remove input read files after mapping
+        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'se' )
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
-        
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -U ${read1} | \
+
+        # Create subfolder for intermediate files
+        mkdir -p "${sample_id}_bam_prep"
+
+        # Use input val parameters directly, do not symlink
+        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -U "${read1}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}.primary.bam
+            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing intermediate primary BAM"
-        rm -f ${sample_id}.primary.bam
+        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing input files: reads and reference"
-        rm -f ${ref_genome} ${genome_dictionary} $ref_genome 2>/dev/null || true
-            
+        # Clean up intermediate subfolder
+        rm -rf "${sample_id}_bam_prep"
+
+        # Remove input read files after mapping
+        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
     else if ( params.reads_type == 'mx' )
         """
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${readsType})"
-        
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x ${ref_index} -1 ${read1} -2 ${read2} -U ${read3} | \
+
+        # Create subfolder for intermediate files
+        mkdir -p "${sample_id}_bam_prep"
+
+        # Use input val parameters directly, do not symlink
+        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" -U "${read3}" | \
             samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
             samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}.primary.bam
+            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing intermediate primary BAM"
-        rm -f ${sample_id}.primary.bam
+        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
 
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM"
         samtools index --csi --threads ${task.cpus} ${sample_id}.bam
 
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Removing input files: reads and reference"
-        rm -f ${ref_genome} ${genome_dictionary} $ref_genome 2>/dev/null || true
-            
+        # Clean up intermediate subfolder
+        rm -rf "${sample_id}_bam_prep"
+
+        # Remove input read files after mapping
+        rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
+
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
         echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Performance: completed successfully"
         """
@@ -489,21 +501,35 @@ process COVERAGE_GENERATION {
     path("${bam.baseName}.bed"), emit: coverage
 
     script:
-    def bamName = bam.getName()
-    
     """
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Process started - Generating coverage information"
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Process started - Generating coverage information"
     
-    samtools depth -J --threads ${task.cpus} ${bam} | \
+    # Create subfolder for intermediate files
+    mkdir -p "${bam.baseName}_coverage_gen"
+    cd "${bam.baseName}_coverage_gen"
+    
+    # Create symlinks to input files
+    ln -sf "../${bam}" input.bam
+    ln -sf "../${bam_index}" input.bam.csi
+    
+    samtools depth -J --threads ${task.cpus} input.bam | \
         awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
         bedops --merge - > ${bam.baseName}.bed
     
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Removing input files: BAM and BAM index"
-    rm -f ${bam} ${bam_index}
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Input files removed"
+    # Move final output to parent directory
+    mv ${bam.baseName}.bed ../${bam.baseName}.bed
+    
+    # Return to parent directory
+    cd ..
+    
+    # Clean up intermediate subfolder
+    rm -rf "${bam.baseName}_coverage_gen"
 
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Process completed - Coverage BED file created"
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bamName}] Performance: completed successfully"
+    # Remove input files after completion
+    rm -f "${bam}" "${bam_index}" 2>/dev/null || true
+    
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Process completed - Coverage BED file created"
+    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -522,23 +548,41 @@ process GENERATE_ZERO_VCF {
     path("zero.vcf.gz"), emit: zero_vcf
 
     script:
-    def bamName = bam.getName()
     String genotype = (["0"] * params.ploidy).join("/")
     
     """
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Process started - Generating zero VCF"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process started - Generating zero VCF"
     
-    bcftools mpileup -Ov --count-orphans --fasta-ref ${ref_genome} --threads ${task.cpus} --max-depth 1 \
-        --min-BQ ${params.min_base_quality} --regions-file ${coverage_bed} ${bam} | \
+    # Create subfolder for intermediate files
+    mkdir -p "${bam.baseName}_zero_vcf_gen"
+    cd "${bam.baseName}_zero_vcf_gen"
+    
+    # Create symlinks to input files
+    ln -sf "../${bam}" input.bam
+    ln -sf "../${bam_index}" input.bam.csi
+    ln -sf "../${ref_genome}" ref_genome.fasta
+    ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
+    ln -sf "../${coverage_bed}" coverage.bed
+    
+    bcftools mpileup -Ov --count-orphans --fasta-ref ref_genome.fasta --threads ${task.cpus} --max-depth 1 \
+        --min-BQ ${params.min_base_quality} --regions-file coverage.bed input.bam | \
         awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' | \
         awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Removing input files: BAM, BAM index, reference genome, reference genome FAI, and coverage BED"
-    rm -f ${bam} ${bam_index} ${ref_genome} ${ref_genome_fai} ${coverage_bed}
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Input files removed"
+    # Move final output to parent directory
+    mv zero.vcf.gz ../zero.vcf.gz
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Process completed - Zero VCF created"
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bamName}] Performance: completed successfully"
+    # Return to parent directory
+    cd ..
+    
+    # Clean up intermediate subfolder
+    rm -rf "${bam.baseName}_zero_vcf_gen"
+
+    # Remove input files after completion
+    rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" 2>/dev/null || true
+    
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process completed - Zero VCF created"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -560,58 +604,70 @@ process CALLING {
     tuple val("${bam.baseName}"), path("*.indels_*.vcf.gz"), emit: indels_vcf
 
     script:
-    def bamName = bam.getName()
     def parallel_cpus = getAvailableCallersCount(effective_callers)
     
     """
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Process started - Running variant callers"
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Using callers: ${effective_callers}"
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Parallel CPUs: ${parallel_cpus}"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Process started - Running variant callers"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Using callers: ${effective_callers}"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Parallel CPUs: ${parallel_cpus}"
+    
+    # Create subfolder for intermediate files
+    mkdir -p "${bam.baseName}_calling"
+    cd "${bam.baseName}_calling"
+    
+    # Create symlinks to input files
+    ln -sf "../${bam}" input.bam
+    ln -sf "../${bam_index}" input.bam.csi
+    ln -sf "../${ref_genome}" ref_genome.fasta
+    ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
+    ln -sf "../${coverage_bed}" coverage.bed
+    ln -sf "../${ref_genome_dict}" ref_genome.dict
     
     touch callers_commands.sh
 
     if [[ ",${effective_callers}," == *"bcftools"* ]]; then
-        echo "bash ${projectDir}/bin/bcftools_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added bcftools caller command"
+        echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added bcftools caller command"
     fi
 
     if [[ ",${effective_callers}," == *"freebayes"* ]]; then
-        echo "bash ${projectDir}/bin/freebayes_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added freebayes caller command"
+        echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added freebayes caller command"
     fi
 
     if [[ ",${effective_callers}," == *"gatk"* ]]; then
-        echo "bash ${projectDir}/bin/gatk4_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added GATK4 caller command"
+        echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added GATK4 caller command"
     fi
 
     if [[ ",${effective_callers}," == *"vardict"* ]]; then
-        echo "bash ${projectDir}/bin/vardict_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added VarDict caller command"
+        echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added VarDict caller command"
     fi
 
     if [[ ",${effective_callers}," == *"snver"* ]]; then
-        echo "bash ${projectDir}/bin/snver_caller.sh ${bam} ${coverage_bed} ${ref_genome} ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
-        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Added SNVer caller command"
+        echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Added SNVer caller command"
     fi
 
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Executing ${parallel_cpus} callers in parallel"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Executing ${parallel_cpus} callers in parallel"
     parallel -j ${parallel_cpus} '{}' :::: callers_commands.sh
     
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Removing callers_commands.sh and all input/intermediate files"
-    rm -f callers_commands.sh 2>/dev/null || true
+    # Move final outputs to parent directory
+    mv *.snps_*.vcf.gz ../
+    mv *.indels_*.vcf.gz ../
+    
+    # Return to parent directory
+    cd ..
+    
+    # Clean up intermediate subfolder
+    rm -rf "${bam.baseName}_calling"
 
-    rm -f "${bam}" 2>/dev/null || true
-    rm -f "${bam_index}" 2>/dev/null || true
-    rm -f "${coverage_bed}" 2>/dev/null || true
-    rm -f "${ref_genome}" 2>/dev/null || true
-    rm -f "${ref_genome_fai}" 2>/dev/null || true
-    rm -f "${ref_genome_dict}" 2>/dev/null || true
-
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] callers_commands.sh, input files, and intermediate files removed"
-
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Process completed - Variant calling finished"
-    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bamName}] Performance: completed successfully"
+    # Remove input files after completion
+    rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" "${ref_genome_dict}" 2>/dev/null || true
+    
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Process completed - Variant calling finished"
+    echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Performance: completed successfully"
     """
 }
 
@@ -642,7 +698,24 @@ process GENERATE_CONSENSUS {
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Consensus threshold: ${cons_threshold}"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Window size: ${params.win_size}"
     
-    awk -v OFS='\t' '{print \$1,"0",\$2}' ${ref_genome_fai} > genome.bed
+    # Create subfolder for intermediate files
+    mkdir -p "${sample}_consensus_gen"
+    cd "${sample}_consensus_gen"
+    
+    # Create symlinks to input files
+    ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
+    ln -sf "../${zero_vcf}" zero.vcf.gz
+    
+    # Create symlinks to VCF files
+    for vcf in ../${sample}.snps_*.vcf.gz; do
+        ln -sf "\$vcf" "\$(basename \$vcf)"
+    done
+    
+    for vcf in ../${sample}.indels_*.vcf.gz; do
+        ln -sf "\$vcf" "\$(basename \$vcf)"
+    done
+    
+    awk -v OFS='\\t' '{print \$1,"0",\$2}' ref_genome.fasta.fai > genome.bed
     bedtools makewindows -b genome.bed -w ${params.win_size} > genome_intervals.bed
 
     mkdir all_chrs
@@ -657,7 +730,7 @@ process GENERATE_CONSENSUS {
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
         bcftools sort -Oz -o ${sample}.snps.vcf.gz
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] SNPs consensus VCF created"
@@ -671,24 +744,24 @@ process GENERATE_CONSENSUS {
     find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
 
     bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
-        bcftools reheader --threads ${task.cpus} -f ${ref_genome_fai} | \
+        bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
         bcftools sort -Oz -o ${sample}.indels.vcf.gz
         
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus VCF created"
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Cleaning up intermediate and input files"
+    # Move final outputs to parent directory
+    mv ${sample}.snps.vcf.gz ../${sample}.snps.vcf.gz
+    mv ${sample}.indels.vcf.gz ../${sample}.indels.vcf.gz
+    
+    # Return to parent directory
+    cd ..
+    
+    # Clean up intermediate subfolder (this removes all intermediate files automatically)
+    rm -rf "${sample}_consensus_gen"
 
-    rm -f genome.bed genome_intervals.bed vcf_files.txt 2>/dev/null || true
-
-    rm -rf all_chrs 2>/dev/null || true
-
-    rm -f "${sample}.snps_"*.vcf.gz "${sample}.snps_"*.vcf.gz.csi 2>/dev/null || true
-    rm -f "${sample}.indels_"*.vcf.gz "${sample}.indels_"*.vcf.gz.csi 2>/dev/null || true
-
-    rm -f zero.vcf.gz zero.vcf.gz.csi 2>/dev/null || true
-
-    rm -f ${ref_genome_fai} 2>/dev/null || true
-
+    # Remove input files after completion
+    rm -f "${ref_genome_fai}" "${zero_vcf}" "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz 2>/dev/null || true
+    
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Performance: completed successfully"
     """

@@ -5,20 +5,43 @@
 set -e
 
 # Input parameters
-BAM_FILE=$1
-COVERAGE_FILE=$2
-REF_GENOME=$3
-PLOIDY=$4
-MIN_BASE_QUALITY=$5
-MIN_SNP_QUAL=$6
+BAM_FILE="$1"
+COVERAGE_FILE="$2"
+REF_GENOME="$3"
+PLOIDY="$4"
+MIN_BASE_QUALITY="$5"
+MIN_SNP_QUAL="$6"
+
+# Validate required parameters
+if [ $# -ne 6 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL>"
+    echo "Error: Expected 6 parameters, got $#"
+    exit 1
+fi
+
+# Validate that required files exist
+if [ ! -f "$BAM_FILE" ]; then
+    echo "Error: BAM file '$BAM_FILE' not found"
+    exit 1
+fi
+
+if [ ! -f "$COVERAGE_FILE" ]; then
+    echo "Error: Coverage file '$COVERAGE_FILE' not found"
+    exit 1
+fi
+
+if [ ! -f "$REF_GENOME" ]; then
+    echo "Error: Reference genome '$REF_GENOME' not found"
+    exit 1
+fi
 
 # Extract base name from BAM file
 BAM_BASENAME=$(basename "$BAM_FILE" .bam)
 
 # Logging function
 log_message() {
-    local level=$1
-    local message=$2
+    local level="$1"
+    local message="$2"
     local timestamp=$(date -Iseconds)
     echo "[${timestamp}] [${level}] [SNVER_CALLER] [${BAM_BASENAME}] ${message}"
 }
@@ -55,31 +78,99 @@ fi
 
 # Process SNPs VCF
 log_message "INFO" "Processing SNPs VCF"
-bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | \
-    bcftools filter -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -Oz -o "${BAM_BASENAME}.snps_snver.vcf.gz"
 
-if [ $? -eq 0 ]; then
-    log_message "INFO" "SNPs VCF processing completed successfully"
-else
-    log_message "ERROR" "SNPs VCF processing failed"
+# Step 1: Reheader SNPs VCF
+bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools reheader for SNPs failed"
     exit 1
 fi
+
+# Step 2: Filter SNPs by quality
+bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools filter for SNPs failed"
+    exit 1
+fi
+
+# Step 3: Annotate and remove INFO/FORMAT fields for SNPs
+bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools annotate for SNPs failed"
+    exit 1
+fi
+
+# Step 4: Filter for biallelic SNPs
+bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools view (allele filter) for SNPs failed"
+    exit 1
+fi
+
+# Step 5: Normalize SNPs
+bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.snps_snver.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools norm for SNPs failed"
+    exit 1
+fi
+
+log_message "INFO" "SNPs VCF processing completed successfully"
 
 # Process indels VCF
 log_message "INFO" "Processing indels VCF"
-bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | \
-    bcftools filter -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate --force -x INFO,FORMAT - | bcftools view --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -Oz -o "${BAM_BASENAME}.indels_snver.vcf.gz"
 
-if [ $? -eq 0 ]; then
-    log_message "INFO" "Indels VCF processing completed successfully"
-else
-    log_message "ERROR" "Indels VCF processing failed"
+# Step 1: Reheader indels VCF
+bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools reheader for indels failed"
     exit 1
 fi
+
+# Step 2: Filter indels by quality
+bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools filter for indels failed"
+    exit 1
+fi
+
+# Step 3: Annotate and remove INFO/FORMAT fields for indels
+bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools annotate for indels failed"
+    exit 1
+fi
+
+# Step 4: Filter for biallelic indels
+bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools view (allele filter) for indels failed"
+    exit 1
+fi
+
+# Step 5: Normalize indels
+bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.indels_snver.bcf"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "bcftools norm for indels failed"
+    exit 1
+fi
+
+log_message "INFO" "Indels VCF processing completed successfully"
+
+# Generate final compressed output files
+log_message "INFO" "Generating final compressed output files"
+bcftools view -Ov "${BAM_BASENAME}.snps_snver.bcf" | bgzip > "${BAM_BASENAME}.snps_snver.vcf.gz"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "Final SNPs output generation failed"
+    exit 1
+fi
+
+bcftools view -Ov "${BAM_BASENAME}.indels_snver.bcf" | bgzip > "${BAM_BASENAME}.indels_snver.vcf.gz"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "Final indels output generation failed"
+    exit 1
+fi
+
+log_message "INFO" "Final compressed output files generated successfully"
 
 # Calculate duration and log completion
 END_TIME=$(date +%s)
@@ -88,9 +179,3 @@ DURATION=$((END_TIME - START_TIME))
 log_message "INFO" "Process completed - SNPs and indels VCFs generated"
 log_message "INFO" "Performance: ${DURATION} seconds"
 log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.vcf.gz, ${BAM_BASENAME}.indels_snver.vcf.gz"
-
-# Clean up temporary files
-log_message "INFO" "Cleaning up temporary files"
-rm -f reference.fasta reference.fasta.fai "${BAM_BASENAME}.raw.vcf" "${BAM_BASENAME}.filter.vcf" "${BAM_BASENAME}.indel.filter.vcf" "${BAM_BASENAME}.indel.raw.vcf" "${BAM_BASENAME}.failed.log" 2>/dev/null || true
-log_message "INFO" "Temporary files cleaned up"
-
