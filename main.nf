@@ -408,101 +408,22 @@ process PREPARE_BAM {
     tuple path("${sample_id}.bam"), path("${sample_id}.bam.csi"), emit: bam
 
     script:
-    if ( params.reads_type == 'pe' )
-        """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
-        mkdir -p "${sample_id}_bam_prep"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
-            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
-            samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
-        samtools index --csi --threads ${task.cpus} ${sample_id}.bam
-
-        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
-            rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
-        fi
-
-        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
-            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
-        fi
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        """
-    else if ( params.reads_type == 'se' )
-        """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
-        mkdir -p "${sample_id}_bam_prep"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -U "${read1}" | \
-            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
-            samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
-        samtools index --csi --threads ${task.cpus} ${sample_id}.bam
-
-        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
-            rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
-        fi
-
-        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
-            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
-        fi
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        """
-    else if ( params.reads_type == 'mx' )
-        """
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${params.reads_type})"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Creating intermediate subfolder for BAM preparation"
-        mkdir -p "${sample_id}_bam_prep"
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${task.cpus} threads"
-        bowtie2 --threads ${task.cpus} --rg-id ${sample_id} --rg SM:${sample_id} -x "${ref_index}" -1 "${read1}" -2 "${read2}" -U "${read3}" | \
-            samtools view -@ ${task.cpus} -S -b -q ${params.min_map_qual} -F 4 - | \
-            samtools fixmate -@ ${task.cpus} -m - - | \
-            samtools sort -@ ${task.cpus} -o ${sample_id}_bam_prep/${sample_id}.primary.bam
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running LeftAlignIndels on primary BAM"
-        gatk LeftAlignIndels -I ${sample_id}_bam_prep/${sample_id}.primary.bam -O ${sample_id}.bam -R ${ref_genome} -OBI false
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Indexing final BAM with samtools"
-        samtools index --csi --threads ${task.cpus} ${sample_id}.bam
-
-        if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
-            rm -rf "${sample_id}_bam_prep"
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up intermediate subfolder"
-        fi
-
-        if [ "${params.cleanup_input_symlinks}" = "true" ]; then
-            rm -f "${ref_genome}" "${genome_dictionary}" "${genome_fai}" 2>/dev/null || true
-            echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Cleaned up input files"
-        fi
-
-        echo "[\$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process completed - BAM file created"
-        """
-    else
-        error 'Invalid reads type: ${params.reads_type}. Available types: se, pe, mx'
+    """
+    prepare_bam.sh \
+        ${params.reads_type} \
+        ${sample_id} \
+        "${read1}" \
+        "${read2}" \
+        "${read3}" \
+        "${ref_genome}" \
+        "${genome_dictionary}" \
+        "${genome_fai}" \
+        "${ref_index}" \
+        ${params.min_map_qual} \
+        ${task.cpus} \
+        "${params.cleanup_intermediate_subfolders}" \
+        "${params.cleanup_input_symlinks}"
+    """
 }
 
 process COVERAGE_GENERATION {
