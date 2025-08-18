@@ -11,7 +11,8 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **🔄 Consensus-driven approach**: Combines multiple variant callers using configurable consensus rules
 - **🧬 Ploidy flexibility**: Supports both diploid and polyploid species with automatic caller selection
 - **📊 Multiple consensus types**: Majority rule, n-1 consensus, and full consensus options
-- **🔧 Flexible input support**: Compatible with GBS (Genotyping-by-Sequencing) and WGS data
+- **📂 Dual input support**: Processes both FASTQ (raw reads) and BAM (pre-aligned) files, allowing flexible integration of sequencing data at different analysis stages
+- **🔧 Flexible input compatibility**: Works with GBS (Genotyping-by-Sequencing) and WGS data
 - **⚡ Parallel processing**: Efficient parallel execution for optimal performance
 - **🎛️ Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
 - **📈 Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
@@ -41,11 +42,14 @@ bash run_test.sh
 bash cleanup.sh
 ```
 
-**Note**: The test script expects test data in the `test_data/` directory with the following structure:
-- `arth_chr1.fasta.gz` - Reference genome
-- `test_reads_R1.fq.gz` - Paired-end read 1
-- `test_reads_R2.fq.gz` - Paired-end read 2  
-- `test_reads_SE.fq.gz` - Single-end reads
+**Note**: The test script expects test data in the `test_data/` directory with the following files:
+- `arth_chr1.fasta.gz` — Reference genome (compressed FASTA)
+- `test_reads_R1.fq.gz` — Paired-end read 1 (FASTQ)
+- `test_reads_R2.fq.gz` — Paired-end read 2 (FASTQ)
+- `test_reads_SE.fq.gz` — Single-end reads (FASTQ)
+- `sample1.bam` — Example BAM file for BAM input mode
+
+The directory structure should look like:
 
 ### 3. Basic Usage
 
@@ -70,13 +74,13 @@ nextflow run main.nf \
 
 ### Supported Variant Callers
 
-| Caller | Diploid Support | Polyploid Support | Description |
-|--------|----------------|-------------------|-------------|
-| **bcftools** | ✅ | ❌ | Fast, lightweight variant calling |
-| **GATK4** | ✅ | ✅ | Industry-standard variant calling |
-| **FreeBayes** | ✅ | ✅ | Bayesian variant detection |
-| **SNVer** | ✅ | ✅ | Statistical variant calling |
-| **VarDict** | ✅ | ❌ | Advanced variant detection |
+| Caller      | Diploid Support | Polyploid Support |
+|-------------|----------------|-------------------|
+| **bcftools**| ✅             | ❌                |
+| **GATK4**   | ✅             | ✅                |
+| **FreeBayes**| ✅            | ✅                |
+| **SNVer**   | ✅             | ✅                |
+| **VarDict** | ✅             | ❌                |
 
 ### Workflow Scheme
 
@@ -222,36 +226,51 @@ nextflow run main.nf \
 
 ### Samples TSV Format
 
-Create a tab-separated file with sample information:
+The structure of `--samples_tsv` depends on two parameters:
+- `--input_format`: `fastq` (raw reads) or `bam` (pre-aligned)
+- `--reads_type`: `pe`, `se`, or `mx` (applies to FASTQ mode)
 
+Notes (applies to all modes):
+- No header line is expected; do not include a header row.
+- Fields must be separated by a single TAB character (TSV), not spaces or commas.
+
+#### FASTQ mode (`--input_format fastq`)
+
+Provide 4 columns per sample: `sample_id`, `R1`, `R2`, `SE`.
+- Required columns by `--reads_type`:
+  - `pe`: columns 1,2,3 required (R1,R2). Column 4 can be `-`.
+  - `se`: columns 1 and 4 required (SE). Columns 2 and 3 can be `-`.
+  - `mx`: all 4 columns required (R1,R2,SE).
+
+Examples:
 ```bash
-# samples.tsv
-sample1    /path/to/sample1_R1.fq.gz    /path/to/sample1_R2.fq.gz    /path/to/sample1_SE.fq.gz
-sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz    /path/to/sample2_SE.fq.gz
+# reads_type=pe
+sample1    /path/R1.fq.gz    /path/R2.fq.gz    -
+
+# reads_type=se
+sample2    -                 -                 /path/SE.fq.gz
+
+# reads_type=mx
+sample3    /path/R1.fq.gz    /path/R2.fq.gz    /path/SE.fq.gz
 ```
 
-**Read Type Configurations**:
-Provide at least this columns (others may contain any symbols and are ignored):
-- **`--reads_type pe`**: Paired-end reads (columns 1, 2 & 3)
-- **`--reads_type se`**: Single-end reads (column 1, 2)
-- **`--reads_type mx`**: Mixed reads (coulmn 1, columns 2 & 3 for PE, column 4 for SE)
+Accepted read formats: `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`.
 
-### BAM Mode TSV Format (`--input_format bam`)
+#### BAM mode (`--input_format bam`)
 
-Provide at least two columns (others may contain any symbols and are ignored):
+Provide at least 2 columns per sample: `sample_id`, `bam_path`. Columns 3–4 are ignored.
+- `--reads_type` is accepted but does not affect BAM mode parsing.
 
+Example:
 ```bash
-# samples_bam.tsv
-sample1    /abs/path/sample1.bam     x     x
-sample2    /abs/path/sample2.bam     -     -
+sample1    /abs/path/sample1.bam    x    x
 ```
 
-- Column 1: sample ID
-- Column 2: BAM path (absolute path required)
-- Columns 3–4: ignored
+Notes:
+- Column 2 must be a valid `.bam` file.
 
-**File Format Support**:
-- Input reads: `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
+#### File Format Support
+- Input reads (FASTQ mode): `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
 - Reference genome: `.fasta`, `.fa`, `.fna` (compressed or uncompressed)
 - Output VCFs: `.vcf.gz` (bgzipped)
 
@@ -481,14 +500,6 @@ We welcome contributions from the community! Here's how you can help:
 3. Implement your changes
 4. Add tests and documentation
 5. Submit a pull request
-
-### 📊 Community Feedback
-
-Your input shapes our development priorities! We regularly collect feedback through:
-- **GitHub Issues**: Bug reports and feature requests
-- **User Surveys**: Annual user experience surveys
-- **Community Calls**: Monthly development discussions
-- **Scientific Conferences**: Presentations and workshops
 
 ---
 
