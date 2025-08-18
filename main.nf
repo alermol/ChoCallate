@@ -16,6 +16,7 @@ include {
     allEffectiveCallersPolyploidSuitable;
     validateAllParameters;
     validateTSVFile;
+    validateInputFormat;
     validateReferenceGenome;
     validateBowtie2Index;
     validatePloidy;
@@ -127,7 +128,7 @@ if (!outdir.exists()) {
     ])
 }
 
-def samplesValidation = validateTSVFile(params.samples_tsv)
+def samplesValidation = validateTSVFile(params.samples_tsv, params.input_format, params.reads_type)
 if (samplesValidation.valid) {
     logInfo("Samples TSV validation passed", [
         validation: "samples_tsv_format",
@@ -144,13 +145,15 @@ if (refGenomeValidation.valid) {
     ])
 }
 
-def refIndexValidation = validateBowtie2Index(params.reference_index)
-if (refIndexValidation.valid) {
-    logInfo("Bowtie2 index validation passed", [
-        validation: "bowtie2_index_format",
-        index_directory: params.reference_index,
-        index_files_count: refIndexValidation.indexFiles.size()
-    ])
+if (params.input_format == 'fastq') {
+    def refIndexValidation = validateBowtie2Index(params.reference_index)
+    if (refIndexValidation.valid) {
+        logInfo("Bowtie2 index validation passed", [
+            validation: "bowtie2_index_format",
+            index_directory: params.reference_index,
+            index_files_count: refIndexValidation.indexFiles.size()
+        ])
+    }
 }
 
 def effective_callers
@@ -215,12 +218,12 @@ workflow {
     Channel
         .fromPath(params.samples_tsv)
         .splitCsv(header: false, sep: '\t')
-        .map{row -> tuple(row[0], file(row[1]), file(row[2]), file(row[3]))}
+        .map{row -> tuple(row[0], row[1], row[2], row[3])}
         .set{sample_run_ch}
     
     logInfo("Sample channel created", [samples_count: "processing"])
 
-    ref_index = file(params.reference_index)
+    ref_index = params.input_format == 'fastq' ? file(params.reference_index) : 'NA'
     ref_genome = file(params.reference_genome)
 
     CREATE_FAI_INDEX(ref_genome)
@@ -410,6 +413,7 @@ process PREPARE_BAM {
     script:
     """
     prepare_bam.sh \
+        ${params.input_format} \
         ${params.reads_type} \
         ${sample_id} \
         "${read1}" \

@@ -75,7 +75,15 @@ def validateFile(String filePath, String fileType) {
     return [valid: true, file: file]
 }
 
-def validateTSVFile(String filePath) {
+def validateInputFormat(String inputFormat) {
+    def valid = ['fastq','bam']
+    if (!inputFormat || !valid.contains(inputFormat.toLowerCase())) {
+        return [valid: false, error: "Invalid input_format: ${inputFormat}. Valid options: fastq, bam"]
+    }
+    return [valid: true, value: inputFormat.toLowerCase()]
+}
+
+def validateTSVFile(String filePath, String inputFormat, String readsType) {
     def fileValidation = validateFile(filePath, "Samples TSV")
     if (!fileValidation.valid) {
         return fileValidation
@@ -86,8 +94,6 @@ def validateTSVFile(String filePath) {
     def content = file.text
     def lines = content.split('\n')
     
-
-    
     if (lines.size() < 1) {
         return [valid: false, error: "Samples TSV file must contain at least 1 sample line"]
     }
@@ -95,28 +101,76 @@ def validateTSVFile(String filePath) {
     // No header - all lines are sample data
     def startIndex = 0
     
+    // Normalize for comparisons
+    def fmt = (inputFormat ?: 'fastq').toLowerCase()
+    def rt = (readsType ?: '').toLowerCase()
+
     // Validate sample lines
     for (int i = startIndex; i < lines.size(); i++) {
         def line = lines[i].trim()
         if (line.isEmpty()) continue
         
         def columns = line.split('\t')
-        if (columns.size() < 4) {
-            return [valid: false, error: "Sample line ${i+1} has insufficient columns: ${columns.size()} < 4. Expected: sample_id, read1, read2, read3"]
-        }
-        
-        // Check sample ID
-        if (!columns[0] || columns[0].trim().isEmpty()) {
-            return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
-        }
-        
-        // Check read files
-        for (int j = 1; j < 4; j++) {
-            if (columns[j] && !columns[j].trim().isEmpty()) {
-                def readFile = new File(columns[j])
-                if (!readFile.exists()) {
-                    return [valid: false, error: "Read file does not exist in line ${i+1}, column ${j+1}: ${columns[j]}"]
+        if (fmt == 'fastq') {
+            if (columns.size() < 4) {
+                return [valid: false, error: "Sample line ${i+1} has insufficient columns: ${columns.size()} < 4. Expected 4 columns for FASTQ mode"]
+            }
+            if (!columns[0] || columns[0].trim().isEmpty()) {
+                return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
+            }
+            if (rt == 'se') {
+                def sePath = columns[3]
+                if (!sePath || sePath.trim().isEmpty()) {
+                    return [valid: false, error: "FASTQ se mode requires column 4 (SE read) in line ${i+1}"]
                 }
+                def f = new File(sePath)
+                if (!f.exists()) {
+                    return [valid: false, error: "SE FASTQ file in column 4 does not exist (line ${i+1}): ${sePath}"]
+                }
+            } else if (rt == 'pe') {
+                def r1 = columns[1]
+                def r2 = columns[2]
+                if (!r1 || r1.trim().isEmpty() || !r2 || r2.trim().isEmpty()) {
+                    return [valid: false, error: "FASTQ pe mode requires columns 2 and 3 (R1,R2) in line ${i+1}"]
+                }
+                def f1 = new File(r1)
+                def f2 = new File(r2)
+                if (!f1.exists()) {
+                    return [valid: false, error: "PE FASTQ R1 in column 2 does not exist (line ${i+1}): ${r1}"]
+                }
+                if (!f2.exists()) {
+                    return [valid: false, error: "PE FASTQ R2 in column 3 does not exist (line ${i+1}): ${r2}"]
+                }
+            } else if (rt == 'mx') {
+                def r1 = columns[1]
+                def r2 = columns[2]
+                def se = columns[3]
+                if (!r1 || r1.trim().isEmpty() || !r2 || r2.trim().isEmpty() || !se || se.trim().isEmpty()) {
+                    return [valid: false, error: "FASTQ mx mode requires columns 2,3,4 (R1,R2,SE) in line ${i+1}"]
+                }
+                if (!new File(r1).exists()) return [valid: false, error: "MX FASTQ R1 missing (line ${i+1}): ${r1}"]
+                if (!new File(r2).exists()) return [valid: false, error: "MX FASTQ R2 missing (line ${i+1}): ${r2}"]
+                if (!new File(se).exists()) return [valid: false, error: "MX FASTQ SE missing (line ${i+1}): ${se}"]
+            } else {
+                return [valid: false, error: "Invalid reads_type '${readsType}' for FASTQ input. Expected one of: se, pe, mx"]
+            }
+        } else if (fmt == 'bam') {
+            if (columns.size() < 2) {
+                return [valid: false, error: "Sample line ${i+1} has insufficient columns: ${columns.size()} < 2. Expected: sample_id, bam_path"]
+            }
+            if (!columns[0] || columns[0].trim().isEmpty()) {
+                return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
+            }
+            def bamPath = columns[1]
+            if (!bamPath || bamPath.trim().isEmpty()) {
+                return [valid: false, error: "BAM path is required in column 2 (line ${i+1})"]
+            }
+            def bamFile = new File(bamPath)
+            if (!bamFile.exists()) {
+                return [valid: false, error: "BAM file does not exist in line ${i+1}: ${bamPath}"]
+            }
+            if (!bamPath.toLowerCase().endsWith('.bam')) {
+                return [valid: false, error: "BAM file in line ${i+1} must have .bam extension: ${bamPath}"]
             }
         }
     }
@@ -349,8 +403,15 @@ def validateAllParameters(Map params) {
     def errors = []
     def warnings = []
     
+    // Input format
+    def inputFormatValidation = validateInputFormat(params.input_format)
+    if (!inputFormatValidation.valid) {
+        errors << inputFormatValidation.error
+    }
+    def inputFormat = inputFormatValidation.valid ? inputFormatValidation.value : 'fastq'
+
     // File validations
-    def samplesValidation = validateTSVFile(params.samples_tsv)
+    def samplesValidation = validateTSVFile(params.samples_tsv, inputFormat, params.reads_type)
     if (!samplesValidation.valid) {
         errors << samplesValidation.error
     }
@@ -360,9 +421,11 @@ def validateAllParameters(Map params) {
         errors << refGenomeValidation.error
     }
     
-    def refIndexValidation = validateBowtie2Index(params.reference_index)
-    if (!refIndexValidation.valid) {
-        errors << refIndexValidation.error
+    if (inputFormat == 'fastq') {
+        def refIndexValidation = validateBowtie2Index(params.reference_index)
+        if (!refIndexValidation.valid) {
+            errors << refIndexValidation.error
+        }
     }
     
     // Numeric parameter validations
@@ -392,9 +455,11 @@ def validateAllParameters(Map params) {
     }
     
     // CPU and resource validations
-    def bowtie2CpuValidation = validateCPUParameter(params.bowtie2_cpu, "bowtie2_cpu")
-    if (!bowtie2CpuValidation.valid) {
-        errors << bowtie2CpuValidation.error
+    if (inputFormat == 'fastq') {
+        def bowtie2CpuValidation = validateCPUParameter(params.bowtie2_cpu, "bowtie2_cpu")
+        if (!bowtie2CpuValidation.valid) {
+            errors << bowtie2CpuValidation.error
+        }
     }
     
     def bcftoolsCpuValidation = validateCPUParameter(params.bcftools_cpu, "bcftools_cpu")
@@ -418,9 +483,11 @@ def validateAllParameters(Map params) {
     }
     
     // Fork validations
-    def bowtie2ForksValidation = validateForkParameter(params.bowtie2_forks, "bowtie2_forks")
-    if (!bowtie2ForksValidation.valid) {
-        errors << bowtie2ForksValidation.error
+    if (inputFormat == 'fastq') {
+        def bowtie2ForksValidation = validateForkParameter(params.bowtie2_forks, "bowtie2_forks")
+        if (!bowtie2ForksValidation.valid) {
+            errors << bowtie2ForksValidation.error
+        }
     }
     
     def callingForksValidation = validateForkParameter(params.calling_forks, "calling_forks")
@@ -439,9 +506,15 @@ def validateAllParameters(Map params) {
     }
     
     // String parameter validations
-    def readsTypeValidation = validateReadsType(params.reads_type)
-    if (!readsTypeValidation.valid) {
-        errors << readsTypeValidation.error
+    if (inputFormat == 'fastq') {
+        def readsTypeValidation = validateReadsType(params.reads_type)
+        if (!readsTypeValidation.valid) {
+            errors << readsTypeValidation.error
+        }
+    } else {
+        if (params.reads_type && params.reads_type !in ['se','pe','mx']) {
+            warnings << "reads_type (${params.reads_type}) is ignored when input_format=bam"
+        }
     }
     
     def readsSourceValidation = validateReadsSource(params.reads_source)

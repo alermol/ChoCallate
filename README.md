@@ -56,6 +56,16 @@ nextflow run main.nf \
     --samples_tsv /path/to/samples.tsv
 ```
 
+BAM input example (no Bowtie2 index required):
+
+```bash
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --input_format bam \
+    --reads_type pe \
+    --samples_tsv /path/to/samples_bam.tsv
+```
+
 ## 🏗️ Pipeline Architecture
 
 ### Supported Variant Callers
@@ -87,8 +97,9 @@ nextflow run main.nf \
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `--reference_genome` | ✅ | - | Reference genome in FASTA format (supports gzipped) |
-| `--reference_index` | ✅ | - | Bowtie2 index prefix for the reference genome |
+| `--reference_index` | ✅ for `input_format=fastq` | - | Bowtie2 index prefix for the reference genome (not required for BAM input) |
 | `--samples_tsv` | ✅ | `input.tsv` | TSV file with sample information |
+| `--input_format` | ✅ | `fastq` | Input files format: `fastq` or `bam` |
 
 ### Input/Output Parameters
 
@@ -109,6 +120,7 @@ nextflow run main.nf \
 
 | Parameter | Default | Choices | Description |
 |-----------|---------|---------|-------------|
+| `--input_format` | `fastq` | `fastq`, `bam` | Selects whether samples TSV lists FASTQ reads or BAM files |
 | `--reads_type` | `pe` | `pe`, `se`, `mx` | Read type: paired-end, single-end, or mixed |
 | `--reads_source` | `gbs` | `gbs`, `wgs` | Data source: GBS or whole genome sequencing |
 | `--ploidy` | `2` | `≥2` | Ploidy level of the organism |
@@ -219,9 +231,24 @@ sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz    /path/to/sa
 ```
 
 **Read Type Configurations**:
-- **`--reads_type pe`**: Paired-end reads (columns 2 & 3)
-- **`--reads_type se`**: Single-end reads (column 2)
-- **`--reads_type mx`**: Mixed reads (columns 2 & 3 for PE, column 4 for SE)
+Provide at least this columns (others may contain any symbols and are ignored):
+- **`--reads_type pe`**: Paired-end reads (columns 1, 2 & 3)
+- **`--reads_type se`**: Single-end reads (column 1, 2)
+- **`--reads_type mx`**: Mixed reads (coulmn 1, columns 2 & 3 for PE, column 4 for SE)
+
+### BAM Mode TSV Format (`--input_format bam`)
+
+Provide at least two columns (others may contain any symbols and are ignored):
+
+```bash
+# samples_bam.tsv
+sample1    /abs/path/sample1.bam     x     x
+sample2    /abs/path/sample2.bam     -     -
+```
+
+- Column 1: sample ID
+- Column 2: BAM path (absolute path required)
+- Columns 3–4: ignored
 
 **File Format Support**:
 - Input reads: `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
@@ -231,8 +258,8 @@ sample2    /path/to/sample2_R1.fq.gz    /path/to/sample2_R2.fq.gz    /path/to/sa
 ### Reference Requirements
 
 - **Format**: FASTA (supports both compressed and uncompressed)
-- **Index**: Pre-built Bowtie2 index
-- **Path**: Absolute paths recommended
+- **Index**: Pre-built Bowtie2 index (required only for `--input_format fastq`)
+- **Path**: Absolute paths required
 
 ## 📊 Output Structure
 
@@ -297,13 +324,14 @@ ChoCallate/
 ├── functions/                   # Utility functions
 │   ├── utils.nf                 # Parameter validation functions
 │   └── logging.nf               # Logging utilities
-├── bin/                         # Variant caller scripts
+├── bin/                         # Pipeline scripts and variant caller wrappers
 │   ├── bcftools_caller.sh       # BCFtools variant calling
 │   ├── gatk4_caller.sh          # GATK4 variant calling
 │   ├── freebayes_caller.sh      # FreeBayes variant calling
 │   ├── snver_caller.sh          # SNVer variant calling
 │   ├── vardict_caller.sh        # VarDict variant calling
 │   ├── consensus_generation.sh  # Consensus generation script
+│   ├── prepare_bam.sh           # BAM preparation and alignment script
 │   ├── process_snps.py          # Python script for SNPs consensus
 │   ├── process_indels.py        # Python script for indels consensus
 │   └── logging_utils.py         # Python logging utilities
@@ -416,54 +444,15 @@ Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline* [Computer 
 
 ChoCallate is actively developed with a clear vision for future enhancements. Here's our roadmap for upcoming versions:
 
-#### New Germline Variant Callers
-- **DeepVariant**: Google's deep learning-based variant caller
-- **Strelka2  (Germline mode)**: Illumina's somatic variant caller
-
-#### Somatic Variant Callers
-- **VarScan2**: Robust somatic mutation and copy number alteration caller
-- **LoFreq**: Sensitive detection of low-frequency somatic variants
-- **Lancet**: Micro-assembly-based somatic variant caller
-- **Strelka2 (Somatic mode)**: Accurate somatic SNV and indel detection
-- **VarDict (Somatic mode)**: Sensitive detection of somatic variants using VarDict's tumor/normal workflow
-
-#### Long-Read Variant Callers
-- **Clair3**: Deep learning-based variant caller optimized for ONT and PacBio reads
-- **PEPPER-Margin-DeepVariant**: End-to-end pipeline for long-read variant calling
-- **Medaka**: ONT-specific variant calling and consensus polishing
-- **Longshot**: Accurate variant calling for diploid genomes from long reads
-- **Sniffles**: Structural variant detection from long-read sequencing data
-- **NanoCaller**: Deep learning-based variant caller for Oxford Nanopore and PacBio reads
-
-#### New Short Read Mapping Tools (including RNA-seq mapping tools)
-- **BWA-MEM2**: Fast and memory-efficient read aligner for short reads
-- **Minimap2**: Versatile mapper for short reads and spliced alignment
-- **HISAT2**: Graph-based aligner for RNA-seq and DNA-seq data
-- **STAR**: Ultrafast RNA-seq aligner for spliced reads
-- **SOAP2**: Ultrafast and accurate short read aligner for next-generation sequencing data
-- **Subread**: High-performance read aligner for short DNA sequencing reads
-
-#### Long-Read Mapping Tools
-- **Minimap2**: Versatile and fast aligner for long reads (ONT, PacBio) and spliced alignment
-- **BLASR**: PacBio-specific long-read aligner for mapping single-molecule sequencing reads
-- **GraphMap2**: Sensitive and accurate mapper for nanopore and PacBio reads
-- **NGMLR**: Next-generation mapper for long reads, optimized for structural variant detection
-- **LRA**: Long Read Aligner for high-accuracy mapping of long reads
-- **Winnowmap2**: Repeat-aware long-read mapper for ONT and PacBio data
-- **pathMap**: Long-read aligner for complex genomes and repetitive regions
-- **DALIGNER**: Efficient local alignment tool for long noisy reads
-- **MHAP**: MinHash Alignment Process, fast and scalable long-read overlapper for assembly
-
-#### AI-Powered Features
-- **Smart Caller Selection**: ML-based automatic consensus generation
-- **Quality Prediction**: AI-powered variant quality assessment
-- **False Positive Reduction**: Machine learning for improved precision
-
-#### Containerized Solution
-- **Docker/Singularity Support**: Develop and maintain official Docker and Singularity containers for ChoCallate and all dependencies
-- **Reproducible Environments**: Ensure consistent, reproducible pipeline execution across platforms
-- **Container Registry**: Publish and update containers on Docker Hub and other registries
-- **Documentation**: Provide clear instructions for running ChoCallate in containerized environments
+- Add New Germline Variant Callers
+- Add New Short Read Mapping Tools
+- Add Somatic Variant Callers
+- Add Long-Read Variant Callers
+- Add Long-Read Mapping Tools
+- Add AI-Powered Features
+    - ML-based automatic consensus generation
+    - AI-powered variant quality assessment
+- Add Containerized Solution
 
 
 ### 🛠️ Development Priorities

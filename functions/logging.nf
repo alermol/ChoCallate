@@ -344,6 +344,7 @@ def initLogging() {
                 parameters: [
                     samples_tsv: params.samples_tsv,
                     outdir: params.outdir,
+                    input_format: params.input_format,
                     ploidy: params.ploidy,
                     reads_type: params.reads_type,
                     reads_source: params.reads_source,
