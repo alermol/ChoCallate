@@ -32,7 +32,6 @@ nextflow run main.nf \
 # samples.tsv: name, bam_path
 echo -e "${name}\t${bam_path}" > test_data/samples.tsv
 echo "==== TEST 2: input_format=bam, reads_type=pe (should PASS) ===="
-read -p "Press enter to run TEST 2..."
 nextflow run main.nf \
     --samples_tsv test_data/samples.tsv \
     --input_format bam \
