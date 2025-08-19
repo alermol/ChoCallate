@@ -348,7 +348,7 @@ process CREATE_FAI_INDEX {
     path(ref_genome)
 
     output:
-    tuple path("${ref_genome.baseName}.fasta"), path("${ref_genome.baseName}.fasta.fai"), emit: fai_index
+    tuple path("reference.fasta"), path("reference.fasta.fai"), emit: fai_index
 
     script:
     def refName = ref_genome.getName()
@@ -359,14 +359,16 @@ process CREATE_FAI_INDEX {
     
     if [[ "$isGzipped" == "true" ]]; then
         echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Detected gzipped reference genome, creating ungzipped version"
-        gunzip -c ${ref_genome} > ${ref_genome.baseName}.fasta
+        gunzip -c ${ref_genome} > reference.fasta
         echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Ungzipped version created"
+        echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Creating FASTA index"
+        samtools faidx --threads ${task.cpus} reference.fasta
     else
         echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Reference genome is uncompressed"
+        mv ${ref_genome} reference.fasta
+        echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Creating FASTA index"
+        samtools faidx --threads ${task.cpus} reference.fasta
     fi
-    
-    echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Creating FASTA index"
-    samtools faidx --threads ${task.cpus} ${ref_genome.baseName}.fasta
     
     echo "[\$(date -Iseconds)] [INFO] [CREATE_FAI_INDEX] [${refName}] Process completed - FASTA index created"
     """
@@ -566,31 +568,31 @@ process CALLING {
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
-    ln -sf "../${ref_genome}" ref_genome.fasta
-    ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
+    ln -sf "../${ref_genome}" reference.fasta
+    ln -sf "../${ref_genome_fai}" reference.fasta.fai
     ln -sf "../${coverage_bed}" coverage.bed
-    ln -sf "../${ref_genome_dict}" ref_genome.dict
+    ln -sf "../${ref_genome_dict}" reference.dict
     
     touch callers_commands.sh
 
     if [[ ",${effective_callers}," == *"bcftools"* ]]; then
-        echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"freebayes"* ]]; then
-        echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"gatk"* ]]; then
-        echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"vardict"* ]]; then
-        echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"snver"* ]]; then
-        echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed ref_genome.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
     fi
 
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Executing ${parallel_cpus} callers in parallel"

@@ -43,10 +43,6 @@ log_message "INFO" "Process started - SNVer variant calling (ploidy=${PLOIDY}, m
 
 START_TIME=$(date +%s)
 
-log_message "INFO" "Creating symbolic link to reference genome and indexing"
-ln -sf "$REF_GENOME" reference.fasta
-samtools faidx reference.fasta
-
 if [ $? -eq 0 ]; then
     log_message "INFO" "Reference genome indexing completed successfully"
 else
