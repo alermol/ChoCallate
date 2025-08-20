@@ -16,3 +16,4 @@ dependencies:
   - bcftools>=1.20
   - bedtools
   - parallel
+  - pysam
