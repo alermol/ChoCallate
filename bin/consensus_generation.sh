@@ -28,17 +28,17 @@ do
 done
 
 log_message "INFO" "Extracting region-specific zero VCF"
-bcftools view -r ${region} zero.vcf.gz > ${rn}.zero.vcf
+bcftools view -r ${region} zero.bcf > ${rn}.zero.bcf
 
 if [ ${mutation_type} == "snps" ]; then
     log_message "INFO" "Processing SNPs consensus"
     process_snps.py \
-        --zero_vcf ${rn}.zero.vcf \
-        --vcfs $(ls ${rn}.${sample_name}.snps_*.vcf.gz | tr '\n' ',') \
+        --zero_bcf ${rn}.zero.bcf \
+        --bcfs $(ls ${rn}.${sample_name}.snps_*.bcf | tr '\n' ',') \
         --sample ${sample_name} \
-        --chr ${rn} \
-        --cons_threshold ${cons_threshold}
-    
+        --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
+        --cons_threshold ${cons_threshold} | bcftools view -Ob - > all_chrs/${rn}.bcf
+
     if [ $? -eq 0 ]; then
         log_message "INFO" "SNPs consensus processing completed successfully"
     else
@@ -48,10 +48,11 @@ if [ ${mutation_type} == "snps" ]; then
 else
     log_message "INFO" "Processing indels consensus"
     process_indels.py \
-        --vcfs $(ls ${rn}.${sample_name}.indels_*.vcf.gz | tr '\n' ',') \
+        --zero_bcf ${rn}.zero.bcf \
+        --bcfs $(ls ${rn}.${sample_name}.indels_*.bcf | tr '\n' ',') \
         --sample ${sample_name} \
-        --chr ${rn} \
-        --cons_threshold ${cons_threshold}
+        --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
+        --cons_threshold ${cons_threshold} | bcftools view -Ob - > all_chrs/${rn}.bcf
     
     if [ $? -eq 0 ]; then
         log_message "INFO" "Indels consensus processing completed successfully"
@@ -69,12 +70,12 @@ do
     fi
 done
 
-if [ -e "${rn}.zero.vcf" ]; then
-    rm -f "${rn}.zero.vcf"
+if [ -e "${rn}.zero.bcf" ]; then
+    rm -f "${rn}.zero.bcf"
 fi
 
-log_message "INFO" "Compressing output VCFs"
-find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;
+# log_message "INFO" "Compressing output VCFs"
+# find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))

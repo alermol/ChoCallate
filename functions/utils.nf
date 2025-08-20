@@ -472,9 +472,9 @@ def validateAllParameters(Map params) {
         errors << vardictCpuValidation.error
     }
     
-    def zeroVcfCpuValidation = validateCPUParameter(params.zero_vcf_cpu, "zero_vcf_cpu")
-    if (!zeroVcfCpuValidation.valid) {
-        errors << zeroVcfCpuValidation.error
+    def zeroBcfCpuValidation = validateCPUParameter(params.zero_bcf_cpu, "zero_bcf_cpu")
+    if (!zeroBcfCpuValidation.valid) {
+        errors << zeroBcfCpuValidation.error
     }
     
     def consCpusValidation = validateCPUParameter(params.cons_cpus, "cons_cpus")
@@ -495,9 +495,9 @@ def validateAllParameters(Map params) {
         errors << callingForksValidation.error
     }
     
-    def zeroVcfForksValidation = validateForkParameter(params.zero_vcf_forks, "zero_vcf_forks")
-    if (!zeroVcfForksValidation.valid) {
-        errors << zeroVcfForksValidation.error
+    def zeroBcfForksValidation = validateForkParameter(params.zero_bcf_forks, "zero_bcf_forks")
+    if (!zeroBcfForksValidation.valid) {
+        errors << zeroBcfForksValidation.error
     }
     
     def consForksValidation = validateForkParameter(params.cons_forks, "cons_forks")

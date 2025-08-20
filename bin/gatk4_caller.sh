@@ -53,42 +53,35 @@ else
     exit 1
 fi
 
+log_message "INFO" "Indexing GATK4 VCF output with tabix"
+tabix -p vcf -C "${BAM_BASENAME}.gatk1.vcf.gz"
+if [ $? -ne 0 ]; then
+    log_message "ERROR" "tabix indexing of GATK4 VCF failed"
+    exit 1
+fi
+
 log_message "INFO" "Filtering and processing VCF with BCFtools"
 
-bcftools filter -Ou "${BAM_BASENAME}.gatk1.vcf.gz" -e"QUAL<$MIN_SNP_QUAL" > "${BAM_BASENAME}.gatk2.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools filter failed"
-    exit 1
-fi
+bcftools filter -Ou "${BAM_BASENAME}.gatk1.vcf.gz" -e"QUAL<$MIN_SNP_QUAL" - | \
+    bcftools annotate -Ou --force -x INFO,FORMAT - | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
+    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize > "${BAM_BASENAME}.gatk.bcf"
 
-bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.gatk2.bcf" > "${BAM_BASENAME}.gatk3.bcf"
 if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools annotate failed"
-    exit 1
-fi
-
-bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.gatk3.bcf" > "${BAM_BASENAME}.gatk4.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools view (allele filter) failed"
-    exit 1
-fi
-
-bcftools norm -Ou --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize "${BAM_BASENAME}.gatk4.bcf" > "${BAM_BASENAME}.gatk.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools norm failed"
+    log_message "ERROR" "BCFtools filtering/processing pipeline failed"
     exit 1
 fi
 
 log_message "INFO" "VCF filtering and processing completed successfully"
 
-log_message "INFO" "Extracting SNPs and indels from GATK4 output"
-bcftools view -Ov -v snps "${BAM_BASENAME}.gatk.bcf" | bgzip > "${BAM_BASENAME}.snps_gatk.vcf.gz"
+log_message "INFO" "Extracting SNPs and indels from GATK4 output (compressed BCF)"
+bcftools view -Ob -v snps "${BAM_BASENAME}.gatk.bcf" > "${BAM_BASENAME}.snps_gatk.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for SNPs failed"
     exit 1
 fi
 
-bcftools view -Ov -v indels "${BAM_BASENAME}.gatk.bcf" | bgzip > "${BAM_BASENAME}.indels_gatk.vcf.gz"
+bcftools view -Ob -v indels "${BAM_BASENAME}.gatk.bcf" > "${BAM_BASENAME}.indels_gatk.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for indels failed"
     exit 1
@@ -98,5 +91,5 @@ END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
 log_message "INFO" "Process completed - SNPs and indels extracted (${DURATION}s)"
-log_message "INFO" "Output files: ${BAM_BASENAME}.snps_gatk.vcf.gz, ${BAM_BASENAME}.indels_gatk.vcf.gz"
+log_message "INFO" "Output files: ${BAM_BASENAME}.snps_gatk.bcf, ${BAM_BASENAME}.indels_gatk.bcf"
 

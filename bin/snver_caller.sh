@@ -62,33 +62,15 @@ fi
 
 log_message "INFO" "Processing SNPs VCF"
 
-bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools reheader for SNPs failed"
-    exit 1
-fi
+bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | \
+    bcftools view -Ou - | \
+    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
+    bcftools annotate -Ou --force -x INFO,FORMAT - | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
+    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize - > "${BAM_BASENAME}.snps.bcf"
 
-bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
 if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools filter for SNPs failed"
-    exit 1
-fi
-
-bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools annotate for SNPs failed"
-    exit 1
-fi
-
-bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools view (allele filter) for SNPs failed"
-    exit 1
-fi
-
-bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.snps_snver.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools norm for SNPs failed"
+    log_message "ERROR" "bcftools SNPs processing pipeline failed"
     exit 1
 fi
 
@@ -96,55 +78,37 @@ log_message "INFO" "SNPs VCF processing completed successfully"
 
 log_message "INFO" "Processing indels VCF"
 
-bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | bgzip > "${BAM_BASENAME}.snver1.vcf.gz"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools reheader for indels failed"
-    exit 1
-fi
+bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | \
+    bcftools view -Ou - | \
+    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
+    bcftools annotate -Ou --force -x INFO,FORMAT - | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
+    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize - > "${BAM_BASENAME}.indels.bcf"
 
-bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" "${BAM_BASENAME}.snver1.vcf.gz" > "${BAM_BASENAME}.snver2.bcf"
 if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools filter for indels failed"
-    exit 1
-fi
-
-bcftools annotate -Ou --force -x INFO,FORMAT "${BAM_BASENAME}.snver2.bcf" > "${BAM_BASENAME}.snver3.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools annotate for indels failed"
-    exit 1
-fi
-
-bcftools view -Ou --min-alleles 2 --max-alleles 2 "${BAM_BASENAME}.snver3.bcf" > "${BAM_BASENAME}.snver4.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools view (allele filter) for indels failed"
-    exit 1
-fi
-
-bcftools norm -Ou --fasta-ref reference.fasta --atom-overlaps '.' --atomize "${BAM_BASENAME}.snver4.bcf" > "${BAM_BASENAME}.indels_snver.bcf"
-if [ $? -ne 0 ]; then
-    log_message "ERROR" "bcftools norm for indels failed"
+    log_message "ERROR" "bcftools indels processing pipeline failed"
     exit 1
 fi
 
 log_message "INFO" "Indels VCF processing completed successfully"
 
-log_message "INFO" "Generating final compressed output files"
-bcftools view -Ov "${BAM_BASENAME}.snps_snver.bcf" | bgzip > "${BAM_BASENAME}.snps_snver.vcf.gz"
+log_message "INFO" "Generating final compressed BCF output files"
+bcftools view -Ob "${BAM_BASENAME}.snps.bcf" > "${BAM_BASENAME}.snps_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "Final SNPs output generation failed"
     exit 1
 fi
 
-bcftools view -Ov "${BAM_BASENAME}.indels_snver.bcf" | bgzip > "${BAM_BASENAME}.indels_snver.vcf.gz"
+bcftools view -Ob "${BAM_BASENAME}.indels.bcf" > "${BAM_BASENAME}.indels_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "Final indels output generation failed"
     exit 1
 fi
 
-log_message "INFO" "Final compressed output files generated successfully"
+log_message "INFO" "Final compressed BCF output files generated successfully"
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
-log_message "INFO" "Process completed - SNPs and indels VCFs generated (${DURATION}s)"
-log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.vcf.gz, ${BAM_BASENAME}.indels_snver.vcf.gz"
+log_message "INFO" "Process completed - SNPs and indels BCFs generated (${DURATION}s)"
+log_message "INFO" "Output files: ${BAM_BASENAME}.snps_snver.bcf, ${BAM_BASENAME}.indels_snver.bcf"

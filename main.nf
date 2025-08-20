@@ -55,7 +55,7 @@ initLogging()
 logInfo("Cleanup configuration loaded", [
     enable_sample_cleanup: params.enable_sample_cleanup,
     cleanup_intermediate_bam: params.cleanup_intermediate_bam,
-    cleanup_intermediate_vcf: params.cleanup_intermediate_vcf,
+    cleanup_intermediate_bcf: params.cleanup_intermediate_bcf,
     cleanup_intermediate_subfolders: params.cleanup_intermediate_subfolders,
     cleanup_input_symlinks: params.cleanup_input_symlinks,
     debug_mode: params.debug,
@@ -236,7 +236,7 @@ workflow {
 
     COVERAGE_GENERATION(PREPARE_BAM.out.bam)
 
-    GENERATE_ZERO_VCF(PREPARE_BAM.out.bam,
+    GENERATE_ZERO_BCF(PREPARE_BAM.out.bam,
                       CREATE_FAI_INDEX.out.fai_index,
                       COVERAGE_GENERATION.out.coverage)
 
@@ -249,32 +249,32 @@ workflow {
     GENERATE_CONSENSUS(CALLING.out.snps_vcf,
                        CALLING.out.indels_vcf,
                        CREATE_FAI_INDEX.out.fai_index.collect{it[1]},
-                       GENERATE_ZERO_VCF.out.zero_vcf)
+                       GENERATE_ZERO_BCF.out.zero_bcf)
     
     if (params.enable_sample_cleanup && !params.debug) {
         logInfo("Sample-level cleanup enabled - cleaning intermediate files", [
             action: "sample_cleanup_enabled",
             debug_mode: false,
             intermediate_bam_cleanup: params.cleanup_intermediate_bam,
-            intermediate_vcf_cleanup: params.cleanup_intermediate_vcf
+            intermediate_vcf_cleanup: params.cleanup_intermediate_bcf
         ])
         
         CLEANUP_SAMPLE_TEMP(GENERATE_CONSENSUS.out.final_snps,
                             GENERATE_CONSENSUS.out.final_indels,
                             PREPARE_BAM.out.bam,
                             COVERAGE_GENERATION.out.coverage,
-                            GENERATE_ZERO_VCF.out.zero_vcf,
+                            GENERATE_ZERO_BCF.out.zero_bcf,
                             CALLING.out.snps_vcf,
                             CALLING.out.indels_vcf,
                             params.cleanup_intermediate_bam,
-                            params.cleanup_intermediate_vcf)
+                            params.cleanup_intermediate_bcf)
     } else if (params.enable_sample_cleanup && params.debug) {
         logInfo("Sample-level cleanup skipped in debug mode - preserving all intermediate files", [
             action: "sample_cleanup_skipped",
             debug_mode: true,
             reason: "Debug mode preserves intermediate files for analysis",
             intermediate_bam_cleanup: params.cleanup_intermediate_bam,
-            intermediate_vcf_cleanup: params.cleanup_intermediate_vcf
+            intermediate_vcf_cleanup: params.cleanup_intermediate_bcf
         ])
     } else if (!params.enable_sample_cleanup) {
         logInfo("Sample-level cleanup disabled by configuration", [
@@ -480,9 +480,9 @@ process COVERAGE_GENERATION {
     """
 }
 
-process GENERATE_ZERO_VCF {
-    maxForks params.zero_vcf_forks
-    cpus params.zero_vcf_cpu
+process GENERATE_ZERO_BCF {
+    maxForks params.zero_bcf_forks
+    cpus params.zero_bcf_cpu
 
     tag "${bam.baseName}"
 
@@ -492,47 +492,57 @@ process GENERATE_ZERO_VCF {
     path(coverage_bed)
 
     output:
-    path("zero.vcf.gz"), emit: zero_vcf
+    path("zero.bcf"), emit: zero_bcf
 
     script:
     String genotype = (["0"] * params.ploidy).join("/")
     
     """
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process started - Generating zero VCF"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Process started - Generating zero BCF"
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Creating intermediate subfolder for zero VCF generation"
-    mkdir -p "${bam.baseName}_zero_vcf_gen"
-    cd "${bam.baseName}_zero_vcf_gen"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Creating intermediate subfolder for zero BCF generation"
+    mkdir -p "${bam.baseName}_zero_bcf_gen"
+    cd "${bam.baseName}_zero_bcf_gen"
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Creating symlinks to input files"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
     ln -sf "../${ref_genome}" ref_genome.fasta
     ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
     ln -sf "../${coverage_bed}" coverage.bed
+
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Writing minimal VCF header for bcftools reheader fallback"
+    cat > minimal_header.txt <<EOF
+    ##fileformat=VCFv4.3
+    ##source=ChoCallateZeroVCF
+    ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+    #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	SAMPLE
+    EOF
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Running bcftools mpileup with min base quality ${params.min_base_quality}"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Running bcftools mpileup with min base quality ${params.min_base_quality}"
     bcftools mpileup -Ov --count-orphans --fasta-ref ref_genome.fasta --threads ${task.cpus} --max-depth 1 \
         --min-BQ ${params.min_base_quality} --regions-file coverage.bed input.bam | \
         awk -v OFS='\\t' -v gen=${genotype} '{if(\$0 !~ /#/) print \$1,\$2,\$3,\$4,".","100",".",".","GT",gen; else print \$0}' | \
-        awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | bgzip  > zero.vcf.gz
+        awk -v OFS='\\t' '{if(length(\$4) == 1 || \$0 ~ /#/) print \$0}' | \
+        bcftools reheader -h minimal_header.txt -f ref_genome.fasta.fai - | \
+        bcftools view -Ob -o zero.bcf
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Moving final output to parent directory"
-    mv zero.vcf.gz ../zero.vcf.gz
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Moving final output to parent directory"
+    mv zero.bcf ../zero.bcf
     
     cd ..
     
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
-        rm -rf "${bam.baseName}_zero_vcf_gen"
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Cleaned up intermediate subfolder"
+        rm -rf "${bam.baseName}_zero_bcf_gen"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Cleaned up intermediate subfolder"
     fi
 
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
         rm -f "${bam}" "${bam_index}" "${ref_genome}" "${ref_genome_fai}" "${coverage_bed}" 2>/dev/null || true
-        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Cleaned up input files"
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Cleaned up input files"
     fi
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_VCF] [${bam.baseName}] Process completed - Zero VCF created"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_ZERO_BCF] [${bam.baseName}] Process completed - Zero BCF created"
     """
 }
 
@@ -550,8 +560,8 @@ process CALLING {
     path(ref_genome_dict)
 
     output:
-    tuple val("${bam.baseName}"), path("*.snps_*.vcf.gz"), emit: snps_vcf
-    tuple val("${bam.baseName}"), path("*.indels_*.vcf.gz"), emit: indels_vcf
+    tuple val("${bam.baseName}"), path("*.snps_*.bcf"), emit: snps_vcf
+    tuple val("${bam.baseName}"), path("*.indels_*.bcf"), emit: indels_vcf
 
     script:
     def parallel_cpus = getAvailableCallersCount(effective_callers)
@@ -599,8 +609,8 @@ process CALLING {
     parallel -j ${parallel_cpus} '{}' :::: callers_commands.sh
     
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Moving final outputs to parent directory"
-    mv *.snps_*.vcf.gz ../
-    mv *.indels_*.vcf.gz ../
+    mv *.snps_*.bcf ../
+    mv *.indels_*.bcf ../
     
     cd ..
     
@@ -624,24 +634,24 @@ process GENERATE_CONSENSUS {
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz'
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz'
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.bcf'
+    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.bcf'
 
     input:
-    tuple val(sample), path("${sample}.snps_*.vcf.gz", arity: '3..*')
-    tuple val(sample), path("${sample}.indels_*.vcf.gz", arity: '3..*')
+    tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
+    tuple val(sample), path("${sample}.indels_*.bcf", arity: '3..*')
     path(ref_genome_fai)
-    path(zero_vcf)
+    path(zero_bcf)
 
     output:
-    tuple val("${sample}"), path("${sample}.snps.vcf.gz"), emit: final_snps
-    tuple val("${sample}"), path("${sample}.indels.vcf.gz"), emit: final_indels
+    tuple val("${sample}"), path("${sample}.snps.bcf"), emit: final_snps
+    tuple val("${sample}"), path("${sample}.indels.bcf"), emit: final_indels
 
     script:
     def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
     
     """
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process started - Generating consensus VCFs"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process started - Generating consensus BCFs"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Consensus threshold: ${cons_threshold}"
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Window size: ${params.win_size}"
     
@@ -651,15 +661,15 @@ process GENERATE_CONSENSUS {
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to input files"
     ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
-    ln -sf "../${zero_vcf}" zero.vcf.gz
+    ln -sf "../${zero_bcf}" zero.bcf
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to VCF files"
-    for vcf in ../${sample}.snps_*.vcf.gz; do
-        ln -sf "\$vcf" "\$(basename \$vcf)"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to BCF files"
+    for bcf in ../${sample}.snps_*.bcf; do
+        ln -sf "\$bcf" "\$(basename \$bcf)"
     done
     
-    for vcf in ../${sample}.indels_*.vcf.gz; do
-        ln -sf "\$vcf" "\$(basename \$vcf)"
+    for bcf in ../${sample}.indels_*.bcf; do
+        ln -sf "\$bcf" "\$(basename \$bcf)"
     done
     
     awk -v OFS='\\t' '{print \$1,"0",\$2}' ref_genome.fasta.fai > genome.bed
@@ -668,46 +678,46 @@ process GENERATE_CONSENSUS {
     mkdir all_chrs
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing SNPs..."
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing SNP VCF files with tabix"
-    for i in ${sample}.snps_*; do tabix -C \${i}; done
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing SNP BCF files with bcftools"
+    for i in ${sample}.snps_*; do bcftools index \${i}; done
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing zero VCF with tabix"
-    tabix -C zero.vcf.gz
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing zero BCF with bcftools"
+    bcftools index zero.bcf
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Running consensus generation for SNPs in parallel (${task.cpus} threads)"
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated VCF files for concatenation"
-    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated BCF files for concatenation"
+    find all_chrs/ -name '*.bcf' -type f > vcf_files.txt
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting SNP consensus VCFs"
-    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting SNP consensus BCFs"
+    bcftools concat --naive -Ob --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
-        bcftools sort -Oz -o ${sample}.snps.vcf.gz
+        bcftools sort -Ob -o ${sample}.snps.bcf
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] SNPs consensus VCF created"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] SNPs consensus BCF created"
     rm -r all_chrs/*
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Processing indels..."
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing indel VCF files with tabix"
-    for i in ${sample}.indels_*; do tabix -C \${i}; done
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing indel BCF files with bcftools"
+    for i in ${sample}.indels_*; do bcftools index \${i}; done
 
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Running consensus generation for indels in parallel (${task.cpus} threads)"
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "indels" ${cons_threshold}' :::: genome_intervals.bed
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated indel VCF files for concatenation"
-    find all_chrs/ -name '*.vcf.gz' -type f > vcf_files.txt
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Collecting generated indel BCF files for concatenation"
+    find all_chrs/ -name '*.bcf' -type f > vcf_files.txt
 
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting indel consensus VCFs"
-    bcftools concat --naive-force -Oz --file-list vcf_files.txt | \
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating, reheading, and sorting indel consensus BCFs"
+    bcftools concat --naive -Ob --file-list vcf_files.txt | \
         bcftools reheader --threads ${task.cpus} -f ref_genome.fasta.fai | \
-        bcftools sort -Oz -o ${sample}.indels.vcf.gz
+        bcftools sort -Ob -o ${sample}.indels.bcf
         
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus VCF created"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus BCF created"
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Moving final outputs to parent directory"
-    mv ${sample}.snps.vcf.gz ../${sample}.snps.vcf.gz
-    mv ${sample}.indels.vcf.gz ../${sample}.indels.vcf.gz
+    mv ${sample}.snps.bcf ../${sample}.snps.bcf
+    mv ${sample}.indels.bcf ../${sample}.indels.bcf
     
     cd ..
 
@@ -717,11 +727,11 @@ process GENERATE_CONSENSUS {
     fi
 
     if [ "${params.cleanup_input_symlinks}" = "true" ]; then
-        rm -f "${ref_genome_fai}" "${zero_vcf}" "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz 2>/dev/null || true
+        rm -f "${ref_genome_fai}" "${zero_bcf}" "${sample}.snps_"*.bcf "${sample}.indels_"*.bcf 2>/dev/null || true
         echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Cleaned up input files"
     fi
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus VCFs generated"
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Process completed - Consensus BCFs generated"
     """
 }
 
@@ -733,11 +743,11 @@ process CLEANUP_SAMPLE_TEMP {
     tuple val(sample), path(output_vcf_indels)
     tuple path(bam), path(bam_index)
     path(coverage_bed)
-    path(zero_vcf)
-    tuple val(sample), path("${sample}.snps_*.vcf.gz", arity: '3..*')
-    tuple val(sample), path("${sample}.indels_*.vcf.gz", arity: '3..*')
+    path(zero_bcf)
+    tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
+    tuple val(sample), path("${sample}.indels_*.bcf", arity: '3..*')
     val(cleanup_intermediate_bam)
-    val(cleanup_intermediate_vcf)
+    val(cleanup_intermediate_bcf)
     
     script:
     """
@@ -780,10 +790,10 @@ process CLEANUP_SAMPLE_TEMP {
     fi
 
     [ -e "${coverage_bed}" ] && remove_file_follow_symlink "${coverage_bed}"
-    [ -e "${zero_vcf}" ] && remove_file_follow_symlink "${zero_vcf}"
+    [ -e "${zero_bcf}" ] && remove_file_follow_symlink "${zero_bcf}"
 
-    if [ "${cleanup_intermediate_vcf}" = "true" ]; then
-        for vcf in "${sample}.snps_"*.vcf.gz "${sample}.indels_"*.vcf.gz; do
+    if [ "${cleanup_intermediate_bcf}" = "true" ]; then
+        for vcf in "${sample}.snps_"*.bcf "${sample}.indels_"*.bcf; do
             [ -e "\$vcf" ] && remove_file_follow_symlink "\$vcf"
         done
         log_msg "INFO" "Cleaned up consensus VCFs"

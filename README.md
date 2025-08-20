@@ -17,6 +17,7 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **🎛️ Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
 - **📈 Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
 - **🧹 Smart cleanup**: Configurable cleanup options with debug mode preservation
+- **🔬 BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance
 
 ## 🚀 Quick Start
 
@@ -89,10 +90,10 @@ nextflow run main.nf \
 
 1. **🔍 Alignment**: Bowtie2-based read alignment with quality filtering and BAM preparation
 2. **📊 Coverage Analysis**: Generate coverage information for targeted variant calling
-3. **🎯 Zero VCF Generation**: Create baseline VCF with all covered positions
+3. **🎯 Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
 4. **📊 Variant Calling**: Parallel execution of selected variant callers
 5. **🤝 Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
-6. **📤 Output**: Final compressed VCF files for SNPs and INDELs
+6. **📤 Output**: Final compressed BCF files for SNPs and INDELs
 
 ## ⚙️ Configuration
 
@@ -143,8 +144,8 @@ nextflow run main.nf \
 | `--bowtie2_cpu` | `10` | Number of threads for Bowtie2 alignment |
 | `--bowtie2_forks` | `1` | Number of parallel Bowtie2 processes |
 | `--calling_forks` | `1` | Number of parallel variant calling processes |
-| `--zero_vcf_cpu` | `1` | Number of threads for zero VCF generation |
-| `--zero_vcf_forks` | `1` | Number of parallel zero VCF processes |
+| `--zero_bcf_cpu` | `1` | Number of threads for zero BCF generation |
+| `--zero_bcf_forks` | `1` | Number of parallel zero BCF processes |
 | `--cons_cpus` | `5` | Number of threads for consensus generation |
 | `--cons_forks` | `1` | Number of parallel consensus processes |
 | `--bcftools_cpu` | `1` | Number of threads for bcftools |
@@ -163,7 +164,7 @@ nextflow run main.nf \
 |-----------|---------|-------------|
 | `--enable_sample_cleanup` | `true` | Enable/disable sample-specific cleanup (false in debug mode) |
 | `--cleanup_intermediate_bam` | `true` | Remove intermediate BAM files (false in debug mode) |
-| `--cleanup_intermediate_vcf` | `true` | Remove intermediate VCF files (false in debug mode) |
+| `--cleanup_intermediate_bcf` | `true` | Remove intermediate BCF files (false in debug mode) |
 | `--cleanup_intermediate_subfolders` | `true` | Remove intermediate subfolders (false in debug mode) |
 | `--cleanup_input_symlinks` | `true` | Remove symlinks to input files (false in debug mode) |
 
@@ -190,7 +191,7 @@ nextflow run main.nf \
 ### Consensus Implementation
 
 The consensus generation uses a sophisticated approach:
-- **Zero VCF Integration**: All covered positions from the zero VCF are included in the final output
+- **Zero BCF Integration**: All covered positions from the zero BCF are included in the final output
 - **SQLite Processing**: Python scripts use SQLite databases for efficient variant comparison and consensus calculation
 - **Window-based Processing**: Genomic regions are processed in parallel using configurable window sizes
 - **Quality Filtering**: Variants are filtered based on quality scores and caller agreement
@@ -272,7 +273,8 @@ Notes:
 #### File Format Support
 - Input reads (FASTQ mode): `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
 - Reference genome: `.fasta`, `.fa`, `.fna` (compressed or uncompressed)
-- Output VCFs: `.vcf.gz` (bgzipped)
+- **Variant caller output**: `.bcf` (compressed BCF format)
+- **Final output**: `.bcf` (compressed BCF format)
 
 ### Reference Requirements
 
@@ -285,11 +287,11 @@ Notes:
 ```
 ChoCallate_output/
 ├── sample1/
-│   ├── sample1.snps.vcf.gz      # Final SNPs VCF (bgzipped)
-│   └── sample1.indels.vcf.gz    # Final INDELs VCF (bgzipped)
+│   ├── sample1.snps.bcf      # Final SNPs BCF (compressed)
+│   └── sample1.indels.bcf    # Final INDELs BCF (compressed)
 ├── sample2/
-│   ├── sample2.snps.vcf.gz
-│   └── sample2.indels.vcf.gz
+│   ├── sample2.snps.bcf
+│   └── sample2.indels.bcf
 ├── ChoCallate_errors.log         # Error log for the entire pipeline
 ├── ChoCallate.log                # Main log file for the pipeline
 ├── pipeline_report.html          # Pipeline summary report (HTML)
@@ -352,8 +354,7 @@ ChoCallate/
 │   ├── consensus_generation.sh  # Consensus generation script
 │   ├── prepare_bam.sh           # BAM preparation and alignment script
 │   ├── process_snps.py          # Python script for SNPs consensus
-│   ├── process_indels.py        # Python script for indels consensus
-│   └── logging_utils.py         # Python logging utilities
+│   └── process_indels.py        # Python script for indels consensus
 ├── run_test.sh                  # Test execution script
 ├── cleanup.sh                   # Test cleanup script
 └── README.md                    # This file
@@ -400,6 +401,11 @@ All dependencies are managed via Conda:
 - **Memory optimization**: Efficient memory usage for large datasets
 - **SQLite-based consensus**: Fast in-memory database operations using Python scripts
 - **Window-based processing**: Parallel processing of genomic regions for memory efficiency
+- **BCF-native processing**: Compressed BCF format throughout the pipeline for optimal performance
+
+### Performance Improvements
+
+- **BCF Input/Output**: All variant callers now generate compressed BCF files for better performance
 
 ## 🐛 Troubleshooting
 
@@ -440,7 +446,7 @@ nextflow run main.nf \
     --reference_index /path/to/reference_index \
     --samples_tsv samples.tsv \
     --cleanup_intermediate_bam false \
-    --cleanup_intermediate_vcf true
+    --cleanup_intermediate_bcf true
 ```
 
 

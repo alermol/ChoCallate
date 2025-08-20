@@ -5,46 +5,37 @@ import sqlite3
 import os
 import sys
 from typing import List, Tuple, Set, Dict, Optional, Any
-
-# Add the current directory to the path to import logging utilities
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from logging_utils import setup_logger
+import pysam
 
 
-def sort_gt(s: str) -> str:
-    parts: List[str] = s.split('/')
-    numbers: List[int] = [int(part) for part in parts]
-    numbers_sorted: List[int] = sorted(numbers)
-    return '/'.join(map(str, numbers_sorted))
+def gt_tuple_to_sorted_str(gt: Optional[Tuple[Optional[int], ...]]) -> Optional[str]:
+    if gt is None:
+        return None
+    if any(allele is None for allele in gt):
+        return None
+    sorted_gt: List[int] = sorted(int(a) for a in gt)
+    return '/'.join(map(str, sorted_gt))
+
+
+def gt_str_to_tuple(gt_str: str) -> Tuple[int, ...]:
+    return tuple(int(x) for x in gt_str.replace('|', '/').split('/'))
 
 
 def main() -> None:
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
-    parser.add_argument('--zero_vcf', required=True, help='Path to zero VCF')
-    parser.add_argument('--vcfs', required=True, help='Comma-separated paths to VCF files')
+    parser.add_argument('--zero_bcf', required=True, help='Path to zero BCF')
+    parser.add_argument('--bcfs', required=True, help='Comma-separated paths to BCF files')
     parser.add_argument('--sample', required=True, help='Sample name')
     parser.add_argument('--chr', required=True, help='Chromosome name')
     parser.add_argument('--cons_threshold', type=int, help='Consensus threshold')
     args: argparse.Namespace = parser.parse_args()
 
-    # Initialize logger
-    logger = setup_logger("process_snps", args.sample, "INFO")
-    logger.log_process_start("SNPs consensus generation", {
-        "zero_vcf": args.zero_vcf,
-        "vcfs_count": len(args.vcfs.split(',')),
-        "sample": args.sample,
-        "chromosome": args.chr,
-        "consensus_threshold": args.cons_threshold
-    })
-
-    # Split the comma-separated VCF paths into a list
-    vcf_paths: List[str] = [path.strip() for path in args.vcfs.split(',') if path.strip()]
-    logger.info(f"Processing {len(vcf_paths)} VCF files")
+    # Split the comma-separated BCF paths into a list
+    bcf_paths: List[str] = [path.strip() for path in args.bcfs.split(',') if path.strip()]
 
     conn: sqlite3.Connection = sqlite3.connect(':memory:')
     cursor: sqlite3.Cursor = conn.cursor()
     
-    logger.info("Creating database tables")
     cursor.execute('''
         CREATE TABLE variants (
             chrom TEXT NOT NULL,
@@ -58,7 +49,7 @@ def main() -> None:
     ''')
     
     cursor.execute('''
-        CREATE TABLE zero_vcf_data (
+        CREATE TABLE zero_bcf_data (
             chrom TEXT NOT NULL,
             pos INTEGER NOT NULL,
             ref TEXT NOT NULL,
@@ -68,72 +59,67 @@ def main() -> None:
         )
     ''')
     conn.commit()
-    logger.info("Database tables created successfully")
 
-    # Store zero VCF data separately
-    logger.info("Processing zero VCF data")
-    zero_vcf_positions: Set[Tuple[str, int]] = set()
-    zero_vcf_count = 0
+    # Store zero BCF data separately
+    zero_bcf_positions: Set[Tuple[str, int]] = set()
+    zero_bcf_count = 0
     
-    with open(args.zero_vcf) as f:
-        for line in f:
-            if line.startswith('#'):
+    with pysam.VariantFile(args.zero_bcf, 'rb') as zero_bcf_in:
+        zero_samples: List[str] = list(zero_bcf_in.header.samples)
+        zero_sample_name: Optional[str] = zero_samples[0] if len(zero_samples) > 0 else None
+        for rec in zero_bcf_in:
+            chrom: str = rec.chrom
+            pos: int = rec.pos
+            ref: str = rec.ref
+            alt: str = rec.alts[0] if rec.alts and len(rec.alts) > 0 else '.'
+            gt_tuple: Optional[Tuple[Optional[int], ...]] = None
+            if zero_sample_name is not None:
+                gt_tuple = rec.samples[zero_sample_name].get('GT', None)
+            gt_str_opt: Optional[str] = gt_tuple_to_sorted_str(gt_tuple)
+            if gt_str_opt is None:
                 continue
-            fields: List[str] = line.strip().split('\t')
-            if '.' in fields[9]:
-                continue
-            chrom: str = fields[0]
-            pos: int = int(fields[1])
-            ref: str = fields[3]
-            alt: str = fields[4]
-            gt: str = sort_gt(fields[9])
-            zero_vcf_positions.add((chrom, pos))
+            zero_bcf_positions.add((chrom, pos))
             cursor.execute('''
-                INSERT OR REPLACE INTO zero_vcf_data (chrom, pos, ref, alt, gt)
+                INSERT OR REPLACE INTO zero_bcf_data (chrom, pos, ref, alt, gt)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (chrom, pos, ref, alt, gt))
-            zero_vcf_count += 1
+            ''', (chrom, pos, ref, alt, gt_str_opt))
+            zero_bcf_count += 1
     conn.commit()
-    logger.info(f"Zero VCF processing completed: {zero_vcf_count} variants loaded")
 
-    # Process other VCFs
-    logger.info("Processing variant caller VCFs")
+    # Process other BCFs
     # Create a list of (source_id, file_path) tuples dynamically
-    other_vcfs: List[Tuple[int, str]] = [(i+1, vcf_path) for i, vcf_path in enumerate(vcf_paths)]
+    other_bcf_sources: List[Tuple[int, str]] = [(i+1, bcf_path) for i, bcf_path in enumerate(bcf_paths)]
     
     total_variants = 0
-    for source_id, file_path in other_vcfs:
-        logger.info(f"Processing VCF {source_id}: {os.path.basename(file_path)}")
+    for source_id, file_path in other_bcf_sources:
         variants_count = 0
-        with open(file_path) as f:
-            for line in f:
-                if line.startswith('#'):
+        with pysam.VariantFile(file_path, 'rb') as bcf_in:
+            samples: List[str] = list(bcf_in.header.samples)
+            sample_name: Optional[str] = samples[0] if len(samples) > 0 else None
+            for rec in bcf_in:
+                if sample_name is None:
                     continue
-                fields: List[str] = line.strip().split('\t')
-                if '.' in fields[9]:
+                chrom: str = rec.chrom
+                pos: int = rec.pos
+                if (chrom, pos) not in zero_bcf_positions:
                     continue
-                chrom: str = fields[0]
-                pos: int = int(fields[1])
-                ref: str = fields[3]
-                alt: str = fields[4]
-                if (chrom, pos) not in zero_vcf_positions:
+                ref: str = rec.ref
+                alt: str = rec.alts[0] if rec.alts and len(rec.alts) > 0 else '.'
+                gt_tuple: Optional[Tuple[Optional[int], ...]] = rec.samples[sample_name].get('GT', None)
+                gt_str_opt: Optional[str] = gt_tuple_to_sorted_str(gt_tuple)
+                if gt_str_opt is None:
                     continue
-                gt: str = sort_gt(fields[9])
                 cursor.execute('''
                     INSERT OR REPLACE INTO variants (chrom, pos, ref, alt, gt, source)
                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (chrom, pos, ref, alt, gt, source_id))
+                ''', (chrom, pos, ref, alt, gt_str_opt, source_id))
                 variants_count += 1
         conn.commit()
         total_variants += variants_count
-        logger.info(f"VCF {source_id} processed: {variants_count} variants loaded")
     
-    logger.info(f"All VCFs processed: {total_variants} total variants loaded")
-
-    # Create a table for majority rule consensus calculation (excluding zero VCF)
-    logger.info("Calculating consensus variants")
-    # Build the source list dynamically based on the number of VCFs
-    source_list: str = ','.join(map(str, range(1, len(vcf_paths) + 1)))
+    # Create a table for majority rule consensus calculation (excluding zero BCF)
+    # Build the source list dynamically based on the number of BCFs
+    source_list: str = ','.join(map(str, range(1, len(bcf_paths) + 1)))
     
     cursor.execute(f'''
         CREATE TABLE consensus_candidates AS
@@ -158,62 +144,44 @@ def main() -> None:
     
     # Create a dictionary for quick lookup of consensus results
     consensus_dict: Dict[Tuple[str, int], Tuple[str, str, str]] = {(chrom, pos): (ref, alt, gt) for chrom, pos, ref, alt, gt, cnt in consensus_results}
-    
-    logger.info(f"Consensus calculation completed: {len(consensus_results)} consensus variants found")
 
-    # Prepare final output: all positions from zero VCF must be present
-    logger.info("Generating final consensus VCF")
+    # Prepare final output: all positions from zero BCF must be present
     cursor.execute('''
         SELECT chrom, pos, ref, alt, gt
-        FROM zero_vcf_data
+        FROM zero_bcf_data
         ORDER BY chrom, pos
     ''')
-    zero_vcf_results: List[Tuple[str, int, str, str, str]] = cursor.fetchall()
+    zero_bcf_results: List[Tuple[str, int, str, str, str]] = cursor.fetchall()
 
-    # Ensure output directory exists
-    os.makedirs("all_chrs", exist_ok=True)
-    output_file = f"all_chrs/{args.chr}.vcf"
-    
     consensus_used = 0
-    zero_vcf_used = 0
+    zero_bcf_used = 0
     
-    with open(output_file, 'w') as out:
-        out.write('##fileformat=VCFv4.3\n')
-        out.write('##FORMAT=<ID=GT,Number=1,Type=String>\n')
-        out.write(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}\n')
-        
-        for chrom, pos, ref, alt, gt in zero_vcf_results:
-            # Check if we have a consensus for this position from other VCFs
-            if (chrom, pos) in consensus_dict:
-                # Use consensus from other VCFs (majority rule, excluding zero VCF)
-                consensus_ref: str
-                consensus_alt: str
-                consensus_gt: str
-                consensus_ref, consensus_alt, consensus_gt = consensus_dict[(chrom, pos)]
-                out.write('\t'.join([chrom, str(pos), '.', consensus_ref.upper(), consensus_alt, '.', '.', '.', 'GT', f'{consensus_gt}\n']))
-                consensus_used += 1
-            else:
-                # Position only exists in zero VCF, use zero VCF alleles
-                out.write('\t'.join([chrom, str(pos), '.', ref.upper(), alt, '.', '.', '.', 'GT', f'{gt}\n']))
-                zero_vcf_used += 1
+    # Create header and output VCF to stdout
+    print('##fileformat=VCFv4.3')
     
-    logger.info(f"Final VCF generated: {output_file}")
-    logger.info(f"Variants breakdown: {consensus_used} consensus, {zero_vcf_used} zero VCF")
+    for chrom_name in args.chr.split('\n'):
+        print(f'##contig=<ID={chrom_name}>')
     
-    # Log performance metrics
-    logger.log_performance({
-        "zero_vcf_variants": zero_vcf_count,
-        "total_variants_loaded": total_variants,
-        "consensus_variants": len(consensus_results),
-        "final_variants": len(zero_vcf_results),
-        "consensus_used": consensus_used,
-        "zero_vcf_used": zero_vcf_used
-    })
-    
-    logger.log_process_complete("SNPs consensus generation", {
-        "output_file": output_file,
-        "total_variants": len(zero_vcf_results)
-    })
+    print('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
+    print(f'#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{args.sample}')
+
+    # Output VCF records to stdout
+    for chrom, pos, ref_val, alt_val, gt_val in zero_bcf_results:
+        if (chrom, pos) in consensus_dict:
+            consensus_ref: str
+            consensus_alt: str
+            consensus_gt: str
+            consensus_ref, consensus_alt, consensus_gt = consensus_dict[(chrom, pos)]
+            # Format VCF line
+            alt_field = consensus_alt if consensus_alt != '.' else '.'
+            print(f'{chrom}\t{pos}\t.\t{consensus_ref.upper()}\t{alt_field}\t100\t.\t.\tGT\t{consensus_gt}')
+            consensus_used += 1
+        else:
+            # Format VCF line
+            alt_field = alt_val if alt_val != '.' else '.'
+            print(f'{chrom}\t{pos}\t.\t{ref_val.upper()}\t{alt_field}\t100\t.\t.\tGT\t{gt_val}')
+            zero_bcf_used += 1
+
 
 if __name__ == "__main__":
     main()
