@@ -37,7 +37,7 @@ if [ ${mutation_type} == "snps" ]; then
         --bcfs $(ls ${rn}.${sample_name}.snps_*.bcf | tr '\n' ',') \
         --sample ${sample_name} \
         --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
-        --cons_threshold ${cons_threshold} | bcftools view -Ob - > all_chrs/${rn}.bcf
+        --cons_threshold ${cons_threshold} | bcftools view -Ob -o all_chrs/${rn}.bcf
 
     if [ $? -eq 0 ]; then
         log_message "INFO" "SNPs consensus processing completed successfully"
@@ -52,7 +52,7 @@ else
         --bcfs $(ls ${rn}.${sample_name}.indels_*.bcf | tr '\n' ',') \
         --sample ${sample_name} \
         --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
-        --cons_threshold ${cons_threshold} | bcftools view -Ob - > all_chrs/${rn}.bcf
+        --cons_threshold ${cons_threshold} | bcftools view -Ob -o all_chrs/${rn}.bcf
     
     if [ $? -eq 0 ]; then
         log_message "INFO" "Indels consensus processing completed successfully"
