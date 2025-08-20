@@ -37,7 +37,6 @@ else
     se)
     bowtie2 --threads ${cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -U "${read3}" | \
       samtools view -@ ${cpus} -S -b -q ${min_map_qual} -F 4 - | \
-      samtools fixmate -@ ${cpus} -m - - | \
       samtools sort -@ ${cpus} -o "${sample_id}_bam_prep/${sample_id}.primary.bam"
       ;;
     mx)
