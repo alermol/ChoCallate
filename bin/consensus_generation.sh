@@ -21,22 +21,25 @@ log_message "INFO" "Process started - Consensus generation for ${mutation_type} 
 
 START_TIME=$(date +%s)
 
-log_message "INFO" "Extracting region-specific VCFs for region ${region}"
+log_message "INFO" "Extracting region-specific BCFs for region ${region}"
 for i in $(ls ${sample_name}.${mutation_type}_* | grep -v '.csi')
 do
     bcftools view -r ${region} ${i} > ${rn}.${i}
 done
 
-log_message "INFO" "Extracting region-specific zero VCF"
+log_message "INFO" "Extracting region-specific zero BCF"
 bcftools view -r ${region} zero.bcf > ${rn}.zero.bcf
+
+log_message "INFO" "Extracting chromosome names from zero BCF"
+chr_names=$(bcftools query -f '%CHROM' zero.bcf | uniq)
 
 if [ ${mutation_type} == "snps" ]; then
     log_message "INFO" "Processing SNPs consensus"
     process_snps.py \
         --zero_bcf ${rn}.zero.bcf \
-        --bcfs $(ls ${rn}.${sample_name}.snps_*.bcf | tr '\n' ',') \
+        --bcfs "$(ls ${rn}.${sample_name}.snps_*.bcf | tr '\n' ',')" \
         --sample ${sample_name} \
-        --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
+        --chr "${chr_names}" \
         --cons_threshold ${cons_threshold} | bcftools view -Ob -o all_chrs/${rn}.bcf
 
     if [ $? -eq 0 ]; then
@@ -49,9 +52,9 @@ else
     log_message "INFO" "Processing indels consensus"
     process_indels.py \
         --zero_bcf ${rn}.zero.bcf \
-        --bcfs $(ls ${rn}.${sample_name}.indels_*.bcf | tr '\n' ',') \
+        --bcfs "$(ls ${rn}.${sample_name}.indels_*.bcf | tr '\n' ',')" \
         --sample ${sample_name} \
-        --chr $(bcftools query -f '%CHROM' ${rn}.zero.bcf | uniq) \
+        --chr "${chr_names}" \
         --cons_threshold ${cons_threshold} | bcftools view -Ob -o all_chrs/${rn}.bcf
     
     if [ $? -eq 0 ]; then
@@ -73,9 +76,6 @@ done
 if [ -e "${rn}.zero.bcf" ]; then
     rm -f "${rn}.zero.bcf"
 fi
-
-# log_message "INFO" "Compressing output VCFs"
-# find all_chrs/ -name '*.vcf' -type f -exec bgzip {} \;
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))

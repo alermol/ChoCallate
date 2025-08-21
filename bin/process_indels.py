@@ -110,7 +110,7 @@ def main() -> None:
     print('##fileformat=VCFv4.3')
     
     # Add all chromosome names to the header
-    for chrom_name in args.chr.split('\n'):
+    for chrom_name in args.chr.strip().split('\n'):
         print(f'##contig=<ID={chrom_name}>')
     
     print('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')

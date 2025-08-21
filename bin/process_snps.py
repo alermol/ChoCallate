@@ -159,7 +159,7 @@ def main() -> None:
     # Create header and output VCF to stdout
     print('##fileformat=VCFv4.3')
     
-    for chrom_name in args.chr.split('\n'):
+    for chrom_name in args.chr.strip().split('\n'):
         print(f'##contig=<ID={chrom_name}>')
     
     print('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
