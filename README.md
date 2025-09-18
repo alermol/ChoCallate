@@ -146,7 +146,7 @@ nextflow run main.nf --help
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--effective_callers` | `-` | Comma-separated list of variant callers to use. Use `-` for automatic selection based on ploidy |
+| `--effective_callers` | `-` | Comma-separated list of variant callers to use (case-insensitive). Use `-` for automatic selection based on ploidy. |
 | `--cons_type` | `mj` | Consensus type: `mj` (majority), `n1` (n-1), `fc` (full consensus) |
 
 ### Resource Allocation Parameters

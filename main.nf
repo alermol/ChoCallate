@@ -14,6 +14,7 @@ def min_callers_count         = 3
 include { 
     getAvailableCallersCount; 
     getConsensusThreshold; 
+    normalizeCallerNames;
     allEffectiveCallersInAvailable; 
     effectiveCallersAtLeastThree; 
     allEffectiveCallersDiploidSuitable; 
@@ -198,8 +199,8 @@ if (params.effective_callers == "-") {
         error "Invalid ploidy value: ${params.ploidy}. Ploidy must be 2 or greater."
     }
 } else {
-    effective_callers = params.effective_callers
-    logInfo("Using user-defined effective callers", [callers: effective_callers])
+    effective_callers = normalizeCallerNames(params.effective_callers)
+    logInfo("Using user-defined effective callers", [callers: effective_callers, original: params.effective_callers])
 }
 
 if (!allEffectiveCallersInAvailable(effective_callers, available_callers)) {

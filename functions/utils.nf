@@ -15,9 +15,14 @@ def getConsensusThreshold(String cons_type, String available_callers) {
     }
 }
 
+def normalizeCallerNames(String callers) {
+    def callerList = callers.split(/\s*,\s*/).findAll { it }
+    return callerList.collect { it.toLowerCase().trim() }.join(',')
+}
+
 def allEffectiveCallersInAvailable(String effective_callers, String available_callers) {
-    def effList = effective_callers.split(/\s*,\s*/).findAll { it }
-    def availList = available_callers.split(/\s*,\s*/).findAll { it }
+    def effList = effective_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
+    def availList = available_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
     def missing = effList.findAll { !(it in availList) }
     if (missing) {
         println "The following effective callers are not in available callers: ${missing.join(', ')}"
@@ -32,8 +37,8 @@ def effectiveCallersAtLeastThree(String effective_callers) {
 }
 
 def allEffectiveCallersDiploidSuitable(String effective_callers, String diploid_callers) {
-    def effList = effective_callers.split(/\s*,\s*/).findAll { it }
-    def dipList = diploid_callers.split(/\s*,\s*/).findAll { it }
+    def effList = effective_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
+    def dipList = diploid_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
     def unsuitable = effList.findAll { !(it in dipList) }
     if (unsuitable) {
         println "The following effective callers are not suitable for diploid calling: ${unsuitable.join(', ')}"
@@ -43,8 +48,8 @@ def allEffectiveCallersDiploidSuitable(String effective_callers, String diploid_
 }
 
 def allEffectiveCallersPolyploidSuitable(String effective_callers, String polyploid_callers) {
-    def effList = effective_callers.split(/\s*,\s*/).findAll { it }
-    def polyList = polyploid_callers.split(/\s*,\s*/).findAll { it }
+    def effList = effective_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
+    def polyList = polyploid_callers.split(/\s*,\s*/).findAll { it }.collect { it.toLowerCase().trim() }
     def unsuitable = effList.findAll { !(it in polyList) }
     if (unsuitable) {
         println "The following effective callers are not suitable for polyploid calling: ${unsuitable.join(', ')}"
