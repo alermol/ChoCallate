@@ -1,5 +1,9 @@
 #!/usr/bin/env nextflow
 
+include { handleHelpVersion } from './functions/help_version.nf'
+
+handleHelpVersion()
+
 def available_callers         = 'bcftools,gatk,freebayes,snver,vardict'
 def diploid_callers           = 'bcftools,gatk,freebayes,snver,vardict'
 def polyploid_callers         = 'gatk,freebayes,snver'

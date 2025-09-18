@@ -71,6 +71,18 @@ nextflow run main.nf \
     --samples_tsv /path/to/samples_bam.tsv
 ```
 
+### 4. Command-Line Help
+
+Get help and version information:
+
+```bash
+# Show version information
+nextflow run main.nf --version
+
+# Show comprehensive help
+nextflow run main.nf --help
+```
+
 ## 🏗️ Pipeline Architecture
 
 ### Supported Variant Callers
@@ -188,6 +200,13 @@ nextflow run main.nf \
 | `--log_sample` | `true` | `true`, `false` | Include sample IDs in logs |
 | `--log_file` | `ChoCallate.log` | - | Main log file path |
 | `--log_error_file` | `ChoCallate_errors.log` | - | Error log file path |
+
+### Help and Version Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--help` | `false` | Show help message and exit |
+| `--version` | `false` | Show version information and exit |
 
 ### Consensus Types
 
@@ -349,9 +368,20 @@ sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 ChoCallate/
 ├── main.nf                      # Main Nextflow pipeline script
 ├── nextflow.config              # Pipeline configuration
+├── environment.yaml             # Conda environment specification
+├── LICENSE                      # MIT License file
 ├── functions/                   # Utility functions
 │   ├── utils.nf                 # Parameter validation functions
-│   └── logging.nf               # Logging utilities
+│   ├── logging.nf               # Logging utilities
+│   ├── help_version.nf          # Help and version display module
+│   ├── calling.nf               # Variant calling workflow
+│   ├── prepare_bam.nf           # BAM preparation workflow
+│   ├── coverage_generation.nf   # Coverage analysis workflow
+│   ├── create_fai_index.nf      # FASTA index creation
+│   ├── create_seq_dict.nf       # Sequence dictionary creation
+│   ├── generate_zero_bcf.nf     # Zero BCF generation workflow
+│   ├── generate_consensus.nf    # Consensus generation workflow
+│   └── cleanup_sample_temp.nf   # Sample cleanup workflow
 ├── bin/                         # Pipeline scripts and variant caller wrappers
 │   ├── bcftools_caller.sh       # BCFtools variant calling
 │   ├── gatk4_caller.sh          # GATK4 variant calling
