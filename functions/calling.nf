@@ -12,6 +12,12 @@ process CALLING {
     path(ref_genome_dict)
     val(effective_callers)
     val(parallel_cpus)
+    val(bcftools_mpileup_extra_args)
+    val(bcftools_call_extra_args)
+    val(freebayes_extra_args)
+    val(gatk4_extra_args)
+    val(vardict_extra_args)
+    val(snver_extra_args)
 
     output:
     tuple val("${bam.baseName}"), path("*.snps_*.bcf"), emit: snps_vcf
@@ -38,23 +44,23 @@ process CALLING {
     touch callers_commands.sh
 
     if [[ ",${effective_callers}," == *"bcftools"* ]]; then
-        echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/bcftools_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.bcftools_cpu} '${bcftools_mpileup_extra_args}' '${bcftools_call_extra_args}'" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"freebayes"* ]]; then
-        echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/freebayes_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.reads_source} ${params.min_base_quality} ${params.min_snp_qual} '${freebayes_extra_args}'" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"gatk"* ]]; then
-        echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/gatk4_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} '${gatk4_extra_args}'" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"vardict"* ]]; then
-        echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/vardict_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} ${params.vardict_cpu} '${vardict_extra_args}'" >> callers_commands.sh
     fi
 
     if [[ ",${effective_callers}," == *"snver"* ]]; then
-        echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual}" >> callers_commands.sh
+        echo "bash ${projectDir}/bin/snver_caller.sh input.bam coverage.bed reference.fasta ${ploidy} ${params.min_base_quality} ${params.min_snp_qual} '${snver_extra_args}'" >> callers_commands.sh
     fi
 
     echo "[\$(date -Iseconds)] [INFO] [CALLING] [${bam.baseName}] Executing ${parallel_cpus} callers in parallel"

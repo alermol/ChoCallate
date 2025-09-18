@@ -8,10 +8,11 @@ REF_GENOME="$3"
 PLOIDY="$4"
 MIN_BASE_QUALITY="$5"
 MIN_SNP_QUAL="$6"
+SNVER_EXTRA_ARGS="$7"
 
-if [ $# -ne 6 ]; then
-    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL>"
-    echo "Error: Expected 6 parameters, got $#"
+if [ $# -lt 6 ] || [ $# -gt 7 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <SNVER_EXTRA_ARGS>"
+    echo "Error: Expected 7 parameters, got $#"
     exit 1
 fi
 
@@ -51,7 +52,7 @@ else
 fi
 
 log_message "INFO" "Running SNVer variant calling"
-snver -i "$BAM_FILE" -r reference.fasta -o "$BAM_BASENAME" -l "$COVERAGE_FILE" -bq "$MIN_BASE_QUALITY" -n "$PLOIDY"
+snver -i "$BAM_FILE" -r reference.fasta -o "$BAM_BASENAME" -l "$COVERAGE_FILE" -bq "$MIN_BASE_QUALITY" -n "$PLOIDY" ${SNVER_EXTRA_ARGS}
 
 if [ $? -eq 0 ]; then
     log_message "INFO" "SNVer variant calling completed successfully"

@@ -9,10 +9,11 @@ PLOIDY="$4"
 MIN_BASE_QUALITY="$5"
 MIN_SNP_QUAL="$6"
 THREADS="$7"
+VARDICT_EXTRA_ARGS="$8"
 
-if [ $# -ne 7 ]; then
-    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <THREADS>"
-    echo "Error: Expected 7 parameters, got $#"
+if [ $# -lt 7 ] || [ $# -gt 8 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <THREADS> <VARDICT_EXTRA_ARGS>"
+    echo "Error: Expected 8 parameters, got $#"
     exit 1
 fi
 
@@ -45,7 +46,7 @@ log_message "INFO" "Process started - VarDict variant calling (ploidy=${PLOIDY},
 START_TIME=$(date +%s)
 
 log_message "INFO" "Running VarDict variant calling"
-vardict-java -G "$REF_GENOME" -N "$BAM_BASENAME" -b "$BAM_FILE" -fisher -th "$THREADS" \
+vardict-java -G "$REF_GENOME" -N "$BAM_BASENAME" -b "$BAM_FILE" -fisher -th "$THREADS" ${VARDICT_EXTRA_ARGS} \
     -VS SILENT --nosv -k 0 -q "$MIN_BASE_QUALITY" -c 1 -S 2 -E 3 -g 4 "$COVERAGE_FILE" | \
     var2vcf_valid.pl -S -q "$MIN_BASE_QUALITY" -N "$BAM_BASENAME" -E | \
     bcftools reheader -f "$REF_GENOME.fai" | \

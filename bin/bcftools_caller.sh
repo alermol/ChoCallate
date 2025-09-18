@@ -9,10 +9,12 @@ PLOIDY="$4"
 MIN_BASE_QUALITY="$5"
 MIN_SNP_QUAL="$6"
 THREADS="$7"
+MPILEUP_EXTRA_ARGS="$8"
+CALL_EXTRA_ARGS="$9"
 
-if [ $# -ne 7 ]; then
-    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <THREADS>"
-    echo "Error: Expected 7 parameters, got $#"
+if [ $# -lt 7 ] || [ $# -gt 9 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <THREADS> <MPILEUP_EXTRA_ARGS> <CALL_EXTRA_ARGS>"
+    echo "Error: Expected 9 parameters, got $#"
     exit 1
 fi
 
@@ -46,8 +48,8 @@ START_TIME=$(date +%s)
 
 log_message "INFO" "Running BCFtools mpileup and variant calling"
 bcftools mpileup -Ou --count-orphans --fasta-ref "$REF_GENOME" --threads "$THREADS" --max-depth 250 \
-    --min-BQ "$MIN_BASE_QUALITY" --regions-file "$COVERAGE_FILE" "$BAM_FILE" | \
-    bcftools call -Ou --multiallelic-caller --threads "$THREADS" | \
+    --min-BQ "$MIN_BASE_QUALITY" --regions-file "$COVERAGE_FILE" ${MPILEUP_EXTRA_ARGS} "$BAM_FILE" | \
+    bcftools call -Ou --multiallelic-caller --threads "$THREADS" ${CALL_EXTRA_ARGS} | \
     bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
     bcftools annotate -Ou --force -x INFO,FORMAT - | \
     bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \

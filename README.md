@@ -158,6 +158,12 @@ nextflow run main.nf \
 | `--win_size` | `1000000` | Window size (in bp) for parallel consensus generation |
 | `--debug` | `false` | Keep working directory after pipeline completion |
 | `--bowtie2_extra_args` | `""` | Extra arguments passed directly to Bowtie2 during alignment (use as is) |
+| `--bcftools_mpileup_extra_args` | `""` | Extra arguments appended to `bcftools mpileup` |
+| `--bcftools_call_extra_args` | `""` | Extra arguments appended to `bcftools call` |
+| `--freebayes_extra_args` | `""` | Extra arguments appended to `freebayes` |
+| `--gatk4_extra_args` | `""` | Extra arguments appended to `gatk HaplotypeCaller` |
+| `--snver_extra_args` | `""` | Extra arguments appended to `snver` |
+| `--vardict_extra_args` | `""` | Extra arguments appended to `vardict-java` |
 
 ### Cleanup Configuration Parameters
 

@@ -273,7 +273,13 @@ workflow {
             params.ploidy,
             CREATE_SEQ_DICT.out.gen_dict,
             effective_callers,
-            parallel_cpus)
+            parallel_cpus,
+            params.bcftools_mpileup_extra_args,
+            params.bcftools_call_extra_args,
+            params.freebayes_extra_args,
+            params.gatk4_extra_args,
+            params.vardict_extra_args,
+            params.snver_extra_args)
 
     def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
     GENERATE_CONSENSUS(CALLING.out.snps_vcf,

@@ -8,10 +8,11 @@ REF_GENOME="$3"
 PLOIDY="$4"
 MIN_BASE_QUALITY="$5"
 MIN_SNP_QUAL="$6"
+GATK_EXTRA_ARGS="$7"
 
-if [ $# -ne 6 ]; then
-    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL>"
-    echo "Error: Expected 6 parameters, got $#"
+if [ $# -lt 6 ] || [ $# -gt 7 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <GATK_EXTRA_ARGS>"
+    echo "Error: Expected 7 parameters, got $#"
     exit 1
 fi
 
@@ -44,7 +45,7 @@ log_message "INFO" "Process started - GATK4 HaplotypeCaller variant calling (plo
 START_TIME=$(date +%s)
 
 log_message "INFO" "Running GATK4 HaplotypeCaller"
-gatk HaplotypeCaller -I "$BAM_FILE" -R "$REF_GENOME" -mbq "$MIN_BASE_QUALITY" -O "${BAM_BASENAME}.gatk1.vcf.gz" -L "$COVERAGE_FILE" -ploidy "$PLOIDY" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false
+gatk HaplotypeCaller -I "$BAM_FILE" -R "$REF_GENOME" -mbq "$MIN_BASE_QUALITY" -O "${BAM_BASENAME}.gatk1.vcf.gz" -L "$COVERAGE_FILE" -ploidy "$PLOIDY" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false ${GATK_EXTRA_ARGS}
 
 if [ $? -eq 0 ]; then
     log_message "INFO" "GATK4 HaplotypeCaller completed successfully"

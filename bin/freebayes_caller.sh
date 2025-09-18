@@ -9,10 +9,11 @@ PLOIDY="$4"
 READS_SOURCE="$5"
 MIN_BASE_QUALITY="$6"
 MIN_SNP_QUAL="$7"
+FREEBAYES_EXTRA_ARGS="$8"
 
-if [ $# -ne 7 ]; then
-    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <READS_SOURCE> <MIN_BASE_QUALITY> <MIN_SNP_QUAL>"
-    echo "Error: Expected 7 parameters, got $#"
+if [ $# -lt 7 ] || [ $# -gt 8 ]; then
+    echo "Usage: $0 <BAM_FILE> <COVERAGE_FILE> <REF_GENOME> <PLOIDY> <READS_SOURCE> <MIN_BASE_QUALITY> <MIN_SNP_QUAL> <FREEBAYES_EXTRA_ARGS>"
+    echo "Error: Expected 8 parameters, got $#"
     exit 1
 fi
 
@@ -48,7 +49,7 @@ log_message "INFO" "Running FreeBayes variant calling with ${READS_SOURCE} param
 if [[ "$READS_SOURCE" == "gbs" ]]; then
     freebayes --fasta-reference "$REF_GENOME" --targets "$COVERAGE_FILE" --dont-left-align-indels --ploidy "$PLOIDY" \
         --use-best-n-alleles 4 --min-alternate-qsum "$MIN_BASE_QUALITY" --hwe-priors-off --no-population-priors \
-        --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" \
+        --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" ${FREEBAYES_EXTRA_ARGS} \
         --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam "$BAM_FILE" --limit-coverage 250 | \
         bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
         bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
@@ -61,7 +62,7 @@ if [[ "$READS_SOURCE" == "gbs" ]]; then
 else
     freebayes --fasta-reference "$REF_GENOME" --targets "$COVERAGE_FILE" --dont-left-align-indels --ploidy "$PLOIDY" \
         --use-best-n-alleles 4 --min-alternate-qsum "$MIN_BASE_QUALITY" --hwe-priors-off --no-population-priors \
-        --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" \
+        --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" ${FREEBAYES_EXTRA_ARGS} \
         --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam "$BAM_FILE" --limit-coverage 250 | \
         bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" | \
         bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
