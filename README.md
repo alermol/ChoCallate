@@ -117,9 +117,9 @@ nextflow run main.nf \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--min_coverage` | `5` | Minimum position coverage depth for variant calling |
-| `--min_base_quality` | `20` | Minimum base quality for variant calling |
-| `--min_map_qual` | `10` | Minimum mapping quality for read filtering |
-| `--min_snp_qual` | `20` | Minimum variant quality threshold |
+| `--min_base_quality` | `5` | Minimum base quality for variant calling |
+| `--min_map_qual` | `5` | Minimum mapping quality for read filtering |
+| `--min_snp_qual` | `5` | Minimum variant quality threshold |
 
 ### Data Type Parameters
 
@@ -157,6 +157,7 @@ nextflow run main.nf \
 |-----------|---------|-------------|
 | `--win_size` | `1000000` | Window size (in bp) for parallel consensus generation |
 | `--debug` | `false` | Keep working directory after pipeline completion |
+| `--bowtie2_extra_args` | `""` | Extra arguments passed directly to Bowtie2 during alignment (use as is) |
 
 ### Cleanup Configuration Parameters
 

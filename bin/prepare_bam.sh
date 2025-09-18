@@ -16,6 +16,7 @@ min_map_qual="${11}"
 cpus="${12}"
 cleanup_intermediate_subfolders="${13}"
 cleanup_input_symlinks="${14}"
+extra_bowtie2_args="${15}"
 
 echo "[$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Process started - Mapping reads (${reads_type})"
 
@@ -29,18 +30,18 @@ else
   echo "[$(date -Iseconds)] [INFO] [BOWTIE2_MAPPING] [${sample_id}] Running Bowtie2 alignment with ${cpus} threads"
   case "${reads_type}" in
     pe)
-    bowtie2 --threads ${cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
+    bowtie2 --threads ${cpus} ${extra_bowtie2_args} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
       samtools view -@ ${cpus} -S -b -q ${min_map_qual} -F 4 - | \
       samtools fixmate -@ ${cpus} -m - - | \
       samtools sort -@ ${cpus} -o "${sample_id}_bam_prep/${sample_id}.primary.bam"
       ;;
     se)
-    bowtie2 --threads ${cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -U "${read3}" | \
+    bowtie2 --threads ${cpus} ${extra_bowtie2_args} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -U "${read3}" | \
       samtools view -@ ${cpus} -S -b -q ${min_map_qual} -F 4 - | \
       samtools sort -@ ${cpus} -o "${sample_id}_bam_prep/${sample_id}.primary.bam"
       ;;
     mx)
-    bowtie2 --threads ${cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -1 "${read1}" -2 "${read2}" -U "${read3}" | \
+      bowtie2 --threads ${cpus} ${extra_bowtie2_args} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -1 "${read1}" -2 "${read2}" -U "${read3}" | \
       samtools view -@ ${cpus} -S -b -q ${min_map_qual} -F 4 - | \
       samtools fixmate -@ ${cpus} -m - - | \
       samtools sort -@ ${cpus} -o "${sample_id}_bam_prep/${sample_id}.primary.bam"
