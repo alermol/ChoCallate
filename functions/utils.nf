@@ -110,6 +110,23 @@ def validateTSVFile(String filePath, String inputFormat, String readsType) {
     def fmt = (inputFormat ?: 'fastq').toLowerCase()
     def rt = (readsType ?: '').toLowerCase()
 
+    // Helpers to support comma-separated lists of paths in cells
+    def parsePaths = { String s ->
+        (s ?: '')
+            .split(/\s*,\s*/)
+            .collect { it.trim() }
+            .findAll { it }
+    }
+
+    def anyMissingPath = { List<String> paths ->
+        for (p in paths) {
+            if (!new File(p).exists()) {
+                return p
+            }
+        }
+        return null
+    }
+
     // Validate sample lines
     for (int i = startIndex; i < lines.size(); i++) {
         def line = lines[i].trim()
@@ -124,38 +141,47 @@ def validateTSVFile(String filePath, String inputFormat, String readsType) {
                 return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
             }
             if (rt == 'se') {
-                def sePath = columns[3]
-                if (!sePath || sePath.trim().isEmpty()) {
+                def sePaths = parsePaths(columns[3])
+                if (sePaths.isEmpty()) {
                     return [valid: false, error: "FASTQ se mode requires column 4 (SE read) in line ${i+1}"]
                 }
-                def f = new File(sePath)
-                if (!f.exists()) {
-                    return [valid: false, error: "SE FASTQ file in column 4 does not exist (line ${i+1}): ${sePath}"]
+                def missing = anyMissingPath(sePaths)
+                if (missing) {
+                    return [valid: false, error: "SE FASTQ file listed in column 4 does not exist (line ${i+1}): ${missing}"]
                 }
             } else if (rt == 'pe') {
-                def r1 = columns[1]
-                def r2 = columns[2]
-                if (!r1 || r1.trim().isEmpty() || !r2 || r2.trim().isEmpty()) {
+                def r1Paths = parsePaths(columns[1])
+                def r2Paths = parsePaths(columns[2])
+                if (r1Paths.isEmpty() || r2Paths.isEmpty()) {
                     return [valid: false, error: "FASTQ pe mode requires columns 2 and 3 (R1,R2) in line ${i+1}"]
                 }
-                def f1 = new File(r1)
-                def f2 = new File(r2)
-                if (!f1.exists()) {
-                    return [valid: false, error: "PE FASTQ R1 in column 2 does not exist (line ${i+1}): ${r1}"]
+                if (r1Paths.size() != r2Paths.size()) {
+                    return [valid: false, error: "FASTQ pe mode requires equal number of R1 and R2 files (line ${i+1}): R1=${r1Paths.size()}, R2=${r2Paths.size()}"]
                 }
-                if (!f2.exists()) {
-                    return [valid: false, error: "PE FASTQ R2 in column 3 does not exist (line ${i+1}): ${r2}"]
+                def missingR1 = anyMissingPath(r1Paths)
+                if (missingR1) {
+                    return [valid: false, error: "PE FASTQ R1 listed in column 2 does not exist (line ${i+1}): ${missingR1}"]
+                }
+                def missingR2 = anyMissingPath(r2Paths)
+                if (missingR2) {
+                    return [valid: false, error: "PE FASTQ R2 listed in column 3 does not exist (line ${i+1}): ${missingR2}"]
                 }
             } else if (rt == 'mx') {
-                def r1 = columns[1]
-                def r2 = columns[2]
-                def se = columns[3]
-                if (!r1 || r1.trim().isEmpty() || !r2 || r2.trim().isEmpty() || !se || se.trim().isEmpty()) {
+                def r1Paths = parsePaths(columns[1])
+                def r2Paths = parsePaths(columns[2])
+                def sePaths = parsePaths(columns[3])
+                if (r1Paths.isEmpty() || r2Paths.isEmpty() || sePaths.isEmpty()) {
                     return [valid: false, error: "FASTQ mx mode requires columns 2,3,4 (R1,R2,SE) in line ${i+1}"]
                 }
-                if (!new File(r1).exists()) return [valid: false, error: "MX FASTQ R1 missing (line ${i+1}): ${r1}"]
-                if (!new File(r2).exists()) return [valid: false, error: "MX FASTQ R2 missing (line ${i+1}): ${r2}"]
-                if (!new File(se).exists()) return [valid: false, error: "MX FASTQ SE missing (line ${i+1}): ${se}"]
+                if (r1Paths.size() != r2Paths.size()) {
+                    return [valid: false, error: "FASTQ mx mode requires equal number of R1 and R2 files (line ${i+1}): R1=${r1Paths.size()}, R2=${r2Paths.size()}"]
+                }
+                def missingR1 = anyMissingPath(r1Paths)
+                if (missingR1) return [valid: false, error: "MX FASTQ R1 listed in column 2 does not exist (line ${i+1}): ${missingR1}"]
+                def missingR2 = anyMissingPath(r2Paths)
+                if (missingR2) return [valid: false, error: "MX FASTQ R2 listed in column 3 does not exist (line ${i+1}): ${missingR2}"]
+                def missingSE = anyMissingPath(sePaths)
+                if (missingSE) return [valid: false, error: "MX FASTQ SE listed in column 4 does not exist (line ${i+1}): ${missingSE}"]
             } else {
                 return [valid: false, error: "Invalid reads_type '${readsType}' for FASTQ input. Expected one of: se, pe, mx"]
             }
@@ -167,15 +193,18 @@ def validateTSVFile(String filePath, String inputFormat, String readsType) {
                 return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
             }
             def bamPath = columns[1]
-            if (!bamPath || bamPath.trim().isEmpty()) {
+            def bamPaths = parsePaths(bamPath)
+            if (bamPaths.isEmpty()) {
                 return [valid: false, error: "BAM path is required in column 2 (line ${i+1})"]
             }
-            def bamFile = new File(bamPath)
-            if (!bamFile.exists()) {
-                return [valid: false, error: "BAM file does not exist in line ${i+1}: ${bamPath}"]
-            }
-            if (!bamPath.toLowerCase().endsWith('.bam')) {
-                return [valid: false, error: "BAM file in line ${i+1} must have .bam extension: ${bamPath}"]
+            for (p in bamPaths) {
+                def bf = new File(p)
+                if (!bf.exists()) {
+                    return [valid: false, error: "BAM file listed in column 2 does not exist (line ${i+1}): ${p}"]
+                }
+                if (!p.toLowerCase().endsWith('.bam')) {
+                    return [valid: false, error: "BAM file in line ${i+1} must have .bam extension: ${p}"]
+                }
             }
         }
     }
