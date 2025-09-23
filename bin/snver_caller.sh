@@ -65,10 +65,10 @@ log_message "INFO" "Processing SNPs VCF"
 
 bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.filter.vcf" | \
     bcftools view -Ou - | \
-    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate -Ou --force -x INFO,FORMAT - | \
-    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize - > "${BAM_BASENAME}.snps.bcf"
+    bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
+    bcftools annotate -Ou --force -x INFO,FORMAT | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.snps.bcf"
 
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools SNPs processing pipeline failed"
@@ -81,10 +81,10 @@ log_message "INFO" "Processing indels VCF"
 
 bcftools reheader -f reference.fasta.fai "${BAM_BASENAME}.indel.filter.vcf" | \
     bcftools view -Ou - | \
-    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate -Ou --force -x INFO,FORMAT - | \
-    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize - > "${BAM_BASENAME}.indels.bcf"
+    bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
+    bcftools annotate -Ou --force -x INFO,FORMAT | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+    bcftools norm -Ob --fasta-ref reference.fasta --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.indels.bcf"
 
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools indels processing pipeline failed"
@@ -94,13 +94,13 @@ fi
 log_message "INFO" "Indels VCF processing completed successfully"
 
 log_message "INFO" "Generating final compressed BCF output files"
-bcftools view -Ob "${BAM_BASENAME}.snps.bcf" > "${BAM_BASENAME}.snps_snver.bcf"
+bcftools view -Ob "${BAM_BASENAME}.snps.bcf" -o "${BAM_BASENAME}.snps_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "Final SNPs output generation failed"
     exit 1
 fi
 
-bcftools view -Ob "${BAM_BASENAME}.indels.bcf" > "${BAM_BASENAME}.indels_snver.bcf"
+bcftools view -Ob "${BAM_BASENAME}.indels.bcf" -o "${BAM_BASENAME}.indels_snver.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "Final indels output generation failed"
     exit 1

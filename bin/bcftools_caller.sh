@@ -50,10 +50,10 @@ log_message "INFO" "Running BCFtools mpileup and variant calling"
 bcftools mpileup -Ou --count-orphans --fasta-ref "$REF_GENOME" --threads "$THREADS" --max-depth 250 \
     --min-BQ "$MIN_BASE_QUALITY" --regions-file "$COVERAGE_FILE" ${MPILEUP_EXTRA_ARGS} "$BAM_FILE" | \
     bcftools call -Ou --multiallelic-caller --threads "$THREADS" ${CALL_EXTRA_ARGS} | \
-    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate -Ou --force -x INFO,FORMAT - | \
-    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize > "${BAM_BASENAME}.bcftools.bcf"
+    bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
+    bcftools annotate -Ou --force -x INFO,FORMAT | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.bcftools.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools variant calling pipeline failed"
     exit 1
@@ -62,13 +62,13 @@ fi
 log_message "INFO" "BCFtools variant calling completed successfully"
 
 log_message "INFO" "Extracting SNPs and indels from BCFtools output"
-bcftools view -Ob -v snps "${BAM_BASENAME}.bcftools.bcf" > "${BAM_BASENAME}.snps_bcftools.bcf"
+bcftools view -Ob -v snps "${BAM_BASENAME}.bcftools.bcf" -o "${BAM_BASENAME}.snps_bcftools.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for SNPs failed"
     exit 1
 fi
 
-bcftools view -Ob -v indels "${BAM_BASENAME}.bcftools.bcf" > "${BAM_BASENAME}.indels_bcftools.bcf"
+bcftools view -Ob -v indels "${BAM_BASENAME}.bcftools.bcf" -o "${BAM_BASENAME}.indels_bcftools.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for indels failed"
     exit 1

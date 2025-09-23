@@ -63,10 +63,10 @@ fi
 
 log_message "INFO" "Filtering and processing VCF with BCFtools"
 
-bcftools filter -Ou "${BAM_BASENAME}.gatk1.vcf.gz" -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate -Ou --force -x INFO,FORMAT - | \
-    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize > "${BAM_BASENAME}.gatk.bcf"
+bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou "${BAM_BASENAME}.gatk1.vcf.gz" | \
+    bcftools annotate -Ou --force -x INFO,FORMAT | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.gatk.bcf"
 
 if [ $? -ne 0 ]; then
     log_message "ERROR" "BCFtools filtering/processing pipeline failed"
@@ -76,13 +76,13 @@ fi
 log_message "INFO" "VCF filtering and processing completed successfully"
 
 log_message "INFO" "Extracting SNPs and indels from GATK4 output (compressed BCF)"
-bcftools view -Ob -v snps "${BAM_BASENAME}.gatk.bcf" > "${BAM_BASENAME}.snps_gatk.bcf"
+bcftools view -Ob -v snps "${BAM_BASENAME}.gatk.bcf" -o "${BAM_BASENAME}.snps_gatk.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for SNPs failed"
     exit 1
 fi
 
-bcftools view -Ob -v indels "${BAM_BASENAME}.gatk.bcf" > "${BAM_BASENAME}.indels_gatk.bcf"
+bcftools view -Ob -v indels "${BAM_BASENAME}.gatk.bcf" -o "${BAM_BASENAME}.indels_gatk.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for indels failed"
     exit 1

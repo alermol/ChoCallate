@@ -51,10 +51,10 @@ if [[ "$READS_SOURCE" == "gbs" ]]; then
         --use-best-n-alleles 4 --min-alternate-qsum "$MIN_BASE_QUALITY" --hwe-priors-off --no-population-priors \
         --binomial-obs-priors-off --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" ${FREEBAYES_EXTRA_ARGS} \
         --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam "$BAM_FILE" --limit-coverage 250 | \
-        bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
-        bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-        bcftools annotate -Ou --force -x INFO,FORMAT - | \
-        bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize > "${BAM_BASENAME}.freebayes.bcf"
+        bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
+        bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+        bcftools annotate -Ou --force -x INFO,FORMAT | \
+        bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.freebayes.bcf"
     if [ $? -ne 0 ]; then
         log_message "ERROR" "FreeBayes variant calling and processing failed"
         exit 1
@@ -64,10 +64,10 @@ else
         --use-best-n-alleles 4 --min-alternate-qsum "$MIN_BASE_QUALITY" --hwe-priors-off --no-population-priors \
         --allele-balance-priors-off --min-base-quality "$MIN_BASE_QUALITY" ${FREEBAYES_EXTRA_ARGS} \
         --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --bam "$BAM_FILE" --limit-coverage 250 | \
-        bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" | \
+        bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
         bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
         bcftools annotate -Ou --force -x INFO,FORMAT | \
-        bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize > "${BAM_BASENAME}.freebayes.bcf"
+        bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.freebayes.bcf"
     if [ $? -ne 0 ]; then
         log_message "ERROR" "FreeBayes variant calling and processing failed"
         exit 1
@@ -77,13 +77,13 @@ fi
 log_message "INFO" "FreeBayes variant calling completed successfully"
 
 log_message "INFO" "Extracting SNPs and indels from FreeBayes output"
-bcftools view -Ob -v snps "${BAM_BASENAME}.freebayes.bcf" > "${BAM_BASENAME}.snps_freebayes.bcf"
+bcftools view -Ob -v snps "${BAM_BASENAME}.freebayes.bcf" -o "${BAM_BASENAME}.snps_freebayes.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for SNPs failed"
     exit 1
 fi
 
-bcftools view -Ob -v indels "${BAM_BASENAME}.freebayes.bcf" > "${BAM_BASENAME}.indels_freebayes.bcf"
+bcftools view -Ob -v indels "${BAM_BASENAME}.freebayes.bcf" -o "${BAM_BASENAME}.indels_freebayes.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for indels failed"
     exit 1

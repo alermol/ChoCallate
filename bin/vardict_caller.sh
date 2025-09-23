@@ -50,11 +50,11 @@ vardict-java -G "$REF_GENOME" -N "$BAM_BASENAME" -b "$BAM_FILE" -fisher -th "$TH
     -VS SILENT --nosv -k 0 -q "$MIN_BASE_QUALITY" -c 1 -S 2 -E 3 -g 4 "$COVERAGE_FILE" | \
     var2vcf_valid.pl -S -q "$MIN_BASE_QUALITY" -N "$BAM_BASENAME" -E | \
     bcftools reheader -f "$REF_GENOME.fai" | \
-    bcftools view -Ou - | \
-    bcftools filter -Ou -e"QUAL<$MIN_SNP_QUAL" - | \
-    bcftools annotate -Ou --force -x INFO,FORMAT - | \
-    bcftools view -Ou --min-alleles 2 --max-alleles 2 - | \
-    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize - > "${BAM_BASENAME}.vardict.bcf"
+    bcftools view -Ou | \
+    bcftools filter -e"QUAL<${MIN_SNP_QUAL}" -Ou | \
+    bcftools annotate -Ou --force -x INFO,FORMAT | \
+    bcftools view -Ou --min-alleles 2 --max-alleles 2 | \
+    bcftools norm -Ob --fasta-ref "$REF_GENOME" --atom-overlaps '.' --atomize -o "${BAM_BASENAME}.vardict.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "VarDict variant calling pipeline failed"
     exit 1
@@ -63,13 +63,13 @@ fi
 log_message "INFO" "VarDict variant calling completed successfully"
 
 log_message "INFO" "Extracting SNPs and indels from VarDict output"
-bcftools view -Ob -v snps "${BAM_BASENAME}.vardict.bcf" > "${BAM_BASENAME}.snps_vardict.bcf"
+bcftools view -Ob -v snps "${BAM_BASENAME}.vardict.bcf" -o "${BAM_BASENAME}.snps_vardict.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for SNPs failed"
     exit 1
 fi
 
-bcftools view -Ob -v indels "${BAM_BASENAME}.vardict.bcf" > "${BAM_BASENAME}.indels_vardict.bcf"
+bcftools view -Ob -v indels "${BAM_BASENAME}.vardict.bcf" -o "${BAM_BASENAME}.indels_vardict.bcf"
 if [ $? -ne 0 ]; then
     log_message "ERROR" "bcftools view for indels failed"
     exit 1
