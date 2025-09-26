@@ -18,6 +18,7 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **📈 Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
 - **🧹 Smart cleanup**: Configurable cleanup options with debug mode preservation
 - **🔬 BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance
+- **📦 Optional single-file output**: Merge per-sample results into single multi-sample BCF
 
 ## 🚀 Quick Start
 
@@ -105,7 +106,8 @@ nextflow run main.nf --help
 3. **🎯 Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
 4. **📊 Variant Calling**: Parallel execution of selected variant callers
 5. **🤝 Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
-6. **📤 Output**: Final compressed BCF files for SNPs and INDELs
+6. **🧩 Optional Merge Step**: When enabled, merges all samples' BCFs into single final SNP/INDEL BCFs
+7. **📤 Output**: Final compressed BCF files for SNPs and INDELs
 
 ## ⚙️ Configuration
 
@@ -162,6 +164,7 @@ nextflow run main.nf --help
 | `--cons_forks` | `1` | Number of parallel consensus processes |
 | `--bcftools_cpu` | `1` | Number of threads for bcftools |
 | `--vardict_cpu` | `1` | Number of threads for VarDict |
+| `--merge_bcfs_cpus` | `1` | Number of threads for BCF merge step |
 
 ### Processing Parameters
 
@@ -176,6 +179,9 @@ nextflow run main.nf --help
 | `--gatk4_extra_args` | `""` | Extra arguments appended to `gatk HaplotypeCaller` |
 | `--snver_extra_args` | `""` | Extra arguments appended to `snver` |
 | `--vardict_extra_args` | `""` | Extra arguments appended to `vardict-java` |
+| `--bcftools_merge_extra_args` | `""` | Extra arguments appended to `bcftools merge` |
+| `--merge_bcfs_forks` | `1` | Number of parallel merge processes |
+| `--single_file` | `false` | If `true`, output one merged pair of final BCFs |
 
 ### Cleanup Configuration Parameters
 
@@ -310,6 +316,8 @@ Notes:
 
 ## 📊 Output Structure
 
+Default (per-sample outputs):
+
 ```
 ChoCallate_output/
 ├── sample1/
@@ -323,6 +331,19 @@ ChoCallate_output/
 ├── pipeline_report.html          # Pipeline summary report (HTML)
 ├── timeline_report.html          # Timeline of process execution (HTML)
 └── trace.txt                     # Detailed process trace file
+```
+
+Single-file mode (`--single_file`):
+
+```
+ChoCallate_output/
+├── final.snps.bcf               # Merged SNPs across all samples
+├── final.indels.bcf             # Merged INDELs across all samples
+├── ChoCallate_errors.log
+├── ChoCallate.log
+├── pipeline_report.html
+├── timeline_report.html
+└── trace.txt
 ```
 
 ## 🔧 Advanced Configuration
@@ -381,6 +402,7 @@ ChoCallate/
 │   ├── create_seq_dict.nf       # Sequence dictionary creation
 │   ├── generate_zero_bcf.nf     # Zero BCF generation workflow
 │   ├── generate_consensus.nf    # Consensus generation workflow
+│   ├── merge_bcfs.nf            # Merge per-sample BCFs into single outputs
 │   └── cleanup_sample_temp.nf   # Sample cleanup workflow
 ├── bin/                         # Pipeline scripts and variant caller wrappers
 │   ├── bcftools_caller.sh       # BCFtools variant calling

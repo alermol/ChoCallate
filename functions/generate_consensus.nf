@@ -4,8 +4,8 @@ process GENERATE_CONSENSUS {
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.snps.bcf'
-    publishDir "${params.outdir}/${sample}/", mode: 'copy', pattern: '*.indels.bcf'
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.bcf', enabled: !params.single_file
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.bcf', enabled: !params.single_file
 
     input:
     tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
@@ -26,7 +26,7 @@ process GENERATE_CONSENSUS {
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating intermediate subfolder for consensus generation"
     mkdir -p "${sample}_consensus_gen"
-    cd "${sample}_consensus_gen"
+    pushd "${sample}_consensus_gen" > /dev/null
     
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Creating symlinks to input files"
     ln -sf "../${ref_genome_fai}" ref_genome.fasta.fai
@@ -88,7 +88,7 @@ process GENERATE_CONSENSUS {
     mv ${sample}.snps.bcf ../${sample}.snps.bcf
     mv ${sample}.indels.bcf ../${sample}.indels.bcf
     
-    cd ..
+    popd > /dev/null
 
     if [ "${params.cleanup_intermediate_subfolders}" = "true" ]; then
         rm -rf "${sample}_consensus_gen"

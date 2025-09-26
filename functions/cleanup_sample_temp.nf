@@ -9,6 +9,7 @@ process CLEANUP_SAMPLE_TEMP {
     path(zero_bcf)
     tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
     tuple val(sample), path("${sample}.indels_*.bcf", arity: '3..*')
+    val(merged)
     val(cleanup_intermediate_bam)
     val(cleanup_intermediate_bcf)
     

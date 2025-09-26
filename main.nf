@@ -77,6 +77,9 @@ include {
     GENERATE_CONSENSUS 
 } from './functions/generate_consensus.nf'
 include { 
+    MERGE_BCFS 
+} from './functions/merge_bcfs.nf'
+include { 
     CLEANUP_SAMPLE_TEMP 
 } from './functions/cleanup_sample_temp.nf'
 
@@ -292,7 +295,15 @@ workflow {
                        CREATE_FAI_INDEX.out.fai_index.collect{it[1]},
                        GENERATE_ZERO_BCF.out.zero_bcf,
                        cons_threshold)
-    
+
+    if (params.single_file) {
+        MERGE_BCFS(GENERATE_CONSENSUS.out.final_snps.map{it[1]}.collect(), 
+                   GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect())
+        MERGED = MERGE_BCFS.out.merged
+    } else {
+        MERGED = true
+    }
+
     if (params.enable_sample_cleanup && !params.debug) {
         logInfo("Sample-level cleanup enabled - cleaning intermediate files", [
             action: "sample_cleanup_enabled",
@@ -308,6 +319,7 @@ workflow {
                             GENERATE_ZERO_BCF.out.zero_bcf,
                             CALLING.out.snps_vcf,
                             CALLING.out.indels_vcf,
+                            MERGED,
                             params.cleanup_intermediate_bam,
                             params.cleanup_intermediate_bcf)
     } else if (params.enable_sample_cleanup && params.debug) {
