@@ -2,25 +2,25 @@
 
 **ChoCallate** (**Cho**rus of **Call**ers) is a high-performance, automated pipeline for consensus-based variant calling that combines multiple variant callers to produce robust, high-confidence single-nucleotide variants (SNVs) and indels (INDELs).
 
-## 🎯 What is ChoCallate?
+## What is ChoCallate?
 
 ChoCallate addresses a critical challenge in variant calling: individual variant callers can produce different results for the same genomic data, leading to uncertainty in variant identification. By implementing a **consensus-driven approach**, ChoCallate combines results from multiple state-of-the-art variant callers and applies configurable consensus rules to generate reliable, high-quality variant calls.
 
-### 🌟 Key Features
+### Key Features
 
-- **🔄 Consensus-driven approach**: Combines multiple variant callers using configurable consensus rules
-- **🧬 Ploidy flexibility**: Supports both diploid and polyploid species with automatic caller selection
-- **📊 Multiple consensus types**: Majority rule, n-1 consensus, and full consensus options
-- **📂 Dual input support**: Processes both FASTQ (raw reads) and BAM (pre-aligned) files, allowing flexible integration of sequencing data at different analysis stages
-- **🔧 Flexible input compatibility**: Works with GBS (Genotyping-by-Sequencing) and WGS data
-- **⚡ Parallel processing**: Efficient parallel execution for optimal performance
-- **🎛️ Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
-- **📈 Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
-- **🧹 Smart cleanup**: Configurable cleanup options with debug mode preservation
-- **🔬 BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance
-- **📦 Optional single-file output**: Merge per-sample results into single multi-sample BCF
+- **Consensus-driven approach**: Combines multiple variant callers using configurable consensus rules
+- **Ploidy flexibility**: Supports both diploid and polyploid species with automatic caller selection
+- **Multiple consensus types**: Majority rule, n-1 consensus, and full consensus options
+- **Dual input support**: Processes both FASTQ (raw reads) and BAM (pre-aligned) files, allowing flexible integration of sequencing data at different analysis stages
+- **Flexible input compatibility**: Works with GBS (Genotyping-by-Sequencing) and WGS data
+- **Parallel processing**: Efficient parallel execution for optimal performance
+- **Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
+- **Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
+- **Smart cleanup**: Configurable cleanup options with debug mode preservation
+- **BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance
+- **Optional single-file output**: Merge per-sample results into single multi-sample BCF
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Installation
 
@@ -80,11 +80,11 @@ Get help and version information:
 # Show version information
 nextflow run main.nf --version
 
-# Show comprehensive help
+# Show help
 nextflow run main.nf --help
 ```
 
-## 🏗️ Pipeline Architecture
+## Pipeline Architecture
 
 ### Supported Variant Callers
 
@@ -101,15 +101,15 @@ nextflow run main.nf --help
 ![ChoCallate Pipeline Scheme](ChoCallate_scheme.png)
 
 
-1. **🔍 Alignment**: Bowtie2-based read alignment with quality filtering and BAM preparation
-2. **📊 Coverage Analysis**: Generate coverage information for targeted variant calling
-3. **🎯 Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
-4. **📊 Variant Calling**: Parallel execution of selected variant callers
-5. **🤝 Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
-6. **🧩 Optional Merge Step**: When enabled, merges all samples' BCFs into single final SNP/INDEL BCFs
-7. **📤 Output**: Final compressed BCF files for SNPs and INDELs
+1. **Alignment**: Bowtie2-based read alignment with quality filtering and BAM preparation
+2. **Coverage Analysis**: Generate coverage information for targeted variant calling
+3. **Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
+4. **Variant Calling**: Parallel execution of selected variant callers
+5. **Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
+6. **Optional Merge Step**: When enabled, merges all samples' BCFs into single final SNP/INDEL BCFs
+7. **Output**: Final compressed BCF files for SNPs and INDELs
 
-## ⚙️ Configuration
+## Configuration
 
 ### Essential Parameters
 
@@ -255,7 +255,7 @@ nextflow run main.nf \
     --effective_callers gatk,freebayes,snver
 ```
 
-## 📁 Input Data Structure
+## Input Data Structure
 
 ### Samples TSV Format
 
@@ -304,9 +304,9 @@ Notes:
 
 #### File Format Support
 - Input reads (FASTQ mode): `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
-- Reference genome: `.fasta`, `.fa`, `.fna` (compressed or uncompressed)
-- **Variant caller output**: `.bcf` (compressed BCF format)
-- **Final output**: `.bcf` (compressed BCF format)
+- Reference genome: `.fasta`, `.fa`, `.fna` (gzipped or ungzipped)
+- Variant caller output: `.bcf` (compressed BCF format)
+- Final output: `.bcf` (compressed BCF format)
 
 ### Reference Requirements
 
@@ -314,7 +314,7 @@ Notes:
 - **Index**: Pre-built Bowtie2 index (required only for `--input_format fastq`)
 - **Path**: Absolute paths required
 
-## 📊 Output Structure
+## Output Structure
 
 Default (per-sample outputs):
 
@@ -346,7 +346,7 @@ ChoCallate_output/
 └── trace.txt
 ```
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
 ### Quality Filtering
 
@@ -383,7 +383,7 @@ sed -i 's/-Xmx1g/-XmxNg/' $CONDA_PREFIX/bin/snver
 sed -i 's/-Xmx8g/-XmxNg/' $CONDA_PREFIX/bin/vardict-java
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 ChoCallate/
@@ -419,7 +419,7 @@ ChoCallate/
 └── README.md                    # This file
 ```
 
-## 🛠️ Dependencies
+## Dependencies
 
 All dependencies are managed via Conda:
 
@@ -444,36 +444,13 @@ All dependencies are managed via Conda:
 - parallel
 ```
 
-## 📈 Performance and Optimization
-
-### Parallel Processing
-
-- **Parallel processing**: Efficient parallel execution of variant callers
-- **Multi-threading**: Configurable CPU allocation per process
-- **Fork-based parallelism**: Multiple parallel instances for I/O intensive tasks
-- **Window-based consensus**: Parallel processing of genomic regions
-
-### Memory Management
-
-- **Streaming consensus**: Efficient memory usage for large datasets
-- **Intermediate cleanup**: Automatic removal of temporary files
-- **Memory optimization**: Efficient memory usage for large datasets
-- **SQLite-based consensus**: Fast in-memory database operations using Python scripts
-- **Window-based processing**: Parallel processing of genomic regions for memory efficiency
-- **BCF-native processing**: Compressed BCF format throughout the pipeline for optimal performance
-
-### Performance Improvements
-
-- **BCF Input/Output**: All variant callers now generate compressed BCF files for better performance
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
 1. **Memory errors**: Increase memory allocation for SNVer/VarDict
 2. **Disk space**: Monitor available disk space for intermediate files
-3. **Reference format**: FASTA can be compressed or uncompressed
-4. **Path issues**: Use absolute paths for input files
+3. **Path issues**: Use absolute paths for input files
 
 ### Debug Mode
 
@@ -509,7 +486,7 @@ nextflow run main.nf \
 ```
 
 
-## 📄 Citation
+## Citation
 
 **APA Style**:  
 Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline* [Computer software]. GitHub. https://github.com/alermol/ChoCallate
@@ -524,9 +501,9 @@ Ermolaev, A. (2025). *ChoCallate: Consensus variant calling pipeline* [Computer 
 }
 ```
 
-## 🗺️ Development Roadmap
+## Development Roadmap
 
-ChoCallate is actively developed with a clear vision for future enhancements. Here's our roadmap for upcoming versions:
+ChoCallate is actively developed with a clear vision for future enhancements. Here's a roadmap for upcoming versions:
 
 - Add New Germline Variant Callers
 - Add New Short Read Mapping Tools
@@ -539,16 +516,15 @@ ChoCallate is actively developed with a clear vision for future enhancements. He
 - Add Containerized Solution
 
 
-### 🛠️ Development Priorities
+### Development Priorities
 
 1. **Performance Optimization**: Implement advanced strategies to significantly reduce pipeline runtime
 2. **Error Handling**: Improved error recovery and user feedback
 3. **New Variant Callers**: Integration of cutting-edge tools
 4. **Quality Metrics**: Enhanced quality assessment and reporting
 5. **Format Support**: Additional input/output format compatibility
-6. **Testing**: Comprehensive test suite and validation
 
-### 🤝 Contributing to Development
+### Contributing to Development
 
 We welcome contributions from the community! Here's how you can help:
 
@@ -563,12 +539,12 @@ We welcome contributions from the community! Here's how you can help:
 1. Fork the repository
 2. Create a feature branch
 3. Implement your changes
-4. Add tests and documentation
+4. Add documentation
 5. Submit a pull request
 
 ---
 
-## 📜 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
