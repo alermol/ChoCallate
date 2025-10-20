@@ -53,6 +53,9 @@ process GENERATE_CONSENSUS {
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing zero BCF with bcftools"
     bcftools index zero.bcf
 
+    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Extracting chromosome names from zero BCF"
+    bcftools query -f '%CHROM' zero.bcf | uniq > zero_chr_names.txt
+
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Running consensus generation for SNPs in parallel (${task.cpus} threads)"
     parallel -j ${task.cpus} 'consensus_generation.sh {1} {#} ${sample} "snps" ${cons_threshold}' :::: genome_intervals.bed
     

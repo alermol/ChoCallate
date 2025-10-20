@@ -31,7 +31,7 @@ log_message "INFO" "Extracting region-specific zero BCF"
 bcftools view -r ${region} zero.bcf > ${rn}.zero.bcf
 
 log_message "INFO" "Extracting chromosome names from zero BCF"
-chr_names=$(bcftools query -f '%CHROM' zero.bcf | uniq)
+chr_names=$(cat zero_chr_names.txt)
 
 if [ ${mutation_type} == "snps" ]; then
     log_message "INFO" "Processing SNPs consensus"
