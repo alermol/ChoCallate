@@ -18,7 +18,6 @@ process PREPARE_BAM {
     """
     prepare_bam.sh \
         ${params.input_format} \
-        ${params.reads_type} \
         ${sample_id} \
         "${read1}" \
         "${read2}" \

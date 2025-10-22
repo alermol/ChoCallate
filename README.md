@@ -68,7 +68,6 @@ BAM input example (no Bowtie2 index required):
 nextflow run main.nf \
     --reference_genome /path/to/reference.fasta \
     --input_format bam \
-    --reads_type pe \
     --samples_tsv /path/to/samples_bam.tsv
 ```
 
@@ -140,7 +139,6 @@ nextflow run main.nf --help
 | Parameter | Default | Choices | Description |
 |-----------|---------|---------|-------------|
 | `--input_format` | `fastq` | `fastq`, `bam` | Selects whether samples TSV lists FASTQ reads or BAM files |
-| `--reads_type` | `pe` | `pe`, `se`, `mx` | Read type: paired-end, single-end, or mixed |
 | `--reads_source` | `gbs` | `gbs`, `wgs` | Data source: GBS or whole genome sequencing |
 | `--ploidy` | `2` | `≥2` | Ploidy level of the organism |
 
@@ -259,9 +257,8 @@ nextflow run main.nf \
 
 ### Samples TSV Format
 
-The structure of `--samples_tsv` depends on two parameters:
+The structure of `--samples_tsv` depends on the `--input_format` parameter:
 - `--input_format`: `fastq` (raw reads) or `bam` (pre-aligned)
-- `--reads_type`: `pe`, `se`, or `mx` (applies to FASTQ mode)
 
 Notes (applies to all modes):
 - No header line is expected; do not include a header row.
@@ -270,20 +267,23 @@ Notes (applies to all modes):
 #### FASTQ mode (`--input_format fastq`)
 
 Provide 4 columns per sample: `sample_id`, `R1`, `R2`, `SE`.
-- Required columns by `--reads_type`:
-  - `pe`: columns 1,2,3 required (R1,R2). Column 4 can be `-`.
-  - `se`: columns 1 and 4 required (SE). Columns 2 and 3 can be `-`.
-  - `mx`: all 4 columns required (R1,R2,SE).
+- At least one of columns 2, 3, or 4 must contain valid FASTQ file paths
+- **Valid read combinations:**
+  - **R1 + R2 only**: Paired-end reads (column 4 can be `-`)
+  - **SE only**: Single-end reads (columns 2 and 3 can be `-`)
+  - **R1 + R2 + SE**: Mixed reads (all three types)
+- If both R1 and R2 are provided, they must have equal counts
+- Empty columns can be marked with `-`
 
 Examples:
 ```bash
-# reads_type=pe
+# Paired-end reads
 sample1    /path/R1.fq.gz    /path/R2.fq.gz    -
 
-# reads_type=se
+# Single-end reads
 sample2    -                 -                 /path/SE.fq.gz
 
-# reads_type=mx
+# Mixed reads (paired-end + single-end)
 sample3    /path/R1.fq.gz    /path/R2.fq.gz    /path/SE.fq.gz
 ```
 
@@ -292,11 +292,10 @@ Accepted read formats: `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`.
 #### BAM mode (`--input_format bam`)
 
 Provide at least 2 columns per sample: `sample_id`, `bam_path`. Columns 3–4 are ignored.
-- `--reads_type` is accepted but does not affect BAM mode parsing.
 
 Example:
 ```bash
-sample1    /abs/path/sample1.bam    x    x
+sample1    /abs/path/sample1.bam    -    -
 ```
 
 Notes:

@@ -25,7 +25,6 @@ include {
     validateReferenceGenome;
     validateBowtie2Index;
     validatePloidy;
-    validateReadsType;
     validateReadsSource;
     validateConsensusType;
     validateLogLevel;
@@ -161,7 +160,7 @@ if (!outdir.exists()) {
     ])
 }
 
-def samplesValidation = validateTSVFile(params.samples_tsv, params.input_format, params.reads_type)
+def samplesValidation = validateTSVFile(params.samples_tsv, params.input_format)
 if (samplesValidation.valid) {
     logInfo("Samples TSV validation passed", [
         validation: "samples_tsv_format",

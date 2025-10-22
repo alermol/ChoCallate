@@ -39,7 +39,6 @@ def showHelp() {
     println ""
     println "INPUT FORMAT OPTIONS:"
     println "  --input_format <format>      Input format: 'fastq' or 'bam' (default: fastq)"
-    println "  --reads_type <type>          Read type: 'se', 'pe', or 'mx' (default: pe)"
     println "  --reads_source <source>      Source: 'gbs' or 'wgs' (default: gbs)\n"
     println ""
     println "VARIANT CALLING OPTIONS:"

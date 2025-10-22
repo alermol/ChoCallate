@@ -23,7 +23,6 @@ echo "==== TEST 1: input_format=fastq, reads_type=pe (should PASS) ===="
 nextflow run main.nf \
     --samples_tsv test_data/samples.tsv \
     --input_format fastq \
-    --reads_type pe \
     --reference_index test_data/arth_chr1.fasta.gz \
     --outdir test_data/chocallate_test_1 \
     --reference_genome test_data/arth_chr1.fasta.gz || echo "FAILED as expected?"
@@ -35,7 +34,6 @@ echo "==== TEST 2: input_format=bam, reads_type=pe (should PASS) ===="
 nextflow run main.nf \
     --samples_tsv test_data/samples.tsv \
     --input_format bam \
-    --reads_type pe \
     --outdir test_data/chocallate_test_2 \
     --reference_genome test_data/arth_chr1.fasta.gz || echo "FAILED as expected?"
 

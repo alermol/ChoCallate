@@ -88,7 +88,7 @@ def validateInputFormat(String inputFormat) {
     return [valid: true, value: inputFormat.toLowerCase()]
 }
 
-def validateTSVFile(String filePath, String inputFormat, String readsType) {
+def validateTSVFile(String filePath, String inputFormat) {
     def fileValidation = validateFile(filePath, "Samples TSV")
     if (!fileValidation.valid) {
         return fileValidation
@@ -108,14 +108,13 @@ def validateTSVFile(String filePath, String inputFormat, String readsType) {
     
     // Normalize for comparisons
     def fmt = (inputFormat ?: 'fastq').toLowerCase()
-    def rt = (readsType ?: '').toLowerCase()
 
     // Helpers to support comma-separated lists of paths in cells
     def parsePaths = { String s ->
         (s ?: '')
             .split(/\s*,\s*/)
             .collect { it.trim() }
-            .findAll { it }
+            .findAll { it && it != '-' }
     }
 
     def anyMissingPath = { List<String> paths ->
@@ -140,50 +139,65 @@ def validateTSVFile(String filePath, String inputFormat, String readsType) {
             if (!columns[0] || columns[0].trim().isEmpty()) {
                 return [valid: false, error: "Sample line ${i+1} has empty sample ID"]
             }
-            if (rt == 'se') {
-                def sePaths = parsePaths(columns[3])
-                if (sePaths.isEmpty()) {
-                    return [valid: false, error: "FASTQ se mode requires column 4 (SE read) in line ${i+1}"]
-                }
-                def missing = anyMissingPath(sePaths)
-                if (missing) {
-                    return [valid: false, error: "SE FASTQ file listed in column 4 does not exist (line ${i+1}): ${missing}"]
-                }
-            } else if (rt == 'pe') {
-                def r1Paths = parsePaths(columns[1])
-                def r2Paths = parsePaths(columns[2])
-                if (r1Paths.isEmpty() || r2Paths.isEmpty()) {
-                    return [valid: false, error: "FASTQ pe mode requires columns 2 and 3 (R1,R2) in line ${i+1}"]
-                }
-                if (r1Paths.size() != r2Paths.size()) {
-                    return [valid: false, error: "FASTQ pe mode requires equal number of R1 and R2 files (line ${i+1}): R1=${r1Paths.size()}, R2=${r2Paths.size()}"]
-                }
+            // For FASTQ, validate that at least one of the read columns has data
+            def r1Paths = parsePaths(columns[1])
+            def r2Paths = parsePaths(columns[2])
+            def sePaths = parsePaths(columns[3])
+            
+            // Early validation: Check for valid read combinations
+            def hasR1 = !r1Paths.isEmpty()
+            def hasR2 = !r2Paths.isEmpty()
+            def hasSE = !sePaths.isEmpty()
+            
+            // Valid combinations:
+            // 1. R1 + R2 only (paired-end)
+            // 2. SE only (single-end)
+            // 3. R1 + R2 + SE (mixed)
+            def isValidCombination = (hasR1 && hasR2 && !hasSE) ||  // Paired-end only
+                                    (!hasR1 && !hasR2 && hasSE) ||  // Single-end only
+                                    (hasR1 && hasR2 && hasSE)        // Mixed
+            
+            if (!isValidCombination) {
+                def combination = []
+                if (hasR1) combination << "R1"
+                if (hasR2) combination << "R2"
+                if (hasSE) combination << "SE"
+                def combinationStr = combination.isEmpty() ? "none" : combination.join("+")
+                return [valid: false, error: "Invalid read combination '${combinationStr}' in line ${i+1}. Valid combinations: R1+R2 (paired-end), SE (single-end), or R1+R2+SE (mixed)"]
+            }
+            
+            // Check if any read files are provided (redundant but kept for safety)
+            if (r1Paths.isEmpty() && r2Paths.isEmpty() && sePaths.isEmpty()) {
+                return [valid: false, error: "FASTQ mode requires at least one read file in columns 2, 3, or 4 (line ${i+1})"]
+            }
+            
+            // Validate R1 files if provided
+            if (!r1Paths.isEmpty()) {
                 def missingR1 = anyMissingPath(r1Paths)
                 if (missingR1) {
-                    return [valid: false, error: "PE FASTQ R1 listed in column 2 does not exist (line ${i+1}): ${missingR1}"]
+                    return [valid: false, error: "FASTQ R1 file listed in column 2 does not exist (line ${i+1}): ${missingR1}"]
                 }
+            }
+            
+            // Validate R2 files if provided
+            if (!r2Paths.isEmpty()) {
                 def missingR2 = anyMissingPath(r2Paths)
                 if (missingR2) {
-                    return [valid: false, error: "PE FASTQ R2 listed in column 3 does not exist (line ${i+1}): ${missingR2}"]
+                    return [valid: false, error: "FASTQ R2 file listed in column 3 does not exist (line ${i+1}): ${missingR2}"]
                 }
-            } else if (rt == 'mx') {
-                def r1Paths = parsePaths(columns[1])
-                def r2Paths = parsePaths(columns[2])
-                def sePaths = parsePaths(columns[3])
-                if (r1Paths.isEmpty() || r2Paths.isEmpty() || sePaths.isEmpty()) {
-                    return [valid: false, error: "FASTQ mx mode requires columns 2,3,4 (R1,R2,SE) in line ${i+1}"]
-                }
-                if (r1Paths.size() != r2Paths.size()) {
-                    return [valid: false, error: "FASTQ mx mode requires equal number of R1 and R2 files (line ${i+1}): R1=${r1Paths.size()}, R2=${r2Paths.size()}"]
-                }
-                def missingR1 = anyMissingPath(r1Paths)
-                if (missingR1) return [valid: false, error: "MX FASTQ R1 listed in column 2 does not exist (line ${i+1}): ${missingR1}"]
-                def missingR2 = anyMissingPath(r2Paths)
-                if (missingR2) return [valid: false, error: "MX FASTQ R2 listed in column 3 does not exist (line ${i+1}): ${missingR2}"]
+            }
+            
+            // Validate SE files if provided
+            if (!sePaths.isEmpty()) {
                 def missingSE = anyMissingPath(sePaths)
-                if (missingSE) return [valid: false, error: "MX FASTQ SE listed in column 4 does not exist (line ${i+1}): ${missingSE}"]
-            } else {
-                return [valid: false, error: "Invalid reads_type '${readsType}' for FASTQ input. Expected one of: se, pe, mx"]
+                if (missingSE) {
+                    return [valid: false, error: "FASTQ SE file listed in column 4 does not exist (line ${i+1}): ${missingSE}"]
+                }
+            }
+            
+            // If both R1 and R2 are provided, they should have equal counts
+            if (!r1Paths.isEmpty() && !r2Paths.isEmpty() && r1Paths.size() != r2Paths.size()) {
+                return [valid: false, error: "FASTQ R1 and R2 files must have equal counts (line ${i+1}): R1=${r1Paths.size()}, R2=${r2Paths.size()}"]
             }
         } else if (fmt == 'bam') {
             if (columns.size() < 2) {
@@ -375,13 +389,6 @@ def validatePloidy(Number ploidy) {
     return [valid: true, value: ploidy]
 }
 
-def validateReadsType(String readsType) {
-    def validTypes = ['se', 'pe', 'mx']
-    if (!readsType || !validTypes.contains(readsType)) {
-        return [valid: false, error: "Invalid reads_type: ${readsType}. Valid options: ${validTypes.join(', ')}"]
-    }
-    return [valid: true, value: readsType]
-}
 
 def validateReadsSource(String readsSource) {
     def validSources = ['gbs', 'wgs']
@@ -445,7 +452,7 @@ def validateAllParameters(Map params) {
     def inputFormat = inputFormatValidation.valid ? inputFormatValidation.value : 'fastq'
 
     // File validations
-    def samplesValidation = validateTSVFile(params.samples_tsv, inputFormat, params.reads_type)
+    def samplesValidation = validateTSVFile(params.samples_tsv, inputFormat)
     if (!samplesValidation.valid) {
         errors << samplesValidation.error
     }
@@ -540,16 +547,6 @@ def validateAllParameters(Map params) {
     }
     
     // String parameter validations
-    if (inputFormat == 'fastq') {
-        def readsTypeValidation = validateReadsType(params.reads_type)
-        if (!readsTypeValidation.valid) {
-            errors << readsTypeValidation.error
-        }
-    } else {
-        if (params.reads_type && params.reads_type !in ['se','pe','mx']) {
-            warnings << "reads_type (${params.reads_type}) is ignored when input_format=bam"
-        }
-    }
     
     def readsSourceValidation = validateReadsSource(params.reads_source)
     if (!readsSourceValidation.valid) {

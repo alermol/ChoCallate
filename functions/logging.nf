@@ -346,7 +346,6 @@ def initLogging() {
                     outdir: params.outdir,
                     input_format: params.input_format,
                     ploidy: params.ploidy,
-                    reads_type: params.reads_type,
                     reads_source: params.reads_source,
                     effective_callers: params.effective_callers,
                     min_coverage: params.min_coverage,
