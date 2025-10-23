@@ -22,11 +22,7 @@ echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Process started - 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Creating intermediate subfolder for BAM preparation"
 mkdir -p "${sample_id}_bam_prep"
 
-if [[ "${input_format}" == "bam" ]]; then
-  echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Detected BAM input; skipping alignment"
-  gatk LeftAlignIndels -I "${read1}" -O "${sample_id}.bam" -R "${ref_genome}" -OBI false
-else
-  echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Running Bowtie2 alignment with ${cpus} threads"
+if [[ "${input_format}" == "fastq" ]]; then
   if [ "${read1}" != '-' ] && [ "${read2}" != '-' ] && [ "${read3}" == '-' ]; then
     echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Paired-end reads detected"
     bowtie2 --threads ${cpus} ${extra_bowtie2_args} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "${ref_index}" -1 "${read1}" -2 "${read2}" | \
@@ -48,6 +44,9 @@ else
     echo "[$(date -Iseconds)] [ERROR] [PREPARE_BAM] [${sample_id}] No reads detected" >&2
     exit 1
   fi
+else
+  echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Detected BAM input; skipping alignment"
+  ln -sf "${read1}" "${sample_id}_bam_prep/${sample_id}.primary.bam"
 fi
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Running LeftAlignIndels on primary BAM"
