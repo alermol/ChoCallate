@@ -1,5 +1,5 @@
 process CALLING {
-    maxForks 1
+    maxForks params.calling_forks
     cpus 1
 
     tag "${bam.baseName}"
