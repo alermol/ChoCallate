@@ -50,11 +50,11 @@ else
 fi
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Running LeftAlignIndels on primary BAM"
-gatk LeftAlignIndels -I "${sample_id}_bam_prep/${sample_id}.primary.bam" -O "${sample_id}_bam_prep/${sample_id}.bam" -R "${ref_genome}" -OBI false
+gatk LeftAlignIndels -I "${sample_id}_bam_prep/${sample_id}.primary.bam" -O "${sample_id}.bam" -R "${ref_genome}" -OBI false
 
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Indexing final BAM with samtools"
-samtools index --csi --threads ${cpus} "${sample_id}_bam_prep/${sample_id}.bam"
+samtools index --csi --threads ${cpus} "${sample_id}.bam"
 
 if [ "${cleanup_intermediate_subfolders}" = "true" ]; then
   rm -rf "${sample_id}_bam_prep"
