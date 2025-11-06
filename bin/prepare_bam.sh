@@ -46,7 +46,7 @@ if [[ "${input_format}" == "fastq" ]]; then
   fi
 else
   echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Detected BAM input; skipping alignment"
-  ln -sf "${read1}" "${sample_id}_bam_prep/${sample_id}.primary.bam"
+  samtools addreplacerg -r "@RG\tID:${sample_id}\tSM:${sample_id}" -o "${sample_id}_bam_prep/${sample_id}.primary.bam" "${read1}"
 fi
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Running LeftAlignIndels on primary BAM"
