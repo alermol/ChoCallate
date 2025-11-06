@@ -9,7 +9,6 @@ process PREPARE_BAM {
     path(genome_dictionary)
     tuple path(ref_genome), path(genome_fai)
     val(ref_index)
-    val(bowtie2_extra_args)
 
     output:
     tuple path("${sample_id}.bam"), path("${sample_id}.bam.csi"), emit: bam
@@ -30,7 +29,8 @@ process PREPARE_BAM {
         ${task.cpus} \
         "${params.cleanup_intermediate_subfolders}" \
         "${params.cleanup_input_symlinks}" \
-        "${params.bowtie2_extra_args}"
+        "${params.bowtie2_extra_args}" \
+        "${params.gatk_leftalignindels_extra_args}"
     """
 }
 

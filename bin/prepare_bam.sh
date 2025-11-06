@@ -16,6 +16,7 @@ cpus="${11}"
 cleanup_intermediate_subfolders="${12}"
 cleanup_input_symlinks="${13}"
 extra_bowtie2_args="${14}"
+extra_gatk_leftalignindels_args="${15}"
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Process started - Mapping reads"
 
@@ -50,7 +51,7 @@ else
 fi
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Running LeftAlignIndels on primary BAM"
-gatk LeftAlignIndels -I "${sample_id}_bam_prep/${sample_id}.primary.bam" -O "${sample_id}.bam" -R "${ref_genome}" -OBI false
+gatk LeftAlignIndels -I "${sample_id}_bam_prep/${sample_id}.primary.bam" -O "${sample_id}.bam" -R "${ref_genome}" -OBI false ${extra_gatk_leftalignindels_args}
 
 
 echo "[$(date -Iseconds)] [INFO] [PREPARE_BAM] [${sample_id}] Indexing final BAM with samtools"
