@@ -171,13 +171,14 @@ nextflow run main.nf --help
 | `--win_size` | `1000000` | Window size (in bp) for parallel consensus generation |
 | `--debug` | `false` | Keep working directory after pipeline completion |
 | `--bowtie2_extra_args` | `""` | Extra arguments passed directly to Bowtie2 during alignment (use as is) |
-| `--bcftools_mpileup_extra_args` | `""` | Extra arguments appended to `bcftools mpileup` |
-| `--bcftools_call_extra_args` | `""` | Extra arguments appended to `bcftools call` |
-| `--freebayes_extra_args` | `""` | Extra arguments appended to `freebayes` |
-| `--gatk4_extra_args` | `""` | Extra arguments appended to `gatk HaplotypeCaller` |
-| `--snver_extra_args` | `""` | Extra arguments appended to `snver` |
-| `--vardict_extra_args` | `""` | Extra arguments appended to `vardict-java` |
-| `--bcftools_merge_extra_args` | `""` | Extra arguments appended to `bcftools merge` |
+| `--gatk_leftalignindels_extra_args` | `""` | Extra arguments passed to gatk LeftAlignIndels (use as is) |
+| `--bcftools_mpileup_extra_args` | `""` | Extra arguments appended to `bcftools mpileup` (use as is)|
+| `--bcftools_call_extra_args` | `""` | Extra arguments appended to `bcftools call` (use as is)|
+| `--freebayes_extra_args` | `""` | Extra arguments appended to `freebayes` (use as is)|
+| `--gatk4_extra_args` | `""` | Extra arguments appended to `gatk HaplotypeCaller` (use as is)|
+| `--snver_extra_args` | `""` | Extra arguments appended to `snver` (use as is)|
+| `--vardict_extra_args` | `""` | Extra arguments appended to `vardict-java` (use as is)|
+| `--bcftools_merge_extra_args` | `""` | Extra arguments appended to `bcftools merge` (use as is)|
 | `--merge_bcfs_forks` | `1` | Number of parallel merge processes |
 | `--single_file` | `false` | If `true`, output one merged pair of final BCFs |
 
