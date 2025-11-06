@@ -264,9 +264,7 @@ workflow {
     PREPARE_BAM(sample_run_ch,
                 CREATE_SEQ_DICT.out.gen_dict,
                 CREATE_FAI_INDEX.out.fai_index,
-                ref_index,
-                params.bowtie2_extra_args,
-                params.gatk_leftalignindels_extra_args)
+                ref_index)
 
     COVERAGE_GENERATION(PREPARE_BAM.out.bam)
 
