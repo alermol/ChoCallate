@@ -427,14 +427,6 @@ def validateWindowSize(Number winSize) {
         return [valid: false, error: "Window size is not specified"]
     }
     
-    if (winSize < 1000000) {
-        return [valid: false, error: "Window size (${winSize}) is too small. Minimum: 1000000 bp"]
-    }
-    
-    if (winSize > 10000000) {
-        return [valid: false, error: "Window size (${winSize}) is too large. Maximum: 10000000 bp"]
-    }
-    
     return [valid: true, value: winSize]
 }
 
@@ -586,10 +578,6 @@ def validateAllParameters(Map params) {
     
     if (params.min_base_quality < 5) {
         warnings << "min_base_quality (${params.min_base_quality}) is low. This may result in poor quality variant calls."
-    }
-    
-    if (params.win_size > 5000000) {
-        warnings << "win_size (${params.win_size}) is very large. This may impact memory usage and processing time."
     }
     
     return [valid: errors.isEmpty(), errors: errors, warnings: warnings]
