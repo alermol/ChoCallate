@@ -169,6 +169,8 @@ nextflow run main.nf --help
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--win_size` | `1000000` | Window size (in bp) for parallel consensus generation |
+| `--test_run` | `false` | Enable test mode: process only the first `test_run_limit` samples from `--samples_tsv` |
+| `--test_run_limit` | `2` | Maximum number of samples to process when `--test_run` is enabled |
 | `--debug` | `false` | Keep working directory after pipeline completion |
 | `--bowtie2_extra_args` | `""` | Extra arguments passed directly to Bowtie2 during alignment (use as is) |
 | `--gatk_leftalignindels_extra_args` | `""` | Extra arguments passed to gatk LeftAlignIndels (use as is) |
@@ -359,6 +361,19 @@ nextflow run main.nf \
     --min_base_quality 30 \
     --min_map_qual 20 \
     --min_snp_qual 30
+```
+
+### Test Run Mode
+
+Use test mode to quickly validate configuration on a small subset of samples:
+
+```bash
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
+    --test_run true \
+    --test_run_limit 2
 ```
 
 ### Resource Allocation

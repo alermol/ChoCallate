@@ -247,11 +247,20 @@ if (params.debug) {
 workflow {
     logWorkflowStart()
     
-    Channel
-        .fromPath(params.samples_tsv)
-        .splitCsv(header: false, sep: '\t')
-        .map{row -> tuple(row[0], row[1], row[2], row[3])}
-        .set{sample_run_ch}
+    if (params.test_run) {
+        logInfo("Test run mode enabled")
+        Channel
+            .fromPath(params.samples_tsv)
+            .splitCsv(header: false, sep: '\t', limit: params.test_run_limit)
+            .map{row -> tuple(row[0], row[1], row[2], row[3])}
+            .set{sample_run_ch}
+    } else {
+        Channel
+            .fromPath(params.samples_tsv)
+            .splitCsv(header: false, sep: '\t')
+            .map{row -> tuple(row[0], row[1], row[2], row[3])}
+            .set{sample_run_ch}
+    }
     
     logInfo("Sample channel created", [samples_count: "processing"])
 
