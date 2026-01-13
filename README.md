@@ -17,7 +17,7 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **Configurable quality filtering**: Multiple filtering steps based on coverage, base quality, and SNP quality
 - **Comprehensive logging**: Structured JSON and text logging with detailed execution tracking and performance monitoring
 - **Smart cleanup**: Configurable cleanup options with debug mode preservation
-- **BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance
+- **BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance (optional VCF output available)
 - **Optional single-file output**: Merge per-sample results into single multi-sample BCF
 
 ## Quick Start
@@ -106,7 +106,7 @@ nextflow run main.nf --help
 4. **Variant Calling**: Parallel execution of selected variant callers
 5. **Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
 6. **Optional Merge Step**: When enabled, merges all samples' BCFs into single final SNP/INDEL BCFs
-7. **Output**: Final compressed BCF files for SNPs and INDELs
+7. **Output**: Final compressed BCF (or VCF when `--output_vcf` is enabled) files for SNPs and INDELs
 
 ## Configuration
 
@@ -124,6 +124,7 @@ nextflow run main.nf --help
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--outdir` | `ChoCallate_output` | Output directory for results |
+| `--output_vcf` | `false` | Output compressed VCF instead of compressed BCF |
 
 ### Quality and Filtering Parameters
 
@@ -308,7 +309,7 @@ Notes:
 - Input reads (FASTQ mode): `.fq.gz`, `.fastq.gz`, `.fq`, `.fastq`
 - Reference genome: `.fasta`, `.fa`, `.fna` (gzipped or ungzipped)
 - Variant caller output: `.bcf` (compressed BCF format)
-- Final output: `.bcf` (compressed BCF format)
+- Final output: `.bcf` (compressed BCF format) or `.vcf.gz` (compressed VCF format when `--output_vcf` is enabled)
 
 ### Reference Requirements
 
