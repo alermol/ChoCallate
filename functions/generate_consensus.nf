@@ -4,8 +4,10 @@ process GENERATE_CONSENSUS {
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.bcf', enabled: !params.single_file
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.bcf', enabled: !params.single_file
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.bcf', enabled: !params.output_vcf && !params.single_file
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.bcf', enabled: !params.output_vcf && !params.single_file
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.vcf.gz', enabled: params.output_vcf && !params.single_file
+    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.vcf.gz', enabled: params.output_vcf && !params.single_file
 
     input:
     tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
@@ -15,8 +17,8 @@ process GENERATE_CONSENSUS {
     val(cons_threshold)
 
     output:
-    tuple val("${sample}"), path("${sample}.snps.bcf"), emit: final_snps
-    tuple val("${sample}"), path("${sample}.indels.bcf"), emit: final_indels
+    tuple val("${sample}"), path("${sample}.snps.*"), emit: final_snps
+    tuple val("${sample}"), path("${sample}.indels.*"), emit: final_indels
 
     script:
     """
@@ -87,9 +89,15 @@ process GENERATE_CONSENSUS {
         
     echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indels consensus BCF created"
     
-    echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Moving final outputs to parent directory"
-    mv ${sample}.snps.bcf ../${sample}.snps.bcf
-    mv ${sample}.indels.bcf ../${sample}.indels.bcf
+    if [ "${params.output_vcf}" = "false" ]; then
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Moving final outputs to parent directory"
+        mv ${sample}.snps.bcf ../${sample}.snps.bcf
+        mv ${sample}.indels.bcf ../${sample}.indels.bcf
+    else
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Converting consensus BCF to VCF"
+        bcftools view -Oz -o ../${sample}.snps.vcf.gz ${sample}.snps.bcf
+        bcftools view -Oz -o ../${sample}.indels.vcf.gz ${sample}.indels.bcf
+    fi
     
     popd > /dev/null
 
