@@ -303,13 +303,8 @@ workflow {
                        GENERATE_ZERO_BCF.out.zero_bcf,
                        cons_threshold)
 
-    if (params.single_file) {
-        MERGE_BCFS(GENERATE_CONSENSUS.out.final_snps.map{it[1]}.collect(), 
-                   GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect())
-        MERGED = MERGE_BCFS.out.merged
-    } else {
-        MERGED = true
-    }
+    MERGE_BCFS(GENERATE_CONSENSUS.out.final_snps.map{it[1]}.collect(), 
+               GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect())
 
     if (params.enable_sample_cleanup && !params.debug) {
         logInfo("Sample-level cleanup enabled - cleaning intermediate files", [
@@ -326,7 +321,7 @@ workflow {
                             GENERATE_ZERO_BCF.out.zero_bcf,
                             CALLING.out.snps_vcf,
                             CALLING.out.indels_vcf,
-                            MERGED,
+                            MERGE_BCFS.out.merged,
                             params.cleanup_intermediate_bam,
                             params.cleanup_intermediate_bcf)
     } else if (params.enable_sample_cleanup && params.debug) {

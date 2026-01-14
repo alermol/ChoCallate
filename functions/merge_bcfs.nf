@@ -8,8 +8,8 @@ process MERGE_BCFS {
     publishDir "${params.outdir}/", mode: 'move', pattern: 'final.indels.vcf.gz', enabled: params.output_vcf
 
     input:
-    path('?.snps.*', arity: '1..*')
-    path('?.indels.*', arity: '1..*')
+    path('?.snps', arity: '1..*')
+    path('?.indels', arity: '1..*')
 
     output:
     path 'final.snps.*', emit: final_snps
@@ -21,14 +21,14 @@ process MERGE_BCFS {
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Process started - Merging BCFs"
 
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Indexing SNPs BCFs"
-    parallel -j ${task.cpus} 'bcftools index --csi --threads 1 {}' ::: *.snps.* 
+    parallel -j ${task.cpus} 'bcftools index --csi --threads 1 {}' ::: *.snps
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Indexing indels BCFs"
-    parallel -j ${task.cpus} 'bcftools index --csi --threads 1 {}' ::: *.indels.*
+    parallel -j ${task.cpus} 'bcftools index --csi --threads 1 {}' ::: *.indels
 
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Merging SNPs BCFs"
-    bcftools merge --force-single --threads ${task.cpus} -Ob -o final.snps.bcf ${params.bcftools_merge_extra_args} *.snps.*
+    bcftools merge --force-single --threads ${task.cpus} -Ob -o final.snps.bcf ${params.bcftools_merge_extra_args} *.snps
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Merging indels BCFs"
-    bcftools merge --force-single --threads ${task.cpus} -Ob -o final.indels.bcf ${params.bcftools_merge_extra_args} *.indels.*
+    bcftools merge --force-single --threads ${task.cpus} -Ob -o final.indels.bcf ${params.bcftools_merge_extra_args} *.indels
 
     if [ "${params.output_vcf}" = "true" ]; then
         bcftools view -Oz -o final.snps.vcf.gz final.snps.bcf
@@ -37,8 +37,8 @@ process MERGE_BCFS {
     fi
 
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Cleaning up intermediate BCFs"
-    find . -name '*.snps.bcf' -type l -delete
-    find . -name '*.indels.bcf' -type l -delete
+    find . -name '*.snps' -type l -delete
+    find . -name '*.indels' -type l -delete
     find . -name '*.csi' -type f -delete
 
     echo "[\$(date -Iseconds)] [INFO] [MERGE_BCFS] Process completed - Merged BCFs"

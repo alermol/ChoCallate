@@ -4,10 +4,10 @@ process GENERATE_CONSENSUS {
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.bcf', enabled: !params.output_vcf && !params.single_file
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.bcf', enabled: !params.output_vcf && !params.single_file
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.snps.vcf.gz', enabled: params.output_vcf && !params.single_file
-    publishDir "${params.outdir}/${sample}/", mode: 'move', pattern: '*.indels.vcf.gz', enabled: params.output_vcf && !params.single_file
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.bcf', enabled: !params.output_vcf && params.per_sample_out
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.bcf', enabled: !params.output_vcf && params.per_sample_out
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz', enabled: params.output_vcf && params.per_sample_out
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz', enabled: params.output_vcf && params.per_sample_out
 
     input:
     tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
