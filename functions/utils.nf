@@ -571,6 +571,10 @@ def validateAllParameters(Map params) {
         }
     }
     
+    if (!params.single_file && !params.per_sample_out) {
+        errors << "Parameters single_file and per_sample_out cannot both be false. At least one output mode must be enabled."
+    }
+    
     // Warnings for potentially problematic configurations
     if (params.min_coverage < 2) {
         warnings << "min_coverage (${params.min_coverage}) is very low. This may result in many false positive variants."

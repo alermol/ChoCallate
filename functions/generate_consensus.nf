@@ -4,10 +4,13 @@ process GENERATE_CONSENSUS {
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.bcf', enabled: !params.output_vcf && params.per_sample_out
-    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.bcf', enabled: !params.output_vcf && params.per_sample_out
-    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz', enabled: params.output_vcf && params.per_sample_out
-    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz', enabled: params.output_vcf && params.per_sample_out
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.bcf', enabled: !params.output_vcf && params.per_sample_out && !params.merge_variants
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.bcf', enabled: !params.output_vcf && params.per_sample_out && !params.merge_variants
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.merged.bcf', enabled: !params.output_vcf && params.per_sample_out && params.merge_variants
+
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.snps.vcf.gz', enabled: params.output_vcf && params.per_sample_out && !params.merge_variants
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.indels.vcf.gz', enabled: params.output_vcf && params.per_sample_out && !params.merge_variants
+    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'copy', pattern: '*.merged.vcf.gz', enabled: params.output_vcf && params.per_sample_out && params.merge_variants
 
     input:
     tuple val(sample), path("${sample}.snps_*.bcf", arity: '3..*')
@@ -19,6 +22,7 @@ process GENERATE_CONSENSUS {
     output:
     tuple val("${sample}"), path("${sample}.snps.*"), emit: final_snps
     tuple val("${sample}"), path("${sample}.indels.*"), emit: final_indels
+    tuple val("${sample}"), path("${sample}.merged.*"), emit: final_merged
 
     script:
     """
@@ -93,10 +97,28 @@ process GENERATE_CONSENSUS {
         echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Moving final outputs to parent directory"
         mv ${sample}.snps.bcf ../${sample}.snps.bcf
         mv ${sample}.indels.bcf ../${sample}.indels.bcf
+
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing SNP BCF with tabix"
+        tabix -C --threads ${task.cpus} ../${sample}.snps.bcf
+        tabix -C --threads ${task.cpus} ../${sample}.indels.bcf
+
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating SNP and indel BCFs"
+        bcftools concat -a --threads ${task.cpus} -Ob -o ../${sample}.merged.bcf ../${sample}.snps.bcf ../${sample}.indels.bcf
+
+        rm ../${sample}.snps.bcf.csi ../${sample}.indels.bcf.csi
     else
         echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Converting consensus BCF to VCF"
-        bcftools view -Oz -o ../${sample}.snps.vcf.gz ${sample}.snps.bcf
-        bcftools view -Oz -o ../${sample}.indels.vcf.gz ${sample}.indels.bcf
+        bcftools view -Oz --threads ${task.cpus} -o ../${sample}.snps.vcf.gz ${sample}.snps.bcf
+        bcftools view -Oz --threads ${task.cpus} -o ../${sample}.indels.vcf.gz ${sample}.indels.bcf
+
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Indexing SNP VCF with tabix"
+        tabix -C --threads ${task.cpus} ../${sample}.snps.vcf.gz
+        tabix -C --threads ${task.cpus} ../${sample}.indels.vcf.gz
+
+        echo "[\$(date -Iseconds)] [INFO] [GENERATE_CONSENSUS] [${sample}] Concatenating SNP and indel VCFs"
+        bcftools concat -a --threads ${task.cpus} -Oz -o ../${sample}.merged.vcf.gz ../${sample}.snps.vcf.gz ../${sample}.indels.vcf.gz
+
+        rm ../${sample}.snps.vcf.gz.csi ../${sample}.indels.vcf.gz.csi
     fi
     
     popd > /dev/null

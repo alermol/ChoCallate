@@ -305,10 +305,11 @@ workflow {
 
     if (params.single_file) {
         MERGE_BCFS(GENERATE_CONSENSUS.out.final_snps.map{it[1]}.collect(), 
-                   GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect())
+                   GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect(),
+                   GENERATE_CONSENSUS.out.final_merged.map{it[1]}.collect())
         MERGED = MERGE_BCFS.out.merged
     } else {
-        MERGED = true   
+        MERGED = true
     }
 
     if (params.enable_sample_cleanup && !params.debug) {
