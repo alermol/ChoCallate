@@ -125,6 +125,7 @@ nextflow run main.nf --help
 |-----------|---------|-------------|
 | `--outdir` | `ChoCallate_output` | Output directory for results |
 | `--output_vcf` | `false` | Output compressed VCF instead of compressed BCF |
+| `--per_sample_out` | `true` | Enable/disable per-sample output files (when enabled, outputs are saved to `per_sample/{sample}/` directory) |
 
 ### Quality and Filtering Parameters
 
@@ -183,7 +184,7 @@ nextflow run main.nf --help
 | `--vardict_extra_args` | `""` | Extra arguments appended to `vardict-java` (use as is)|
 | `--bcftools_merge_extra_args` | `""` | Extra arguments appended to `bcftools merge` (use as is)|
 | `--merge_bcfs_forks` | `1` | Number of parallel merge processes |
-| `--single_file` | `false` | If `true`, output one merged pair of final BCFs |
+| `--single_file` | `false` | If `true`, output one merged pair of final BCFs/VCFs |
 
 ### Cleanup Configuration Parameters
 
@@ -319,16 +320,17 @@ Notes:
 
 ## Output Structure
 
-Default (per-sample outputs):
+Default (`--per_sample_out true`, `--single_file false`):
 
 ```
 ChoCallate_output/
-├── sample1/
-│   ├── sample1.snps.bcf      # Final SNPs BCF (compressed)
-│   └── sample1.indels.bcf    # Final INDELs BCF (compressed)
-├── sample2/
-│   ├── sample2.snps.bcf
-│   └── sample2.indels.bcf
+├── per_sample/
+│   ├── sample1/
+│   │   ├── sample1.snps.bcf      # Final SNPs BCF (compressed)
+│   │   └── sample1.indels.bcf    # Final INDELs BCF (compressed)
+│   └── sample2/
+│       ├── sample2.snps.bcf
+│       └── sample2.indels.bcf
 ├── ChoCallate_errors.log         # Error log for the entire pipeline
 ├── ChoCallate.log                # Main log file for the pipeline
 ├── pipeline_report.html          # Pipeline summary report (HTML)
@@ -336,10 +338,17 @@ ChoCallate_output/
 └── trace.txt                     # Detailed process trace file
 ```
 
-Single-file mode (`--single_file`):
+Single-file mode (`--single_file true`):
 
 ```
 ChoCallate_output/
+├── per_sample/                   # Present when --per_sample_out true
+│   ├── sample1/
+│   │   ├── sample1.snps.bcf
+│   │   └── sample1.indels.bcf
+│   └── sample2/
+│       ├── sample2.snps.bcf
+│       └── sample2.indels.bcf
 ├── final.snps.bcf               # Merged SNPs across all samples
 ├── final.indels.bcf             # Merged INDELs across all samples
 ├── ChoCallate_errors.log
