@@ -19,6 +19,7 @@ ChoCallate addresses a critical challenge in variant calling: individual variant
 - **Smart cleanup**: Configurable cleanup options with debug mode preservation
 - **BCF-native processing**: Uses compressed BCF format throughout the pipeline for optimal performance (optional VCF output available)
 - **Optional single-file output**: Merge per-sample results into single multi-sample BCF
+- **Optional variant merging**: Combine SNPs and INDELs into single merged file
 
 ## Quick Start
 
@@ -105,8 +106,9 @@ nextflow run main.nf --help
 3. **Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
 4. **Variant Calling**: Parallel execution of selected variant callers
 5. **Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
-6. **Optional Merge Step**: When enabled, merges all samples' BCFs into single final SNP/INDEL BCFs
-7. **Output**: Final compressed BCF (or VCF when `--output_vcf` is enabled) files for SNPs and INDELs
+6. **Optional Variant Merging**: When `--merge_variants` is enabled, SNPs and INDELs are concatenated into single merged files per sample
+7. **Optional Sample Merge Step**: When `--single_file` is enabled, merges all samples' BCFs/VCFs into single final SNP/INDEL BCFs/VCFs (or merged BCF/VCF when `--merge_variants` is also enabled)
+8. **Output**: Final compressed BCF (or VCF when `--output_vcf` is enabled) files for SNPs and INDELs, or merged variants when `--merge_variants` is enabled
 
 ## Configuration
 
@@ -126,6 +128,7 @@ nextflow run main.nf --help
 | `--outdir` | `ChoCallate_output` | Output directory for results |
 | `--output_vcf` | `false` | Output compressed VCF instead of compressed BCF |
 | `--per_sample_out` | `true` | Enable/disable per-sample output files (when enabled, outputs are saved to `per_sample/{sample}/` directory) |
+| `--merge_variants` | `false` | When enabled, merge SNPs and INDELs into single merged files (per-sample and/or final merged outputs) |
 
 ### Quality and Filtering Parameters
 
@@ -320,7 +323,7 @@ Notes:
 
 ## Output Structure
 
-Default (`--per_sample_out true`, `--single_file false`):
+Default (`--per_sample_out true`, `--single_file false`, `--merge_variants false`):
 
 ```
 ChoCallate_output/
@@ -338,7 +341,23 @@ ChoCallate_output/
 └── trace.txt                     # Detailed process trace file
 ```
 
-Single-file mode (`--single_file true`):
+With variant merging (`--merge_variants true`, `--per_sample_out true`):
+
+```
+ChoCallate_output/
+├── per_sample/
+│   ├── sample1/
+│   │   └── sample1.merged.bcf    # Merged SNPs and INDELs BCF
+│   └── sample2/
+│       └── sample2.merged.bcf
+├── ChoCallate_errors.log
+├── ChoCallate.log
+├── pipeline_report.html
+├── timeline_report.html
+└── trace.txt
+```
+
+Single-file mode (`--single_file true`, `--merge_variants false`):
 
 ```
 ChoCallate_output/
@@ -351,6 +370,23 @@ ChoCallate_output/
 │       └── sample2.indels.bcf
 ├── final.snps.bcf               # Merged SNPs across all samples
 ├── final.indels.bcf             # Merged INDELs across all samples
+├── ChoCallate_errors.log
+├── ChoCallate.log
+├── pipeline_report.html
+├── timeline_report.html
+└── trace.txt
+```
+
+Single-file mode with variant merging (`--single_file true`, `--merge_variants true`):
+
+```
+ChoCallate_output/
+├── per_sample/                   # Present when --per_sample_out true
+│   ├── sample1/
+│   │   └── sample1.merged.bcf
+│   └── sample2/
+│       └── sample2.merged.bcf
+├── final.merged.bcf              # Merged SNPs and INDELs across all samples
 ├── ChoCallate_errors.log
 ├── ChoCallate.log
 ├── pipeline_report.html
@@ -384,6 +420,29 @@ nextflow run main.nf \
     --samples_tsv /path/to/samples.tsv \
     --test_run true \
     --test_run_limit 2
+```
+
+### Variant Merging
+
+Merge SNPs and INDELs into single file:
+
+```bash
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
+    --merge_variants true
+```
+
+When `--merge_variants` is enabled, each sample will produce a single merged BCF/VCF file containing both SNPs and INDELs. This can be combined with `--single_file` to produce a single merged file across all samples:
+
+```bash
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
+    --merge_variants true \
+    --single_file true
 ```
 
 ### Resource Allocation
