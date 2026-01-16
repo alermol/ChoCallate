@@ -102,7 +102,7 @@ nextflow run main.nf --help
 
 
 1. **Alignment**: Bowtie2-based read alignment with quality filtering and BAM preparation
-2. **Coverage Analysis**: Generate coverage information for targeted variant calling
+2. **Coverage Analysis**: Generate coverage information for targeted variant calling (optionally restricted to custom BED file regions)
 3. **Zero BCF Generation**: Create position-template (zero) BCF with all covered positions
 4. **Variant Calling**: Parallel execution of selected variant callers
 5. **Consensus Generation**: Merges results using configurable consensus rules with Python-based SQLite processing
@@ -138,6 +138,7 @@ nextflow run main.nf --help
 | `--min_base_quality` | `5` | Minimum base quality for variant calling |
 | `--min_map_qual` | `5` | Minimum mapping quality for read filtering |
 | `--min_snp_qual` | `5` | Minimum variant quality threshold |
+| `--custom_bed` | `null` | Optional custom BED file to restrict coverage generation to specific genomic regions. When provided, only positions within the BED file regions are included in coverage analysis |
 
 ### Data Type Parameters
 
@@ -408,6 +409,22 @@ nextflow run main.nf \
     --min_map_qual 20 \
     --min_snp_qual 30
 ```
+
+### Custom BED File for Coverage Generation
+
+Restrict variant calling to specific genomic regions using a custom BED file:
+
+```bash
+nextflow run main.nf \
+    --reference_genome /path/to/reference.fasta \
+    --reference_index /path/to/reference_index \
+    --samples_tsv /path/to/samples.tsv \
+    --custom_bed /path/to/custom.bed
+```
+
+When `--custom_bed` is provided, coverage generation is restricted to positions within the specified BED file regions. This is useful for targeted sequencing analysis or when focusing on specific genomic regions of interest.
+
+Only those regions from the BED file generated during pipeline execution that intersect with regions from the specified regions of the BED file will be included in the analysis. If you want to include all positions from the specified regions of the BED file, set the `--min_coverage 0` parameter.
 
 ### Test Run Mode
 
