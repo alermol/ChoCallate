@@ -6,6 +6,7 @@ process COVERAGE_GENERATION {
 
     input:
     tuple path(bam), path(bam_index)
+    path(custom_bed)
 
     output:
     path("${bam.baseName}.bed"), emit: coverage
@@ -21,11 +22,19 @@ process COVERAGE_GENERATION {
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Creating symlinks to input files"
     ln -sf "../${bam}" input.bam
     ln -sf "../${bam_index}" input.bam.csi
-    
-    echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Running samtools depth with min coverage ${params.min_coverage}"
-    samtools depth -J --threads ${task.cpus} input.bam | \
-        awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
-        bedops --merge - > ${bam.baseName}.bed
+    mv "../${custom_bed}" custom.bed
+
+    if [ -f "${custom_bed}" ]; then
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Running samtools depth with min coverage ${params.min_coverage} and custom bed file"
+        samtools depth -J --threads ${task.cpus} input.bam | \
+            awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
+            bedops --merge - | bedops --element-of 1 - custom.bed > ${bam.baseName}.bed
+    else
+        echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Running samtools depth with min coverage ${params.min_coverage}"
+        samtools depth -J --threads ${task.cpus} input.bam | \
+            awk '\$3 >= ${params.min_coverage} {print \$1,\$2-1,\$2}' | \
+            bedops --merge - > ${bam.baseName}.bed
+    fi
     
     echo "[\$(date -Iseconds)] [INFO] [COVERAGE_GENERATION] [${bam.baseName}] Moving final output to parent directory"
     mv ${bam.baseName}.bed ../${bam.baseName}.bed

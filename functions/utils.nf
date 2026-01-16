@@ -430,6 +430,12 @@ def validateWindowSize(Number winSize) {
     return [valid: true, value: winSize]
 }
 
+def createTempFile(String prefix = "tmp", String suffix = ".tmp") {
+    def tempFile = File.createTempFile(prefix, suffix)
+    tempFile.deleteOnExit()
+    return tempFile.absolutePath
+}
+
 
 
 def validateAllParameters(Map params) {
@@ -458,6 +464,18 @@ def validateAllParameters(Map params) {
         def refIndexValidation = validateBowtie2Index(params.reference_index)
         if (!refIndexValidation.valid) {
             errors << refIndexValidation.error
+        }
+    }
+    
+    if (params.custom_bed) {
+        def customBedValidation = validateFile(params.custom_bed, "Custom BED")
+        if (!customBedValidation.valid) {
+            errors << customBedValidation.error
+        } else {
+            def bedFile = customBedValidation.file
+            if (!bedFile.getName().toLowerCase().endsWith('.bed')) {
+                errors << "Custom BED file must have .bed extension: ${params.custom_bed}"
+            }
         }
     }
     

@@ -33,7 +33,8 @@ include {
     validateCPUParameter;
     validateForkParameter;
     validateQualityParameter;
-    validateNumericParameter
+    validateNumericParameter;
+    createTempFile
 } from './functions/utils.nf'
 
 include { 
@@ -275,7 +276,9 @@ workflow {
                 CREATE_FAI_INDEX.out.fai_index,
                 ref_index)
 
-    COVERAGE_GENERATION(PREPARE_BAM.out.bam)
+    def emptyFile = createTempFile()
+    custom_bed = params.custom_bed != null ? file(params.custom_bed) : emptyFile
+    COVERAGE_GENERATION(PREPARE_BAM.out.bam, custom_bed)
 
     GENERATE_ZERO_BCF(PREPARE_BAM.out.bam,
                       CREATE_FAI_INDEX.out.fai_index,
@@ -322,6 +325,7 @@ workflow {
         
         CLEANUP_SAMPLE_TEMP(GENERATE_CONSENSUS.out.final_snps,
                             GENERATE_CONSENSUS.out.final_indels,
+                            GENERATE_CONSENSUS.out.final_merged,
                             PREPARE_BAM.out.bam,
                             COVERAGE_GENERATION.out.coverage,
                             GENERATE_ZERO_BCF.out.zero_bcf,

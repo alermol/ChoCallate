@@ -4,6 +4,7 @@ process CLEANUP_SAMPLE_TEMP {
     input:
     tuple val(sample), path(output_vcf_snps)
     tuple val(sample), path(output_vcf_indels)
+    tuple val(sample), path(output_vcf_merged)
     tuple path(bam), path(bam_index)
     path(coverage_bed)
     path(zero_bcf)
@@ -43,6 +44,11 @@ process CLEANUP_SAMPLE_TEMP {
     done
 
     for vcf in ${output_vcf_indels}; do
+        [ -e "\${vcf}" ] && remove_file_follow_symlink "\${vcf}"
+        [ -e "\${vcf}.csi" ] && remove_file_follow_symlink "\${vcf}.csi"
+    done
+
+    for vcf in ${output_vcf_merged}; do
         [ -e "\${vcf}" ] && remove_file_follow_symlink "\${vcf}"
         [ -e "\${vcf}.csi" ] && remove_file_follow_symlink "\${vcf}.csi"
     done
