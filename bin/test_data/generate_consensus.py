@@ -19,8 +19,8 @@ def genotype_at_position(records: List, index: int, pos: int) -> Tuple[int, int]
 
 def alleles_at_position(records: List[pysam.VariantRecord], index: int, pos: int, ref_seq: str, start: int) -> Tuple[str, str]:
     if index < len(records) and records[index].pos == pos:
-        return records[index].ref, records[index].alts[0]
-    return ref_seq[pos - start - 1], '.'
+        return records[index].ref.upper(), records[index].alts[0].upper()
+    return ref_seq[pos - start - 1].upper(), '.'
 
 
 def get_consensus_genotype(genotypes: List[int], consensus_threshold: int) -> Optional[int]:
@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--ploidy', required=True, type=int, help='Sample ploidy')
     parser.add_argument('--reference', required=True, help='Reference genome assembly')
     parser.add_argument('--consensus_threshold', required=True, type=int, help='Number of matching calls for consensus')
+    parser.add_argument('--type', choices=['snp', 'indel'], required=True, help='Type of mutation')
     args = parser.parse_args()
 
     with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
@@ -68,7 +69,7 @@ def main():
                     contig, start, end = line.split('\t')
                     start = int(start)
                     end = int(end)
-                    ref_seq = reference_file.fetch(contig, start, end).upper()
+                    ref_seq = reference_file.fetch(contig, start, end)
                     records_per_file = [list(vf.fetch(contig, start, end)) for vf in variant_files]
                     indices = [0] * len(records_per_file)
                     for pos in range(start + 1, end + 1):
@@ -76,7 +77,11 @@ def main():
                         for fi in range(len(variant_files)):
                             indices[fi], gt = genotype_at_position(records_per_file[fi], indices[fi], pos)
                             genotypes.append(gt)
+                        if args.type == 'indel' and all([g == 0 for g in genotypes]):
+                            continue
                         consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
+                        if args.type == 'indel' and consensus_genotype == 0:
+                            continue
                         if consensus_genotype is None:
                             continue
                         new_record = output_file.new_record(
@@ -86,8 +91,11 @@ def main():
                             alleles=alleles_at_position(records_per_file[0], indices[0], pos, ref_seq, start),
                             qual=42,
                         )
+                        if args.type == 'indel' and new_record.alts[0] == '.':
+                            continue
                         new_record.samples[args.sample_name]['GT'] = convert_numeric_consensus(consensus_genotype, args.ploidy)
                         output_file.write(new_record)
+
 
 
 if __name__ == '__main__':
