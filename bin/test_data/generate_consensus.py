@@ -46,9 +46,8 @@ def generate_mininimal_header(sample_name: str, reference_file: pysam.FastaFile)
 
 
 def convert_numeric_consensus(numeric_cons: float, ploidy: int):
-    n1 = [1 for i in range(int(numeric_cons * ploidy))]
-    n0 = [0 for i in range(int(ploidy - len(n1)))]
-    return tuple(n0 + n1)
+    k = int(numeric_cons * ploidy)
+    return (0,) * (ploidy - k) + (1,) * k
 
 
 def main():
