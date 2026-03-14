@@ -31,9 +31,10 @@ def get_alleles(variant_file: pysam.VariantFile,
 
 def get_consensus_genotype(genotypes: List[float], consensus_threshold: int) -> float:
     counter: Counter[float] = Counter[float](genotypes)
-    if counter.most_common(1)[0][1] < consensus_threshold:
+    value, count = counter.most_common(1)[0]
+    if count < consensus_threshold:
         return None
-    return counter.most_common(1)[0][0]
+    return value
 
 
 def generate_mininimal_header(sample_name: str, reference_file: pysam.FastaFile) -> pysam.VariantHeader:
@@ -86,6 +87,7 @@ def main():
                         )
                         new_record.samples[args.sample_name]['GT'] = convert_numeric_consensus(consensus_genotype, args.ploidy)
                         output_file.write(new_record)
+
 
 if __name__ == '__main__':
     main()
