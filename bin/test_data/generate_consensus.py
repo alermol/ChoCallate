@@ -71,8 +71,10 @@ def main():
                                  for bcf in args.input]
                 for line in bed_file.fetch():
                     contig, start, end = line.split('\t')
-                    for pos in range(int(start) + 1, int(end) + 1):
-                        genotypes = [get_genotype(vf, contig, pos, pos + 1, args.ploidy) for vf in variant_files]
+                    start = int(start)
+                    end = int(end)
+                    for pos in range(start + 1, end + 1):
+                        genotypes = [get_genotype(vf, contig, pos, pos + 1) for vf in variant_files]
                         consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
                         if consensus_genotype is None:
                             continue
