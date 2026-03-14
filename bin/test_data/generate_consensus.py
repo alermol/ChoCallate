@@ -4,18 +4,17 @@ import pysam
 import argparse
 from contextlib import ExitStack
 from collections import Counter
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 
 def get_genotype(variant_file: pysam.VariantFile, 
                  contig: str, 
                  start: int, 
-                 stop: int, 
-                 ploidy: int) -> float:
+                 stop: int) -> int:
     result: List[pysam.VariantRecord] = list(variant_file.fetch(contig, start, stop))
     if len(result) == 0:
-        return 0.0
-    return sum(result[0].samples[0]['GT']) / ploidy
+        return 0
+    return int(sum(result[0].samples[0]['GT']))
 
 
 def get_alleles(variant_file: pysam.VariantFile, 
@@ -29,8 +28,8 @@ def get_alleles(variant_file: pysam.VariantFile,
     return result[0].ref, result[0].alts[0]
 
 
-def get_consensus_genotype(genotypes: List[float], consensus_threshold: int) -> float:
-    counter: Counter[float] = Counter[float](genotypes)
+def get_consensus_genotype(genotypes: List[int], consensus_threshold: int) -> Optional[int]:
+    counter: Counter[int] = Counter[int](genotypes)
     value, count = counter.most_common(1)[0]
     if count < consensus_threshold:
         return None
@@ -46,9 +45,8 @@ def generate_mininimal_header(sample_name: str, reference_file: pysam.FastaFile)
     return header
 
 
-def convert_numeric_consensus(numeric_cons: float, ploidy: int):
-    k = int(numeric_cons * ploidy)
-    return (0,) * (ploidy - k) + (1,) * k
+def convert_numeric_consensus(numeric_cons: int, ploidy: int):
+    return (0,) * (ploidy - numeric_cons) + (1,) * numeric_cons
 
 
 def main():
