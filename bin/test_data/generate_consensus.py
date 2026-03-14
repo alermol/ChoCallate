@@ -7,25 +7,20 @@ from collections import Counter
 from typing import List, Tuple, Optional
 
 
-def get_genotype(variant_file: pysam.VariantFile, 
-                 contig: str, 
-                 start: int, 
-                 stop: int) -> int:
-    result: List[pysam.VariantRecord] = list(variant_file.fetch(contig, start, stop))
-    if len(result) == 0:
-        return 0
-    return int(sum(result[0].samples[0]['GT']))
+def genotype_at_position(records: List, index: int, pos: int) -> Tuple[int, int]:
+    i = index
+    while i < len(records) and records[i].pos < pos:
+        i += 1
+    if i < len(records) and records[i].pos == pos:
+        gt = int(sum(records[i].samples[0]['GT']))
+        return i, gt
+    return i, 0
 
 
-def get_alleles(variant_file: pysam.VariantFile, 
-                reference: pysam.FastaFile, 
-                contig: str, 
-                start: int, 
-                stop: int) -> Tuple[str]:
-    result: List[pysam.VariantRecord] = list(variant_file.fetch(contig, start, stop))
-    if len(result) == 0:
-        return reference.fetch(contig, start, stop).upper(), '.'
-    return result[0].ref, result[0].alts[0]
+def alleles_at_position(records: List[pysam.VariantRecord], index: int, pos: int, ref_seq: str, start: int) -> Tuple[str, str]:
+    if index < len(records) and records[index].pos == pos:
+        return records[index].ref, records[index].alts[0]
+    return ref_seq[pos - start - 1], '.'
 
 
 def get_consensus_genotype(genotypes: List[int], consensus_threshold: int) -> Optional[int]:
@@ -73,8 +68,14 @@ def main():
                     contig, start, end = line.split('\t')
                     start = int(start)
                     end = int(end)
+                    ref_seq = reference_file.fetch(contig, start, end).upper()
+                    records_per_file = [list(vf.fetch(contig, start, end)) for vf in variant_files]
+                    indices = [0] * len(records_per_file)
                     for pos in range(start + 1, end + 1):
-                        genotypes = [get_genotype(vf, contig, pos, pos + 1) for vf in variant_files]
+                        genotypes = []
+                        for fi in range(len(variant_files)):
+                            indices[fi], gt = genotype_at_position(records_per_file[fi], indices[fi], pos)
+                            genotypes.append(gt)
                         consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
                         if consensus_genotype is None:
                             continue
@@ -82,7 +83,7 @@ def main():
                             contig=contig,
                             start=pos - 1,
                             stop=pos,
-                            alleles=get_alleles(variant_files[0], reference_file, contig, pos, pos + 1),
+                            alleles=alleles_at_position(records_per_file[0], indices[0], pos, ref_seq, start),
                             qual=42,
                         )
                         new_record.samples[args.sample_name]['GT'] = convert_numeric_consensus(consensus_genotype, args.ploidy)
