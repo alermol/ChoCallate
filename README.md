@@ -116,7 +116,7 @@ nextflow run main.nf --help
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--reference_genome` | ✅ | - | Reference genome in FASTA format (supports gzipped) |
+| `--reference_genome` | ✅ | - | Reference genome in FASTA format (supports gzipped using bgzip) |
 | `--reference_index` | ✅ for `input_format=fastq` | - | Bowtie2 index prefix for the reference genome (not required for BAM input) |
 | `--samples_tsv` | ✅ | `input.tsv` | TSV file with sample information |
 | `--input_format` | ✅ | `fastq` | Input files format: `fastq` or `bam` |

@@ -7,3 +7,4 @@ work/
 test_data/samples.tsv
 test_data/*.bt2
 test_data/chocallate_test_*
+.vscode/

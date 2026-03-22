@@ -1,411 +1,184 @@
 #!/usr/bin/env nextflow
 
-include { handleHelpVersion } from './functions/help_version.nf'
+// Generate sample channel
+include { GENERATE_SAMPLE_CHANNEL } from './modules/generate_channel.nf'
 
-handleHelpVersion()
+// Prepare assembly
+include { DECOMPRESS_ASSEMBLY } from './modules/decompress_assembly.nf'
+include { CREATE_FAI_INDEX } from './modules/create_fai_index.nf'
+include { CREATE_SEQ_DICT } from './modules/create_seq_dict.nf'
 
-def available_callers         = 'bcftools,gatk,freebayes,snver,vardict'
-def diploid_callers           = 'bcftools,gatk,freebayes,snver,vardict'
-def polyploid_callers         = 'gatk,freebayes,snver'
-def default_diploid_callers   = 'bcftools,gatk,freebayes,snver,vardict'
-def default_polyploid_callers = 'gatk,freebayes,snver'
-def min_callers_count         = 3
+// Map reads to assembly using Bowtie2
+include { MAP_BOWTIE2_SINGLE; MAP_BOWTIE2_PAIRED; MAP_BOWTIE2_MIXED } from './modules/mapping_bowtie2.nf'
 
-include { 
-    getAvailableCallersCount; 
-    getConsensusThreshold; 
-    normalizeCallerNames;
-    allEffectiveCallersInAvailable; 
-    effectiveCallersAtLeastThree; 
-    allEffectiveCallersDiploidSuitable; 
-    allEffectiveCallersPolyploidSuitable;
-    validateAllParameters;
-    validateTSVFile;
-    validateInputFormat;
-    validateReferenceGenome;
-    validateBowtie2Index;
-    validatePloidy;
-    validateReadsSource;
-    validateConsensusType;
-    validateLogLevel;
-    validateLogFormat;
-    validateWindowSize;
-    validateCPUParameter;
-    validateForkParameter;
-    validateQualityParameter;
-    validateNumericParameter;
-    createTempFile
-} from './functions/utils.nf'
+// Map reads to assembly using BWA
+include { MAP_BWA_SINGLE; MAP_BWA_PAIRED } from './modules/mapping_bwa.nf'
 
-include { 
-    initLogging; 
-    logInfo; 
-    logWarn; 
-    logError; 
-    logDebug; 
-    logProcessStart; 
-    logProcessComplete; 
-    logProcessError; 
-    logWorkflowStart; 
-    logWorkflowComplete; 
-    logWorkflowError;
-    logPerformance;
-    logResourceUsage;
-    logFileOperation;
-    logValidation
-} from './functions/logging.nf'
+// Map reads to assembly using Minimap2
+include { MAP_MINIMAP2_SINGLE; MAP_MINIMAP2_PAIRED } from './modules/mapping_minimap2.nf'
 
-include { 
-    CREATE_FAI_INDEX 
-} from './functions/create_fai_index.nf'
-include { 
-    CREATE_SEQ_DICT 
-} from './functions/create_seq_dict.nf'
-include { 
-    PREPARE_BAM 
-} from './functions/prepare_bam.nf'
-include { 
-    COVERAGE_GENERATION 
-} from './functions/coverage_generation.nf'
-include { 
-    GENERATE_ZERO_BCF 
-} from './functions/generate_zero_bcf.nf'
-include { 
-    CALLING 
-} from './functions/calling.nf'
-include { 
-    GENERATE_CONSENSUS 
-} from './functions/generate_consensus.nf'
-include { 
-    MERGE_BCFS 
-} from './functions/merge_bcfs.nf'
-include { 
-    CLEANUP_SAMPLE_TEMP 
-} from './functions/cleanup_sample_temp.nf'
+// Remove duplicates
+include { REMOVE_DUPLICATES } from './modules/remove_duplicates.nf'
 
-initLogging()
+// Filter BAM file
+include { FILTER_MAPPING_BAM; FILTER_INPUT_BAM } from './modules/filter_bam.nf'
 
-logInfo("Cleanup configuration loaded", [
-    enable_sample_cleanup: params.enable_sample_cleanup,
-    cleanup_intermediate_bam: params.cleanup_intermediate_bam,
-    cleanup_intermediate_bcf: params.cleanup_intermediate_bcf,
-    cleanup_intermediate_subfolders: params.cleanup_intermediate_subfolders,
-    cleanup_input_symlinks: params.cleanup_input_symlinks,
-    debug_mode: params.debug,
-    note: "Work directory always persists. In debug mode, all intermediate files are preserved. In production mode, sample-level cleanup is performed."
-])
+// Left align indels
+include { LEFT_ALIGN_INDELS } from './modules/left_align_indels.nf'
 
-logInfo("Starting input validation and parameter sanity checks")
+// Generate coverage
+include { GENERATE_COVERAGE; INTERSECT_CUSTOM_BED } from './modules/generate_coverage.nf'
 
-def validationResult = validateAllParameters(params)
+// Call variants
+include { CALL_BCFTOOLS; CALL_FREEBAYES; CALL_GATK; CALL_SNVER; CALL_VARDICT } from './modules/calling.nf'
 
-if (!validationResult.valid) {
-    logError("Input validation failed", [
-        validation: "comprehensive_parameter_validation",
-        error_count: validationResult.errors.size(),
-        errors: validationResult.errors
-    ])
-    
-    validationResult.errors.each { error ->
-        logError("Validation error", [error: error])
-    }
-    
-    error "Input validation failed with ${validationResult.errors.size()} error(s). Please fix the issues above and try again."
-}
+// Generate consensus
+include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
 
-if (validationResult.warnings.size() > 0) {
-    logWarn("Parameter warnings detected", [
-        validation: "parameter_warnings",
-        warning_count: validationResult.warnings.size(),
-        warnings: validationResult.warnings
-    ])
-    
-    validationResult.warnings.each { warning ->
-        logWarn("Parameter warning", [warning: warning])
-    }
-}
+// Convert consensus to VCF
+include { CONVERT_TO_VCF } from './modules/convert_to_vcf.nf'
 
-logInfo("Input validation completed successfully", [
-    validation: "comprehensive_parameter_validation",
-    parameters_validated: true,
-    warnings_count: validationResult.warnings.size()
-])
+// Merge outputs
+include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 
-def outdir = new File(params.outdir)
-if (!outdir.exists()) {
-    try {
-        outdir.mkdirs()
-        logInfo("Output directory created", [
-            validation: "output_directory_creation",
-            directory: params.outdir
-        ])
-    } catch (Exception e) {
-        logError("Failed to create output directory", [
-            validation: "output_directory_creation",
-            directory: params.outdir,
-            error: e.message
-        ])
-        error "Failed to create output directory: ${params.outdir}. Error: ${e.message}"
-    }
-} else if (!outdir.canWrite()) {
-    logError("Output directory is not writable", [
-        validation: "output_directory_permissions",
-        directory: params.outdir
-    ])
-    error "Output directory is not writable: ${params.outdir}"
-} else {
-    logInfo("Output directory validation passed", [
-        validation: "output_directory_permissions",
-        directory: params.outdir,
-        writable: true
-    ])
-}
-
-def samplesValidation = validateTSVFile(params.samples_tsv, params.input_format)
-if (samplesValidation.valid) {
-    logInfo("Samples TSV validation passed", [
-        validation: "samples_tsv_format",
-        file: params.samples_tsv,
-        sample_count: samplesValidation.sampleCount
-    ])
-}
-
-def refGenomeValidation = validateReferenceGenome(params.reference_genome)
-if (refGenomeValidation.valid) {
-    logInfo("Reference genome validation passed", [
-        validation: "reference_genome_format",
-        file: params.reference_genome
-    ])
-}
-
-if (params.input_format == 'fastq') {
-    def refIndexValidation = validateBowtie2Index(params.reference_index)
-    if (refIndexValidation.valid) {
-        logInfo("Bowtie2 index validation passed", [
-            validation: "bowtie2_index_format",
-            index_directory: params.reference_index,
-            index_files_count: refIndexValidation.indexFiles.size()
-        ])
-    }
-}
-
-def effective_callers
-if (params.effective_callers == "-") {
-    if (params.ploidy == 2) {
-        effective_callers = default_diploid_callers
-        logInfo("Using default diploid callers", [callers: effective_callers])
-    } else if (params.ploidy > 2) {
-        effective_callers = default_polyploid_callers
-        logInfo("Using default polyploid callers", [callers: effective_callers])
-    } else {
-        logError("Invalid ploidy value", [ploidy: params.ploidy, error: "Ploidy must be 2 or greater"])
-        error "Invalid ploidy value: ${params.ploidy}. Ploidy must be 2 or greater."
-    }
-} else {
-    effective_callers = normalizeCallerNames(params.effective_callers)
-    logInfo("Using user-defined effective callers", [callers: effective_callers, original: params.effective_callers])
-}
-
-if (!allEffectiveCallersInAvailable(effective_callers, available_callers)) {
-    logError("Validation failed", [validation: "effective_callers_availability", callers: effective_callers, available: available_callers])
-    exit 1
-} else {
-    logInfo("Validation passed", [validation: "effective_callers_availability", callers: effective_callers])
-}
-
-if (effectiveCallersAtLeastThree(effective_callers) < min_callers_count) {
-    logError("Validation failed", [
-        validation: "minimum_callers_count", 
-        required: min_callers_count, 
-        provided: getAvailableCallersCount(effective_callers), 
-        callers: effective_callers
-    ])
-    exit 1
-}
-
-if (params.ploidy == 2) {
-    if (allEffectiveCallersDiploidSuitable(effective_callers, diploid_callers)) {
-        logInfo("Validation passed", [validation: "diploid_callers_suitability", callers: effective_callers])
-    } else {
-        logError("Validation failed", [validation: "diploid_callers_suitability", callers: effective_callers, suitable: diploid_callers])
-        exit 1
-    }
-} else if (params.ploidy > 2) {
-    if (allEffectiveCallersPolyploidSuitable(effective_callers, polyploid_callers)) {
-        logInfo("Validation passed", [validation: "polyploid_callers_suitability", callers: effective_callers])
-    } else {
-        logError("Validation failed", [validation: "polyploid_callers_suitability", callers: effective_callers, suitable: polyploid_callers])
-        exit 1
-    }
-}
-
-if (params.debug) {
-    logInfo("Debug mode enabled")
-} else {
-    logInfo("Debug mode disabled")
-}
 
 workflow {
-    logWorkflowStart()
-    
-    if (params.test_run) {
-        logInfo("Test run mode enabled")
-        Channel
-            .fromPath(params.samples_tsv)
-            .splitCsv(header: false, sep: '\t', limit: params.test_run_limit)
-            .map{row -> tuple(row[0], row[1], row[2], row[3])}
-            .set{sample_run_ch}
-    } else {
-        Channel
-            .fromPath(params.samples_tsv)
-            .splitCsv(header: false, sep: '\t')
-            .map{row -> tuple(row[0], row[1], row[2], row[3])}
-            .set{sample_run_ch}
-    }
-    
-    logInfo("Sample channel created", [samples_count: "processing"])
+    // Validate required parameters
+    CLIParamsValidation.outdir_validation(params.outdir)
+    CLIParamsValidation.cons_threshold_validation(params.cons_threshold, params.callers)
+    CLIParamsValidation.reference_genome_validation(params.reference_genome)
+    CLIParamsValidation.reference_index_validation(params.reference_index, params.input_format)
+    CLIParamsValidation.samples_tsv_validation(params.samples_tsv)
+    CLIParamsValidation.ploidy_validation(params.ploidy, workflow.profile)
+    CLIParamsValidation.effective_callers_validation(params.callers, workflow.profile, params.ploidy, params.cons_threshold)
+    CLIParamsValidation.mapper_validation(params.bam_preparation.mapper, params.bam_preparation.reads_type)
 
-    ref_index = params.input_format == 'fastq' ? file(params.reference_index) : 'NA'
+    sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.samples_tsv, params.input_format, params.reads_type)
+
     ref_genome = file(params.reference_genome)
 
-    CREATE_FAI_INDEX(ref_genome)
-    CREATE_SEQ_DICT(CREATE_FAI_INDEX.out.fai_index.collect{it[0]})
-
-    PREPARE_BAM(sample_run_ch,
-                CREATE_SEQ_DICT.out.gen_dict,
-                CREATE_FAI_INDEX.out.fai_index,
-                ref_index)
-
-    def emptyFile = createTempFile()
-    custom_bed = params.custom_bed != null ? file(params.custom_bed) : emptyFile
-    COVERAGE_GENERATION(PREPARE_BAM.out.bam, custom_bed)
-
-    GENERATE_ZERO_BCF(PREPARE_BAM.out.bam,
-                      CREATE_FAI_INDEX.out.fai_index,
-                      COVERAGE_GENERATION.out.coverage)
-
-    def parallel_cpus = getAvailableCallersCount(effective_callers)
-    CALLING(PREPARE_BAM.out.bam,
-            CREATE_FAI_INDEX.out.fai_index,
-            COVERAGE_GENERATION.out.coverage,
-            params.ploidy,
-            CREATE_SEQ_DICT.out.gen_dict,
-            effective_callers,
-            parallel_cpus,
-            params.bcftools_mpileup_extra_args,
-            params.bcftools_call_extra_args,
-            params.freebayes_extra_args,
-            params.gatk4_extra_args,
-            params.vardict_extra_args,
-            params.snver_extra_args)
-
-    def cons_threshold = getConsensusThreshold(params.cons_type, available_callers)
-    GENERATE_CONSENSUS(CALLING.out.snps_vcf,
-                       CALLING.out.indels_vcf,
-                       CREATE_FAI_INDEX.out.fai_index.collect{it[1]},
-                       GENERATE_ZERO_BCF.out.zero_bcf,
-                       cons_threshold)
-
-    if (params.single_file) {
-        MERGE_BCFS(GENERATE_CONSENSUS.out.final_snps.map{it[1]}.collect(), 
-                   GENERATE_CONSENSUS.out.final_indels.map{it[1]}.collect(),
-                   GENERATE_CONSENSUS.out.final_merged.map{it[1]}.collect())
-        MERGED = MERGE_BCFS.out.merged
-    } else {
-        MERGED = true
+    if (params.reference_preparation.decompress.bgzip) {
+        DECOMPRESS_ASSEMBLY(ref_genome)
+        ref_genome = DECOMPRESS_ASSEMBLY.out.ref_genome
     }
 
-    if (params.enable_sample_cleanup && !params.debug) {
-        logInfo("Sample-level cleanup enabled - cleaning intermediate files", [
-            action: "sample_cleanup_enabled",
-            debug_mode: false,
-            intermediate_bam_cleanup: params.cleanup_intermediate_bam,
-            intermediate_vcf_cleanup: params.cleanup_intermediate_bcf
-        ])
-        
-        CLEANUP_SAMPLE_TEMP(GENERATE_CONSENSUS.out.final_snps,
-                            GENERATE_CONSENSUS.out.final_indels,
-                            GENERATE_CONSENSUS.out.final_merged,
-                            PREPARE_BAM.out.bam,
-                            COVERAGE_GENERATION.out.coverage,
-                            GENERATE_ZERO_BCF.out.zero_bcf,
-                            CALLING.out.snps_vcf,
-                            CALLING.out.indels_vcf,
-                            MERGED,
-                            params.cleanup_intermediate_bam,
-                            params.cleanup_intermediate_bcf)
-    } else if (params.enable_sample_cleanup && params.debug) {
-        logInfo("Sample-level cleanup skipped in debug mode - preserving all intermediate files", [
-            action: "sample_cleanup_skipped",
-            debug_mode: true,
-            reason: "Debug mode preserves intermediate files for analysis",
-            intermediate_bam_cleanup: params.cleanup_intermediate_bam,
-            intermediate_vcf_cleanup: params.cleanup_intermediate_bcf
-        ])
-    } else if (!params.enable_sample_cleanup) {
-        logInfo("Sample-level cleanup disabled by configuration", [
-            action: "sample_cleanup_disabled",
-            reason: "enable_sample_cleanup = false"
-        ])
-    }
-}
+    fai_index = CREATE_FAI_INDEX(ref_genome)
+    gen_dict = CREATE_SEQ_DICT(ref_genome)
 
-workflow.onComplete {
-    logWorkflowComplete()
-    
-    if (params.enable_sample_cleanup && !params.debug) {
-        logInfo("Sample-level cleanup was executed during pipeline execution", [
-            action: "cleanup_summary",
-            sample_cleanup_enabled: true,
-            debug_mode: false,
-            status: "intermediate_files_cleaned_via_sample_cleanup"
-        ])
-    } else if (params.enable_sample_cleanup && params.debug) {
-        logInfo("Sample-level cleanup was skipped due to debug mode", [
-            action: "cleanup_summary",
-            sample_cleanup_enabled: true,
-            debug_mode: true,
-            status: "intermediate_files_preserved_for_debugging",
-            reason: "Debug mode preserves all intermediate files for analysis and troubleshooting"
-        ])
-    } else if (!params.enable_sample_cleanup) {
-        logInfo("Sample-level cleanup was disabled by configuration", [
-            action: "cleanup_summary",
-            sample_cleanup_enabled: false,
-            status: "no_sample_cleanup_performed",
-            reason: "enable_sample_cleanup = false"
-        ])
-    }
-    
-    def workDir = workflow.workDir ? file(workflow.workDir) : null
-    if (workDir?.exists()) {
-        if (params.debug) {
-            logInfo("Debug mode cleanup - preserving entire work directory for debugging", [
-                action: "debug_cleanup_preserve",
-                workDir: workDir.toString(),
-                reason: "Debug mode preserves all files for analysis and troubleshooting"
-            ])
-        } else {
-            logInfo("Production mode cleanup - work directory preserved, sample-level cleanup completed", [
-                action: "production_cleanup_complete",
-                workDir: workDir.toString(),
-                note: "Work directory preserved for analysis. Sample-level cleanup was performed during pipeline execution to clean intermediate files."
-            ])
+    if (params.input_format == 'fastq') {
+        ref_index = file(params.reference_index)
+        if (params.bam_preparation.mapper == 'bowtie2') {
+            if (params.reads_type == 'pe') {
+                bam_file = MAP_BOWTIE2_PAIRED(sample_run_ch, ref_index)
+            } else if (params.reads_type == 'se') {
+                bam_file = MAP_BOWTIE2_SINGLE(sample_run_ch, ref_index)
+            } else if (params.reads_type == 'mx') {
+                bam_file = MAP_BOWTIE2_MIXED(sample_run_ch, ref_index)
+            }
         }
-        
-        logInfo("Workflow cleanup completed - work directory preserved", [
-            action: "cleanup_complete", 
-            workDir: workDir.toString(),
-            result: "work_directory_preserved",
-            note: "All intermediate files are either cleaned (production mode) or preserved (debug mode)"
-        ])
+        if (params.bam_preparation.mapper == 'bwa') {
+            if (params.reads_type == 'pe') {
+                bam_file = MAP_BWA_PAIRED(sample_run_ch, ref_index)
+            } else if (params.reads_type == 'se') {
+                bam_file = MAP_BWA_SINGLE(sample_run_ch, ref_index)
+            }
+        }
+        if (params.bam_preparation.mapper == 'minimap2') {
+            if (params.reads_type == 'pe') {
+                bam_file = MAP_MINIMAP2_PAIRED(sample_run_ch, ref_index)
+            } else if (params.reads_type == 'se') {
+                bam_file = MAP_MINIMAP2_SINGLE(sample_run_ch, ref_index)
+            }
+        }
+        bam_file = FILTER_MAPPING_BAM(bam_file)
     }
+
+    if (params.input_format == 'bam') {
+        bam_file = FILTER_INPUT_BAM(sample_run_ch)
+    }
+
+    if (params.bam_preparation.remove_duplicates) {
+        bam_file = REMOVE_DUPLICATES(bam_file)
+    }
+
+    if (params.bam_preparation.left_align_indels) {
+        bam_file = LEFT_ALIGN_INDELS(bam_file, ref_genome, gen_dict, fai_index)
+    }
+
+    bed_coverage = GENERATE_COVERAGE(bam_file)
+    if (params.custom_bed != null) {
+        bed_coverage = INTERSECT_CUSTOM_BED(bed_coverage, file(params.custom_bed))
+    }
+
+    if (params.callers.contains('bcftools')) {
+        CALL_BCFTOOLS(bam_file, ref_genome, bed_coverage)
+        bcftools = CALL_BCFTOOLS.out.calling_result
+    } else {
+        bcftools = channel.empty()
+    }
+
+    if (params.callers.contains('freebayes')) {
+        CALL_FREEBAYES(bam_file, ref_genome, bed_coverage)
+        freebayes = CALL_FREEBAYES.out.calling_result
+    } else {
+        freebayes = channel.empty()
+    }
+
+    if (params.callers.contains('gatk')) {
+        CALL_GATK(bam_file, ref_genome, fai_index, bed_coverage, gen_dict)
+        gatk = CALL_GATK.out.calling_result
+    } else {
+        gatk = channel.empty()
+    }
+
+    if (params.callers.contains('snver')) {
+        CALL_SNVER(bam_file, ref_genome, fai_index, bed_coverage)
+        snver = CALL_SNVER.out.calling_result
+    } else {
+        snver = channel.empty()
+    }
+
+    if (params.callers.contains('vardict')) {
+        CALL_VARDICT(bam_file, ref_genome, fai_index, bed_coverage)
+        vardict = CALL_VARDICT.out.calling_result
+    } else {
+        vardict = channel.empty()
+    }
+
+    all_calls = bcftools
+        .join(freebayes, remainder: true)
+        .join(gatk, remainder: true)
+        .join(snver, remainder: true)
+        .join(vardict, remainder: true)
+        .map { list -> list.findAll { item -> item != null } }
+        .map {tuple -> [tuple[0], tuple[1..-1]]}
+
+
+    // Generate BCF consensus file for each sample
+    if (params.output.format == 'bcf' && params.output.type == 'sample') {
+        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    }
+    
+    // Generate single BCF consensus file for all samples
+    if (params.output.format == 'bcf' && params.output.type == 'single') {
+        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+        MERGE_OUTPUTS(consensus)
+    }
+    
+    // Generate VCF consensus file for each sample
+    if (params.output.format == 'vcf' && params.output.type == 'sample') {
+        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+        CONVERT_TO_VCF(GENERATE_CONSENSUS.out.consensus)
+    }
+    
+    // Generate single VCF consensus file for all samples
+    if (params.output.format == 'vcf' && params.output.type == 'single') {
+        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+        consensus = MERGE_OUTPUTS(consensus)
+        CONVERT_TO_VCF(consensus)
+    }
+    
 }
-
-workflow.onError {
-    logWorkflowError(workflow.errorMessage)
-}
-
-
-
 
