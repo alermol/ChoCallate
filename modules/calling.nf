@@ -28,10 +28,10 @@ process CALL_BCFTOOLS {
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${params.calling.bcftools.extra_args.mpileup} -Ou --fasta-ref tmp/ref_genome.fasta --threads 1 --min-BQ ${params.calling.min_base_quality} --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.extra_args.call} -Ou --threads 1 | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
+    'bcftools mpileup ${params.calling.bcftools.extra_args.mpileup} -Ou --fasta-ref tmp/ref_genome.fasta --threads 1 --min-BQ ${params.calling.min_base_quality} --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.extra_args.call} -Ou --threads 1 | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ob -o bcftools.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o bcftools.bcf
     """
 
     stub:
@@ -70,10 +70,10 @@ process CALL_FREEBAYES {
     EOF
 
     parallel -j ${task.cpus} \
-    'freebayes --fasta-reference tmp/ref_genome.fasta --targets {} --dont-left-align-indels --ploidy "${params.ploidy}" --min-base-quality "${params.calling.min_base_quality}" ${params.calling.freebayes.extra_args} --bam tmp/input.bam | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
+    'freebayes --fasta-reference tmp/ref_genome.fasta --targets {} --dont-left-align-indels --ploidy "${params.ploidy}" --min-base-quality "${params.calling.min_base_quality}" ${params.calling.freebayes.extra_args} --bam tmp/input.bam | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ob -o freebayes.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o freebayes.bcf
     """
 
     stub:
@@ -114,10 +114,10 @@ process CALL_GATK {
     EOF
 
     parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${params.calling.gatk.extra_args} --input tmp/input.bam --reference tmp/ref_genome.fasta --min-base-quality-score "${params.calling.min_base_quality}" --output /dev/stdout --intervals {} --ploidy "${params.ploidy}" --sequence-dictionary tmp/ref_genome.dict | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
+    'gatk HaplotypeCaller ${params.calling.gatk.extra_args} --input tmp/input.bam --reference tmp/ref_genome.fasta --min-base-quality-score "${params.calling.min_base_quality}" --output /dev/stdout --intervals {} --ploidy "${params.ploidy}" --sequence-dictionary tmp/ref_genome.dict | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ob -o gatk.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o gatk.bcf
     """
 
     stub:
@@ -165,7 +165,7 @@ process CALL_SNVER {
     bcftools concat --allow-overlaps --threads 1 -Ou tmp/calling_chunks/{#}/{#}.filter.vcf.gz tmp/calling_chunks/{#}/{#}.indel.filter.vcf.gz | bcftools sort -Ou | bcftools norm --check-ref w --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}/{#}.bcf" ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*/*.bcf | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ob -o snver.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*/*.bcf | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools sort -Ou -o snver.bcf
     """
 
     stub:
@@ -205,10 +205,10 @@ process CALL_VARDICT {
     EOF
 
     parallel -j ${task.cpus} \
-    'vardict-java ${params.calling.vardict.extra_args} -G tmp/ref_genome.fasta -b tmp/input.bam -fisher -th 1 -q "${params.calling.min_base_quality}" -VS SILENT -c 1 -S 2 -E 3 -g 4 {} | var2vcf_valid.pl -S -q "${params.calling.min_base_quality}" -E | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
+    'vardict-java ${params.calling.vardict.extra_args} -G tmp/ref_genome.fasta -b tmp/input.bam -fisher -th 1 -q "${params.calling.min_base_quality}" -VS SILENT -c 1 -S 2 -E 3 -g 4 {} | var2vcf_valid.pl -S -q "${params.calling.min_base_quality}" -E | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools norm --check-ref w -Ou --fasta-ref tmp/ref_genome.fasta --atomize -o tmp/calling_chunks/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ob -o vardict.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o vardict.bcf
     """
 
     stub:
