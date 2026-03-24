@@ -4,50 +4,108 @@ import argparse
 import time
 from collections import Counter
 from contextlib import ExitStack
-from typing import List, Optional, Tuple
+from typing import NamedTuple
 
 import pysam
 
 
-def genotype_at_position(records: List[pysam.VariantRecord], index: int, pos: int, ploidy: int) -> Tuple[int, Tuple[int, int], Tuple[int, int]]:
+class Genotypes(NamedTuple):
+    index: int = 0
+    ref: str = ""
+    alt: tuple[str, ...] = ("",)
+    gt: tuple[int, ...] = (0, 0)
+
+
+def genotype_at_position(records, index, pos):
+    """
+    Get the genotype at a given position in a list of VCF records.
+
+    Args:
+        records: List of pysam.VariantRecord objects.
+        index: Integer index of the record to get the genotype from.
+        pos: Integer position to get the genotype from.
+
+    Returns:
+        A Genotypes named tuple containing the index, reference allele, alternate alleles, and numeric representation of the genotype.
+    """
     i = index
     while i < len(records) and records[i].pos < pos:
         i += 1
-    if i < len(records) and records[i].pos == pos:
-        gt = records[i].ref.upper(), records[i].alts[0].upper()
-        return i, gt, convert_numeric_consensus(sum(records[i].samples[0]['GT']), ploidy)
-    return i, (0, 0), convert_numeric_consensus(0, ploidy) # ref and alt are reference
+    if (i < len(records)) and (records[i].pos == pos):
+        return Genotypes(index=i, 
+                         ref=records[i].ref.upper(), 
+                         alt=tuple(sorted(records[i].alts)), 
+                         gt=tuple(sorted(records[i].samples[0]['GT'])))
+    return Genotypes()
 
 
-def get_consensus_genotype(genotypes: List[Tuple[str, str]], consensus_threshold: int) -> Optional[Tuple[str, str]]:
-    counter: Counter[Tuple[str, str]] = Counter[Tuple[str, str]](genotypes)
+def get_consensus_genotype(genotypes, consensus_threshold):
+    """
+    Get the consensus genotype from a list of genotypes.
+
+    Args:
+        genotypes: List of Genotypes named tuples. Each tuple contains the index, reference allele, 
+        alternate alleles, and numeric representation of the genotype.
+        consensus_threshold: Integer threshold for the consensus genotype.
+
+    Returns:
+        A tuple containing the consensus genotype (reference allele, alternate alleles, numeric representation of the genotype) and the number of matching calls.
+        If the consensus genotype is not found, returns None and 0.
+    """
+    genotypes = [(i.ref, i.alt, i.gt) for i in genotypes]
+    counter = Counter(genotypes)
     value, count = counter.most_common(1)[0]
     if count < consensus_threshold:
         return None, 0
     return value, count
 
 
-def generate_mininimal_header(sample_name: str, reference_file: pysam.FastaFile, consensus_threshold: int) -> pysam.VariantHeader:
+def generate_mininimal_header(sample_name, reference_file, consensus_threshold):
+    """
+    Generate a minimal VCF header for the consensus file.
+
+    Args:
+        sample_name: String sample name.
+        reference_file: pysam.FastaFile object.
+        consensus_threshold: Integer threshold for the consensus genotype.
+
+    Returns:
+        A pysam.VariantHeader object.
+    """
     header = pysam.VariantHeader()
     header.add_sample(sample_name)
     header.add_line(f'##Consensus threshold={consensus_threshold}')
     for ref in reference_file.references:
         header.add_line(f'##contig=<ID={ref},length={reference_file.get_reference_length(ref)}>')
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
-    header.add_line('##INFO=<ID=NM,Number=1,Type=Integer,Description="Number of matching calls">')
+    header.add_line('##FORMAT=<ID=NM,Number=1,Type=Integer,Description="Number of matching calls">')
     return header
 
 
-def convert_numeric_consensus(numeric_cons: int, ploidy: int):
-    return (0,) * (ploidy - numeric_cons) + (1,) * numeric_cons
+def variant_is_snp(ref, alt):
+    """
+    Check if a variant is a SNP.
+
+    Args:
+        variant: Tuple of strings representing the variant.
+
+    Returns:
+        A boolean indicating if the variant is a SNP.
+    """
+    return len(ref) == 1 and len(alt) == 1
 
 
-def variant_is_snp(variant: Tuple[str, str]) -> bool:
-    return len(variant[0]) == 1 and len(variant[1]) == 1
+def variant_is_indel(ref, alt):
+    """
+    Check if a variant is an indel.
 
+    Args:
+        variant: Tuple of strings representing the variant.
 
-def variant_is_indel(variant: Tuple[str, str]) -> bool:
-    return len(variant[0]) > 1 or len(variant[1]) > 1
+    Returns:
+        A boolean indicating if the variant is an indel.
+    """
+    return len(ref) > 1 or len(alt) > 1
 
 
 def main():
@@ -57,10 +115,10 @@ def main():
     parser.add_argument('--bed', required=True, help='Input BED file (gzipped and tabixed)')
     parser.add_argument('--output', required=True, help='Output BCF file')
     parser.add_argument('--sample_name', required=True, help='Sample name')
-    parser.add_argument('--ploidy', required=True, type=int, help='Sample ploidy')
     parser.add_argument('--reference', required=True, help='Reference genome assembly (fasta file and fai index)')
     parser.add_argument('--consensus_threshold', required=True, type=int, help='Number of matching calls for consensus')
     parser.add_argument('--variant_types', required=True, choices=['snp', 'indel', 'both'], help='Variant types to process')
+    parser.add_argument('--ignore-multiallelic', required=True, type=str, choices=['true', 'false'], help='Ignore multiallelic variants')
     args = parser.parse_args()
 
     with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
@@ -82,44 +140,53 @@ def main():
                         # collect genotypes at current position
                         genotypes = []
                         for fi in range(len(variant_files)):
-                            indices[fi], gt, num_gt = genotype_at_position(records_per_file[fi], indices[fi], vcf_start, args.ploidy)
-                            genotypes.append((gt, num_gt))
-                        genotypes = [i if i != ((0, 0), (0, 0)) else ((ref_seq[ref_seq_rel_pos].upper(), '.'), i[1]) for i in genotypes]
+                            res = genotype_at_position(records_per_file[fi], indices[fi], vcf_start)
+                            indices[fi] = res.index
+                            genotypes.append(res)
+                        genotypes = [i if i.gt != (0, 0) else i._replace(ref=ref_seq[ref_seq_rel_pos].upper(), alt=('.',)) for i in genotypes]
 
                         # get consensus genotype at current position
                         consensus_genotype, num_matching_calls = get_consensus_genotype(genotypes, args.consensus_threshold)
+                        # if args.ignore_multiallelic == 'true' and consensus_genotype is not None and len(consensus_genotype[1]) > 1:
+                        #     continue
 
                         # write consensus genotype to output file
                         if consensus_genotype is not None:
+                            # if args.ignore_multiallelic == 'true' and len(consensus_genotype[1]) > 1:
+                            #     vcf_start += len(consensus_genotype[0]) # shift on referene genotype length
+                            #     ref_seq_rel_pos += len(consensus_genotype[0]) # shift on reference genotype length
+                            #     continue
                             if args.variant_types == 'both':
                                 new_record = output_file.new_record(
                                     contig=contig,
                                     start=vcf_start - 1,
                                     stop=vcf_start + 1,
-                                    alleles=consensus_genotype[0],
+                                    alleles=[consensus_genotype[0]] + list(consensus_genotype[1]),
                                     qual=42,
                                 )
-                                new_record.info['NM'] = num_matching_calls
-                                new_record.samples[0]['GT'] = consensus_genotype[1]
+                                new_record.samples[0]['NM'] = num_matching_calls
+                                new_record.ref = consensus_genotype[0]
+                                new_record.samples[0]['GT'] = consensus_genotype[2]
                                 output_file.write(new_record)
                             else:
                                 # write consensus genotype to output file if it is of the same type as the requested variant type
-                                current_variant_type = 'snp' if variant_is_snp(consensus_genotype[0]) else 'indel'
+                                current_variant_type = 'snp' if variant_is_snp(consensus_genotype[0], consensus_genotype[1]) else 'indel'
                                 if current_variant_type == args.variant_types:
                                     new_record = output_file.new_record(
                                         contig=contig,
                                         start=vcf_start - 1,
                                         stop=vcf_start + 1,
-                                        alleles=consensus_genotype[0],
+                                        alleles=[consensus_genotype[0]] + list(consensus_genotype[1]),
                                         qual=42,
                                     )
-                                    new_record.info['NM'] = num_matching_calls
-                                    new_record.samples[0]['GT'] = consensus_genotype[1]
+                                    new_record.samples[0]['NM'] = num_matching_calls
+                                    new_record.ref = consensus_genotype[0]
+                                    new_record.samples[0]['GT'] = consensus_genotype[2]
                                     output_file.write(new_record)
-                        vcf_start += len(consensus_genotype[0][0]) if consensus_genotype is not None else 1 # shift on referene genotype length
-                        ref_seq_rel_pos += len(consensus_genotype[0][0]) if consensus_genotype is not None else 1 # shift on reference genotype length
+                        vcf_start += len(consensus_genotype[0]) if consensus_genotype is not None else 1 # shift on referene genotype length
+                        ref_seq_rel_pos += len(consensus_genotype[0]) if consensus_genotype is not None else 1 # shift on reference genotype length
                         
-                        position_progress += len(consensus_genotype[0][0]) if consensus_genotype is not None else 1
+                        position_progress += len(consensus_genotype[0]) if consensus_genotype is not None else 1
                         if position_progress % 1000000 == 0:
                             print(f'Position progress: {position_progress}')
 
