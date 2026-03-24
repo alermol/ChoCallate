@@ -27,7 +27,7 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample}" --ploidy "${params.ploidy}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.cons_threshold}" --variant_types ${params.output.variant_types}
+    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.cons_threshold}"
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o consensus.bcf

@@ -43,6 +43,7 @@ include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 
 
 workflow {
+
     // Validate required parameters
     CLIParamsValidation.outdir_validation(params.outdir)
     CLIParamsValidation.cons_threshold_validation(params.cons_threshold, params.callers)
@@ -51,7 +52,7 @@ workflow {
     CLIParamsValidation.samples_tsv_validation(params.samples_tsv)
     CLIParamsValidation.ploidy_validation(params.ploidy, workflow.profile)
     CLIParamsValidation.effective_callers_validation(params.callers, workflow.profile, params.ploidy, params.cons_threshold)
-    CLIParamsValidation.mapper_validation(params.bam_preparation.mapper, params.bam_preparation.reads_type)
+    CLIParamsValidation.mapper_validation(params.bam_preparation.mapping.mapper, params.reads_type)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.samples_tsv, params.input_format, params.reads_type)
 
@@ -67,7 +68,7 @@ workflow {
 
     if (params.input_format == 'fastq') {
         ref_index = file(params.reference_index)
-        if (params.bam_preparation.mapper == 'bowtie2') {
+        if (params.bam_preparation.mapping.mapper == 'bowtie2') {
             if (params.reads_type == 'pe') {
                 bam_file = MAP_BOWTIE2_PAIRED(sample_run_ch, ref_index)
             } else if (params.reads_type == 'se') {
@@ -76,14 +77,14 @@ workflow {
                 bam_file = MAP_BOWTIE2_MIXED(sample_run_ch, ref_index)
             }
         }
-        if (params.bam_preparation.mapper == 'bwa') {
+        if (params.bam_preparation.mapping.mapper == 'bwa') {
             if (params.reads_type == 'pe') {
                 bam_file = MAP_BWA_PAIRED(sample_run_ch, ref_index)
             } else if (params.reads_type == 'se') {
                 bam_file = MAP_BWA_SINGLE(sample_run_ch, ref_index)
             }
         }
-        if (params.bam_preparation.mapper == 'minimap2') {
+        if (params.bam_preparation.mapping.mapper == 'minimap2') {
             if (params.reads_type == 'pe') {
                 bam_file = MAP_MINIMAP2_PAIRED(sample_run_ch, ref_index)
             } else if (params.reads_type == 'se') {
@@ -97,11 +98,11 @@ workflow {
         bam_file = FILTER_INPUT_BAM(sample_run_ch)
     }
 
-    if (params.bam_preparation.remove_duplicates) {
+    if (params.bam_preparation.rm_duplicates.enabled) {
         bam_file = REMOVE_DUPLICATES(bam_file)
     }
 
-    if (params.bam_preparation.left_align_indels) {
+    if (params.bam_preparation.left_align_indels.enabled) {
         bam_file = LEFT_ALIGN_INDELS(bam_file, ref_genome, gen_dict, fai_index)
     }
 
@@ -152,6 +153,7 @@ workflow {
         .join(vardict, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
+
 
 
     // Generate BCF consensus file for each sample
