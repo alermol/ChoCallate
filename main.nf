@@ -44,13 +44,11 @@ include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 
 workflow {
     
-    // Validate required parameters
-    CLIParamsValidation.outdir_validation(params.outdir)
-    CLIParamsValidation.cons_threshold_validation(params.cons_threshold, params.callers)
+    // // Validate required parameters
     CLIParamsValidation.reference_genome_validation(params.reference_genome)
     CLIParamsValidation.samples_tsv_validation(params.samples_tsv)
-    CLIParamsValidation.ploidy_validation(params.ploidy, workflow.profile)
-    CLIParamsValidation.effective_callers_validation(params.callers, workflow.profile, params.ploidy, params.cons_threshold)
+    CLIParamsValidation.effective_callers_validation(params.callers, params.ploidy)
+    CLIParamsValidation.cons_threshold_validation(params.cons_threshold, params.callers)
     CLIParamsValidation.mapper_validation(params.bam_preparation.mapping.mapper, params.reads_type)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.samples_tsv, params.input_format, params.reads_type)

@@ -6,13 +6,6 @@ class CLIParamsValidation {
         }
     }
 
-    static void outdir_validation(String outdir) {
-        if (outdir == null) {
-            println "ERROR: Output directory is required"
-            System.exit(1)
-        }
-    }
-
     static void samples_tsv_validation(String samples_tsv) {
         if (samples_tsv == null) {
             println "ERROR: Samples TSV is required"
@@ -20,14 +13,7 @@ class CLIParamsValidation {
         }
     }
 
-    static void ploidy_validation(Number ploidy, String profile) {
-        if (profile == 'polyploid' && ploidy == null) {
-            println "ERROR: Ploidy is required for polyploid calling"
-            System.exit(1)
-        }
-    }
-
-    static void effective_callers_validation(String callers, String profile, Number ploidy, Number cons_threshold) {
+    static void effective_callers_validation(String callers, Number ploidy) {
         def diploid_callers = ['bcftools', 'gatk', 'freebayes', 'snver', 'vardict']
         def polyploid_callers = ['gatk', 'freebayes', 'snver']
         def callersList = callers.split(',')
