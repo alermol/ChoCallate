@@ -16,24 +16,7 @@ read2=$(readlink -f test_data/test_reads_R2.fq.gz)
 read3=$(readlink -f test_data/test_reads_SE.fq.gz)
 bam_path=$(readlink -f test_data/sample1.bam)
 
-# TEST 1: input_format=fastq, reads_type=pe (should PASS)
-# samples.tsv: name, R1, R2, '-'
-echo -e "${name}\t${read1}\t${read2}\t-" > test_data/samples.tsv
-echo "==== TEST 1: input_format=fastq, reads_type=pe (should PASS) ===="
-nextflow run main.nf \
-    --samples_tsv test_data/samples.tsv \
-    --input_format fastq \
-    --reference_index test_data/arth_chr1.fasta.gz \
-    --outdir test_data/chocallate_test_1 \
-    --reference_genome test_data/arth_chr1.fasta.gz || echo "FAILED as expected?"
+echo -e "sample1\t${read1}\t${read2}" > test_data/samples.tsv
 
-# TEST 2: input_format=bam, reads_type=pe (should PASS)
-# samples.tsv: name, bam_path
-echo -e "${name}\t${bam_path}" > test_data/samples.tsv
-echo "==== TEST 2: input_format=bam, reads_type=pe (should PASS) ===="
-nextflow run main.nf \
-    --samples_tsv test_data/samples.tsv \
-    --input_format bam \
-    --outdir test_data/chocallate_test_2 \
-    --reference_genome test_data/arth_chr1.fasta.gz || echo "FAILED as expected?"
+nextflow run main.nf -params-file test_data/test_config.yaml
 
