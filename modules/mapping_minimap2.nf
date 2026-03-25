@@ -7,14 +7,14 @@ process MAP_MINIMAP2_PAIRED {
 
     input:
     tuple val(sample_id), path("tmp/read1"), path("tmp/read2")
-    val(ref_index)
+    path("tmp/ref_genome.fasta")
 
     output:
     tuple val(sample_id), path("mapping.bam"), emit: bam
 
     script:
     """
-    minimap2 -ax sr -t ${task.cpus} ${params.bam_preparation.mapping.minimap2.extra_args} -a "${ref_index}" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    minimap2 -ax sr -t ${task.cpus} ${params.bam_preparation.mapping.minimap2.extra_args} -a "\$(realpath tmp/ref_genome.fasta).mmi" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:
@@ -32,14 +32,14 @@ process MAP_MINIMAP2_SINGLE {
 
     input:
     tuple val(sample_id), path("tmp/read1")
-    val(ref_index)
+    path("tmp/ref_genome.fasta")
 
     output:
     tuple val(sample_id), path("mapping.bam"), emit: bam
 
     script:
     """
-    minimap2 -ax sr -t ${task.cpus} ${params.bam_preparation.mapping.minimap2.extra_args} "${ref_index}" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    minimap2 -ax sr -t ${task.cpus} ${params.bam_preparation.mapping.minimap2.extra_args} "\$(realpath tmp/ref_genome.fasta).mmi" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:

@@ -6,15 +6,6 @@ class CLIParamsValidation {
         }
     }
 
-    static void reference_index_validation(String reference_index, String input_format) {
-        if (input_format == 'fastq') {
-            if (reference_index == null) {
-                println "ERROR: Reference index is required for input_format=fastq"
-                System.exit(1)
-            }
-        }
-    }
-
     static void outdir_validation(String outdir) {
         if (outdir == null) {
             println "ERROR: Output directory is required"

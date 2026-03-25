@@ -48,7 +48,6 @@ workflow {
     CLIParamsValidation.outdir_validation(params.outdir)
     CLIParamsValidation.cons_threshold_validation(params.cons_threshold, params.callers)
     CLIParamsValidation.reference_genome_validation(params.reference_genome)
-    CLIParamsValidation.reference_index_validation(params.reference_index, params.input_format)
     CLIParamsValidation.samples_tsv_validation(params.samples_tsv)
     CLIParamsValidation.ploidy_validation(params.ploidy, workflow.profile)
     CLIParamsValidation.effective_callers_validation(params.callers, workflow.profile, params.ploidy, params.cons_threshold)
@@ -67,28 +66,27 @@ workflow {
     gen_dict = CREATE_SEQ_DICT(ref_genome)
 
     if (params.input_format == 'fastq') {
-        ref_index = file(params.reference_index)
-        if (params.bam_preparation.mapping.mapper == 'bowtie2') {
+        if (params.bam_preparation.mapper == 'bowtie2') {
             if (params.reads_type == 'pe') {
-                bam_file = MAP_BOWTIE2_PAIRED(sample_run_ch, ref_index)
+                bam_file = MAP_BOWTIE2_PAIRED(sample_run_ch, file(params.reference_genome))
             } else if (params.reads_type == 'se') {
-                bam_file = MAP_BOWTIE2_SINGLE(sample_run_ch, ref_index)
+                bam_file = MAP_BOWTIE2_SINGLE(sample_run_ch, file(params.reference_genome))
             } else if (params.reads_type == 'mx') {
-                bam_file = MAP_BOWTIE2_MIXED(sample_run_ch, ref_index)
+                bam_file = MAP_BOWTIE2_MIXED(sample_run_ch, file(params.reference_genome))
             }
         }
-        if (params.bam_preparation.mapping.mapper == 'bwa') {
+        if (params.bam_preparation.mapper == 'bwa') {
             if (params.reads_type == 'pe') {
-                bam_file = MAP_BWA_PAIRED(sample_run_ch, ref_index)
+                bam_file = MAP_BWA_PAIRED(sample_run_ch, file(params.reference_genome))
             } else if (params.reads_type == 'se') {
-                bam_file = MAP_BWA_SINGLE(sample_run_ch, ref_index)
+                bam_file = MAP_BWA_SINGLE(sample_run_ch, file(params.reference_genome))
             }
         }
-        if (params.bam_preparation.mapping.mapper == 'minimap2') {
+        if (params.bam_preparation.mapper == 'minimap2') {
             if (params.reads_type == 'pe') {
-                bam_file = MAP_MINIMAP2_PAIRED(sample_run_ch, ref_index)
+                bam_file = MAP_MINIMAP2_PAIRED(sample_run_ch, file(params.reference_genome))
             } else if (params.reads_type == 'se') {
-                bam_file = MAP_MINIMAP2_SINGLE(sample_run_ch, ref_index)
+                bam_file = MAP_MINIMAP2_SINGLE(sample_run_ch, file(params.reference_genome))
             }
         }
         bam_file = FILTER_MAPPING_BAM(bam_file)
