@@ -21,6 +21,9 @@ class CLIParamsValidation {
             println "ERROR: Effective callers are not specified"
             System.exit(1)
         }
+        if (callersList.size() % 2 == 0) {
+            println "WARNING: It is strongly recommended to use odd number of callers in order to avoid ties in the consensus"
+        }
         if (ploidy == 2) {
             for (caller in callersList) {
                 if (!(caller in diploid_callers)) {
