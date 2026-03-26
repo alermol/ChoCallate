@@ -7,36 +7,15 @@ process GENERATE_COVERAGE {
 
     input:
     tuple val(sample_id), path("tmp/input.bam")
+    path(custom_bed)
 
     output:
     path("coverage.bed"), emit: coverage
 
     script:
+    def intersect_bed = custom_bed.name != "NO_FILE" ? "-b ${custom_bed}" : ""
     """
-    samtools depth -J --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
-    """
-
-    stub:
-    """
-    touch coverage.bed
-    """
-}
-
-process INTERSECT_CUSTOM_BED {
-    cpus 1
-    maxForks params.coverage.forks
-    afterScript 'stage_cleanup.sh'
-
-    input:
-    path("tmp/coverage.bed")
-    path("tmp/custom.bed")
-
-    output:
-    path("coverage.bed"), emit: coverage
-
-    script:
-    """
-    bedops --intersect tmp/coverage.bed tmp/custom.bed > coverage.bed
+    samtools depth -J ${intersect_bed} --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
     """
 
     stub:

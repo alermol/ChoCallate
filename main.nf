@@ -102,10 +102,8 @@ workflow {
         bam_file = LEFT_ALIGN_INDELS(bam_file, ref_genome, gen_dict, fai_index)
     }
 
-    bed_coverage = GENERATE_COVERAGE(bam_file)
-    if (params.input.custom_bed != null) {
-        bed_coverage = INTERSECT_CUSTOM_BED(bed_coverage, file(params.input.custom_bed))
-    }
+    custom_bed = params.input.custom_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.custom_bed, checkIfExists: true)
+    bed_coverage = GENERATE_COVERAGE(bam_file, custom_bed)
 
     if (params.calling.callers.contains('bcftools')) {
         CALL_BCFTOOLS(bam_file, ref_genome, bed_coverage)
