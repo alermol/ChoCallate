@@ -27,7 +27,7 @@ include { FILTER_MAPPING_BAM; FILTER_INPUT_BAM } from './modules/filter_bam.nf'
 include { LEFT_ALIGN_INDELS } from './modules/left_align_indels.nf'
 
 // Generate coverage
-include { GENERATE_COVERAGE; INTERSECT_CUSTOM_BED } from './modules/generate_coverage.nf'
+include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
 
 // Call variants
 include { CALL_BCFTOOLS; CALL_FREEBAYES; CALL_GATK; CALL_SNVER; CALL_VARDICT } from './modules/calling.nf'
