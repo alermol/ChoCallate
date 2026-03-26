@@ -13,10 +13,5 @@ process CREATE_FAI_INDEX {
     """
     samtools faidx --threads ${task.cpus} --output ref_genome.fasta.fai tmp/ref_genome.fasta
     """
-
-    stub:
-    """
-    touch ref_genome.fasta.fai
-    """
 }
 

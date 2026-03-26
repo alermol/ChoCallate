@@ -13,11 +13,6 @@ process CREATE_SEQ_DICT {
     """
     gatk CreateSequenceDictionary -R tmp/ref_genome.fasta -O ref_genome.dict
     """
-
-    stub:
-    """
-    touch ref_genome.dict
-    """
 }
 
 

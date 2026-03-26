@@ -32,11 +32,6 @@ process GENERATE_CONSENSUS {
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "${sample_id}.bcf"
     """
-
-    stub:
-    """
-    touch consensus.bcf
-    """
 }
 
 

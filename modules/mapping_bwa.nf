@@ -17,11 +17,6 @@ process MAP_BWA_PAIRED {
     """
     bwa mem -t ${task.cpus} -R "${rg_id}" "\$(realpath tmp/ref_genome.fasta)" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
-
-    stub:
-    """
-    touch mapping.bam
-    """
 }
 
 process MAP_BWA_SINGLE {
@@ -41,10 +36,5 @@ process MAP_BWA_SINGLE {
     script:
     """
     bwa mem -t ${task.cpus} "\$(realpath tmp/ref_genome.fasta)" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
-    """
-
-    stub:
-    """
-    touch mapping.bam
     """
 }

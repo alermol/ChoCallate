@@ -18,9 +18,4 @@ process LEFT_ALIGN_INDELS {
     """
     gatk LeftAlignIndels -I tmp/input.bam -O output.bam -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false
     """
-
-    stub:
-    """
-    touch output.bam
-    """
 }
