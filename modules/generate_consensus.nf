@@ -3,18 +3,18 @@ process GENERATE_CONSENSUS {
     cpus params.consensus.cpu
     afterScript 'stage_cleanup.sh'
 
-    tag "${sample}"
+    tag "${sample_id}"
 
-    publishDir "${params.output.directory}/per_sample/${sample}/", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
+    publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
 
     input:
-    tuple val(sample), path('tmp/?.bcf', arity: '1..*')
+    tuple val(sample_id), path('tmp/?.bcf', arity: '1..*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/coverage.bed")
 
     output:
-    tuple val("${sample}"), path("consensus.bcf"), emit: consensus
+    tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus
 
     script:
     """
@@ -27,10 +27,10 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
+    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o consensus.bcf
+    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "${sample_id}.bcf"
     """
 
     stub:

@@ -17,9 +17,4 @@ process MERGE_OUTPUTS {
 
     bcftools merge --force-single --threads ${task.cpus} -Ob -o consensus.bcf tmp/*.bcf
     """
-
-    stub:
-    """
-    touch consensus.bcf
-    """
 }

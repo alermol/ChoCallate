@@ -36,7 +36,7 @@ include { CALL_BCFTOOLS; CALL_FREEBAYES; CALL_GATK; CALL_SNVER; CALL_VARDICT } f
 include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
 
 // Convert consensus to VCF
-include { CONVERT_TO_VCF } from './modules/convert_to_vcf.nf'
+include { CONVERT_TO_VCF_SAMPLE; CONVERT_TO_VCF_SINGLE } from './modules/convert_to_vcf.nf'
 
 // Merge outputs
 include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
@@ -154,6 +154,12 @@ workflow {
     if (params.output.format == 'bcf' && params.output.type == 'sample') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
     }
+
+    // Generate VCF consensus file for each sample
+    if (params.output.format == 'vcf' && params.output.type == 'sample') {
+        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+        CONVERT_TO_VCF_SAMPLE(GENERATE_CONSENSUS.out.consensus)
+    }
     
     // Generate single BCF consensus file for all samples
     if (params.output.format == 'bcf' && params.output.type == 'single') {
@@ -162,18 +168,12 @@ workflow {
         MERGE_OUTPUTS(consensus)
     }
     
-    // Generate VCF consensus file for each sample
-    if (params.output.format == 'vcf' && params.output.type == 'sample') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        CONVERT_TO_VCF(GENERATE_CONSENSUS.out.consensus)
-    }
-    
     // Generate single VCF consensus file for all samples
     if (params.output.format == 'vcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
         consensus = MERGE_OUTPUTS(consensus)
-        CONVERT_TO_VCF(consensus)
+        CONVERT_TO_VCF_SINGLE(consensus)
     }
     
 }
