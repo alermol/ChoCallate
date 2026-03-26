@@ -1,11 +1,11 @@
 process GENERATE_CONSENSUS {
-    maxForks params.consensus.forks
+    maxForks 1
     cpus params.consensus.cpu
     afterScript 'stage_cleanup.sh'
 
     tag "${sample}"
 
-    publishDir "${params.outdir}/per_sample/${sample}/", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
+    publishDir "${params.output.directory}/per_sample/${sample}/", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
 
     input:
     tuple val(sample), path('tmp/?.bcf', arity: '1..*')
@@ -27,7 +27,7 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.cons_threshold}"
+    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o consensus.bcf

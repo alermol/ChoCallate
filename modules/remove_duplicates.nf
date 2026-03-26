@@ -1,6 +1,6 @@
 process REMOVE_DUPLICATES {
-    maxForks params.bam_preparation.rm_duplicates.forks
-    cpus params.bam_preparation.rm_duplicates.cpu
+    maxForks 1
+    cpus 1
     afterScript 'stage_cleanup.sh'
     
     tag "${sample_id}"
@@ -13,7 +13,7 @@ process REMOVE_DUPLICATES {
 
     script:
     """
-    picard MarkDuplicates -I tmp/input.bam -O output.bam -M /dev/null ${params.bam_preparation.rm_duplicates.extra_args}
+    picard MarkDuplicates -I tmp/input.bam -O output.bam -M /dev/null --VALIDATION_STRINGENCY SILENT --REMOVE_DUPLICATES true
     """
 
     stub:

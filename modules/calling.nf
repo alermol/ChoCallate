@@ -1,6 +1,6 @@
 process CALL_BCFTOOLS {
-    maxForks params.calling.bcftools.forks
-    cpus params.calling.bcftools.cpu
+    maxForks 1
+    cpus params.calling.cpu
     errorStrategy 'ignore'
     afterScript 'stage_cleanup.sh'
 
@@ -28,7 +28,7 @@ process CALL_BCFTOOLS {
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${params.calling.bcftools.extra_args.mpileup} -Ou --fasta-ref tmp/ref_genome.fasta --threads 1 --min-BQ ${params.calling.min_base_quality} --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.extra_args.call} -Ou --threads 1 | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
+    'bcftools mpileup ${params.calling.bcftools.mpileup.extra_args} -Ou --fasta-ref tmp/ref_genome.fasta --threads 1 --min-BQ ${params.calling.min_base_quality} --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.call.extra_args} -Ou --threads 1 | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt | bcftools norm --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o bcftools.bcf
@@ -41,8 +41,8 @@ process CALL_BCFTOOLS {
 }
 
 process CALL_FREEBAYES {
-    cpus params.calling.freebayes.cpu
-    maxForks params.calling.freebayes.forks
+    cpus params.calling.cpu
+    maxForks 1
     errorStrategy 'ignore'
     afterScript 'stage_cleanup.sh'
 
@@ -83,8 +83,8 @@ process CALL_FREEBAYES {
 }
 
 process CALL_GATK {
-    cpus params.calling.gatk.cpu
-    maxForks params.calling.gatk.forks
+    cpus params.calling.cpu
+    maxForks 1
     errorStrategy 'ignore'
     afterScript 'stage_cleanup.sh'
 
@@ -127,8 +127,8 @@ process CALL_GATK {
 }
 
 process CALL_SNVER {
-    cpus params.calling.snver.cpu
-    maxForks params.calling.snver.forks
+    cpus params.calling.cpu
+    maxForks 1
     errorStrategy 'ignore'
     afterScript 'stage_cleanup.sh'
 
@@ -175,8 +175,8 @@ process CALL_SNVER {
 }
 
 process CALL_VARDICT {
-    maxForks params.calling.vardict.forks
-    cpus params.calling.vardict.cpu
+    maxForks 1
+    cpus params.calling.cpu
     errorStrategy 'ignore'
     afterScript 'stage_cleanup.sh'
 

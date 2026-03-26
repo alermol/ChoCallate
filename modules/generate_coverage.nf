@@ -1,6 +1,6 @@
 process GENERATE_COVERAGE {
-    cpus params.coverage.cpu
-    maxForks params.coverage.forks
+    cpus 1
+    maxForks 1
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
@@ -13,7 +13,7 @@ process GENERATE_COVERAGE {
 
     script:
     """
-    samtools depth "${params.coverage.extra_args.depth}" --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
+    samtools depth -J --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
     """
 
     stub:

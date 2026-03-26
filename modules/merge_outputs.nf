@@ -1,9 +1,9 @@
 process MERGE_OUTPUTS {
-    cpus 1
+    cpus params.consensus.cpu
     maxForks 1
     afterScript 'stage_cleanup.sh'
     
-    publishDir "${params.outdir}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
+    publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
 
     input:
     path('tmp/?.bcf', arity: '1..*')

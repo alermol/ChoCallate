@@ -1,6 +1,6 @@
 process MAP_BOWTIE2_MIXED {
-    maxForks params.bam_preparation.forks
-    cpus params.bam_preparation.mapping.bowtie2.cpu
+    maxForks 1
+    cpus params.mapping.cpu
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
@@ -14,7 +14,7 @@ process MAP_BOWTIE2_MIXED {
 
     script:
     """
-    bowtie2 --threads ${task.cpus} ${params.bam_preparation.mapping.bowtie2.extra_args} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 -U tmp/read3 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bowtie2 --threads ${task.cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 -U tmp/read3 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:
@@ -24,8 +24,8 @@ process MAP_BOWTIE2_MIXED {
 }
 
 process MAP_BOWTIE2_PAIRED {
-    maxForks params.bam_preparation.forks
-    cpus params.bam_preparation.mapping.bowtie2.cpu
+    maxForks 1
+    cpus params.mapping.cpu
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
@@ -39,7 +39,7 @@ process MAP_BOWTIE2_PAIRED {
 
     script:
     """
-    bowtie2 --threads ${task.cpus} ${params.bam_preparation.mapping.bowtie2.extra_args} -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bowtie2 --threads ${task.cpus} -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:
@@ -49,8 +49,8 @@ process MAP_BOWTIE2_PAIRED {
 }
 
 process MAP_BOWTIE2_SINGLE {
-    maxForks params.bam_preparation.forks
-    cpus params.bam_preparation.mapping.bowtie2.cpu
+    maxForks 1
+    cpus params.mapping.cpu
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
@@ -64,7 +64,7 @@ process MAP_BOWTIE2_SINGLE {
 
     script:
     """
-    bowtie2 --threads ${task.cpus} ${params.bam_preparation.mapping.bowtie2.extra_args} -x "\$(realpath tmp/ref_genome.fasta)" -U tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bowtie2 --threads ${task.cpus} -x "\$(realpath tmp/ref_genome.fasta)" -U tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:

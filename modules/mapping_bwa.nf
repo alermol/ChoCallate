@@ -1,6 +1,6 @@
 process MAP_BWA_PAIRED {
-    maxForks params.bam_preparation.forks
-    cpus params.bam_preparation.mapping.bwa.cpu
+    maxForks 1
+    cpus params.mapping.cpu
     afterScript 'stage_cleanup.sh'
     
     tag "${sample_id}"
@@ -15,7 +15,7 @@ process MAP_BWA_PAIRED {
     script:
     def rg_id = "@RG\\tID:${sample_id}\\tSM:${sample_id}"
     """
-    bwa mem -t ${task.cpus} ${params.bam_preparation.mapping.bwa.extra_args} -R "${rg_id}" "\$(realpath tmp/ref_genome.fasta)" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bwa mem -t ${task.cpus} -R "${rg_id}" "\$(realpath tmp/ref_genome.fasta)" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:
@@ -25,8 +25,8 @@ process MAP_BWA_PAIRED {
 }
 
 process MAP_BWA_SINGLE {
-    maxForks params.bam_preparation.forks
-    cpus params.bam_preparation.mapping.bwa.cpu
+    maxForks 1
+    cpus params.mapping.cpu
     afterScript 'stage_cleanup.sh'
     
     tag "${sample_id}"
@@ -40,7 +40,7 @@ process MAP_BWA_SINGLE {
 
     script:
     """
-    bwa mem -t ${task.cpus} ${params.bam_preparation.mapping.bwa.extra_args} "\$(realpath tmp/ref_genome.fasta)" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bwa mem -t ${task.cpus} "\$(realpath tmp/ref_genome.fasta)" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 
     stub:

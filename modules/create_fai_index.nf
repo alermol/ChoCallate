@@ -1,6 +1,6 @@
 process CREATE_FAI_INDEX {
     maxForks 1
-    cpus params.reference_preparation.fai_index.cpu
+    cpus 1
     afterScript 'stage_cleanup.sh'
 
     input:

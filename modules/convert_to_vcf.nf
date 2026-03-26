@@ -3,7 +3,7 @@ process CONVERT_TO_VCF {
     maxForks 1
     afterScript 'stage_cleanup.sh'
 
-    publishDir "${params.outdir}/", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.format == 'vcf' && params.output.type == 'single'
+    publishDir "${params.output.directory}/", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.format == 'vcf' && params.output.type == 'single'
 
     input:
     path('tmp/consensus.bcf')

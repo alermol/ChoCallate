@@ -1,6 +1,6 @@
 process LEFT_ALIGN_INDELS {
-    maxForks params.bam_preparation.left_align_indels.forks
-    cpus params.bam_preparation.left_align_indels.cpu
+    maxForks 1
+    cpus 1
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
@@ -16,7 +16,7 @@ process LEFT_ALIGN_INDELS {
 
     script:
     """
-    gatk LeftAlignIndels -I tmp/input.bam -O output.bam -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false ${params.bam_preparation.left_align_indels.extra_args}
+    gatk LeftAlignIndels -I tmp/input.bam -O output.bam -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false
     """
 
     stub:

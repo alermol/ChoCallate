@@ -1,6 +1,6 @@
 process DECOMPRESS_ASSEMBLY {
     maxForks 1
-    cpus params.reference_preparation.decompress.cpu
+    cpus 1
     afterScript 'stage_cleanup.sh'
 
     input:
