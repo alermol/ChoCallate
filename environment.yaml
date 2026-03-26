@@ -3,17 +3,19 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - freebayes>=1.3.9
-  - samtools>=1.21
+  - freebayes
+  - samtools
   - python
-  - tabix>=1.11
+  - tabix
   - bowtie2
-  - bedops>=2.4.42
-  - gatk4=4.6.*
-  - snver=0.5.3
-  - vardict-java=1.8.3
+  - bedops
+  - gatk4
+  - snver
+  - vardict-java
   - nextflow
-  - bcftools>=1.20
+  - bcftools
   - bedtools
   - parallel
   - pysam
+  - bwa
+  - minimap2
