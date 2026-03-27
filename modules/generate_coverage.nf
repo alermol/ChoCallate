@@ -17,9 +17,4 @@ process GENERATE_COVERAGE {
     """
     samtools depth -J ${intersect_bed} --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
     """
-
-    stub:
-    """
-    touch coverage.bed
-    """
 }

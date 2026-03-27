@@ -16,11 +16,6 @@ process MAP_BOWTIE2_MIXED {
     """
     bowtie2 --threads ${task.cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 -U tmp/read3 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
-
-    stub:
-    """
-    touch mapping.bam
-    """
 }
 
 process MAP_BOWTIE2_PAIRED {
@@ -41,11 +36,6 @@ process MAP_BOWTIE2_PAIRED {
     """
     bowtie2 --threads ${task.cpus} -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
-
-    stub:
-    """
-    touch mapping.bam
-    """
 }
 
 process MAP_BOWTIE2_SINGLE {
@@ -65,10 +55,5 @@ process MAP_BOWTIE2_SINGLE {
     script:
     """
     bowtie2 --threads ${task.cpus} -x "\$(realpath tmp/ref_genome.fasta)" -U tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
-    """
-
-    stub:
-    """
-    touch mapping.bam
     """
 }

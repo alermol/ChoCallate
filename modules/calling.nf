@@ -33,11 +33,6 @@ process CALL_BCFTOOLS {
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o bcftools.bcf
     """
-
-    stub:
-    """
-    touch bcftools.bcf
-    """
 }
 
 process CALL_FREEBAYES {
@@ -74,11 +69,6 @@ process CALL_FREEBAYES {
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o freebayes.bcf
-    """
-
-    stub:
-    """
-    touch freebayes.bcf
     """
 }
 
@@ -118,11 +108,6 @@ process CALL_GATK {
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o gatk.bcf
-    """
-
-    stub:
-    """
-    touch gatk.bcf
     """
 }
 
@@ -167,11 +152,6 @@ process CALL_SNVER {
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*/*.bcf | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools sort -Ou -o snver.bcf
     """
-
-    stub:
-    """
-    touch snver.bcf
-    """
 }
 
 process CALL_VARDICT {
@@ -209,10 +189,5 @@ process CALL_VARDICT {
     bcftools index --threads 1 --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/calling_chunks/*.bcf | bcftools sort -Ou -o vardict.bcf
-    """
-
-    stub:
-    """
-    touch vardict.bcf
     """
 }

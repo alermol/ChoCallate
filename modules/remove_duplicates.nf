@@ -15,9 +15,4 @@ process REMOVE_DUPLICATES {
     """
     picard MarkDuplicates -I tmp/input.bam -O output.bam -M /dev/null --VALIDATION_STRINGENCY SILENT --REMOVE_DUPLICATES true
     """
-
-    stub:
-    """
-    touch output.bam
-    """
 }
