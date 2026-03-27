@@ -9,13 +9,17 @@ include { CREATE_FAI_INDEX } from './modules/create_fai_index.nf'
 include { CREATE_SEQ_DICT } from './modules/create_seq_dict.nf'
 
 // Map reads to assembly using Bowtie2
-include { MAP_BOWTIE2_SINGLE; MAP_BOWTIE2_PAIRED; MAP_BOWTIE2_MIXED } from './modules/mapping_bowtie2.nf'
+include { MAP_BOWTIE2_SINGLE } from './modules/mapping/bowtie2/process_single_reads.nf'
+include { MAP_BOWTIE2_PAIRED } from './modules/mapping/bowtie2/process_paired_reads.nf'
+include { MAP_BOWTIE2_MIXED } from './modules/mapping/bowtie2/process_mixed_reads.nf'
 
 // Map reads to assembly using BWA
-include { MAP_BWA_SINGLE; MAP_BWA_PAIRED } from './modules/mapping_bwa.nf'
+include { MAP_BWA_SINGLE } from './modules/mapping/bwa/process_single_reads.nf'
+include { MAP_BWA_PAIRED } from './modules/mapping/bwa/process_paired_reads.nf'
 
 // Map reads to assembly using Minimap2
-include { MAP_MINIMAP2_SINGLE; MAP_MINIMAP2_PAIRED } from './modules/mapping_minimap2.nf'
+include { MAP_MINIMAP2_SINGLE } from './modules/mapping/minimap2/process_single_reads.nf'
+include { MAP_MINIMAP2_PAIRED } from './modules/mapping/minimap2/process_paired_reads.nf'
 
 // Remove duplicates
 include { REMOVE_DUPLICATES } from './modules/remove_duplicates.nf'
@@ -30,7 +34,11 @@ include { LEFT_ALIGN_INDELS } from './modules/left_align_indels.nf'
 include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
 
 // Call variants
-include { CALL_BCFTOOLS; CALL_FREEBAYES; CALL_GATK; CALL_SNVER; CALL_VARDICT } from './modules/calling.nf'
+include { CALL_BCFTOOLS } from './modules/calling/bcftools.nf'
+include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
+include { CALL_GATK } from './modules/calling/gatk.nf'
+include { CALL_SNVER } from './modules/calling/snver.nf'
+include { CALL_VARDICT } from './modules/calling/vardict.nf'
 
 // Generate consensus
 include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
