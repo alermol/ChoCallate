@@ -46,7 +46,7 @@ calling:
   gatk:
     extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
   vardict:
-    extra_args: "--nosv -k 0"
+    extra_args: "--nosv"
   snver:
     extra_args: "-p 0.01"
 
