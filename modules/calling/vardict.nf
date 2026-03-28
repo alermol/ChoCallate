@@ -25,7 +25,7 @@ process CALL_VARDICT {
     mkdir -p tmp/calling_chunks/
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
-    ${sample_id}
+    vardict
     EOF
 
     parallel -j ${task.cpus} \

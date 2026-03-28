@@ -24,7 +24,7 @@ process CALL_BCFTOOLS {
     mkdir -p tmp/calling_chunks/
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
-    ${sample_id}
+    bcftools
     EOF
 
     parallel -j ${task.cpus} \
