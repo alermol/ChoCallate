@@ -1,7 +1,7 @@
 process MAP_BOWTIE2_SINGLE {
     maxForks 1
     cpus params.mapping.cpu
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 

@@ -2,7 +2,7 @@ process CALL_GATK {
     cpus params.calling.cpu
     maxForks 1
     errorStrategy 'ignore'
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 

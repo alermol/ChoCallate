@@ -1,7 +1,7 @@
 process CREATE_FAI_INDEX {
     maxForks 1
     cpus 1
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     input:
     path(ref_genome), name: "tmp/ref_genome.fasta"

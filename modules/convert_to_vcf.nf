@@ -1,7 +1,7 @@
 process CONVERT_TO_VCF_SAMPLE {
     cpus params.consensus.cpu
     maxForks 1
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 
@@ -22,7 +22,7 @@ process CONVERT_TO_VCF_SAMPLE {
 process CONVERT_TO_VCF_SINGLE {
     cpus params.consensus.cpu
     maxForks 1
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.format == 'vcf' && params.output.type == 'single'
 

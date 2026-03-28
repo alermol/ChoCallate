@@ -1,7 +1,7 @@
 process GENERATE_COVERAGE {
     cpus 1
     maxForks 1
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 

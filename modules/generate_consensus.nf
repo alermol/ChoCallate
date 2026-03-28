@@ -1,7 +1,7 @@
 process GENERATE_CONSENSUS {
     maxForks 1
     cpus params.consensus.cpu
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 

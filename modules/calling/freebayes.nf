@@ -2,13 +2,14 @@ process CALL_FREEBAYES {
     cpus params.calling.cpu
     maxForks 1
     errorStrategy 'ignore'
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 
     input:
     tuple val(sample_id), path("tmp/input.bam")
     path("tmp/ref_genome.fasta")
+    path("tmp/ref_genome.fasta.fai")
     path("tmp/coverage.bed")
 
     output:

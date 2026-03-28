@@ -2,7 +2,7 @@ process CALL_VARSCAN {
     maxForks 1
     cpus params.calling.cpu
     errorStrategy 'ignore'
-    // afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
 

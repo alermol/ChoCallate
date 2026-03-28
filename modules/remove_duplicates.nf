@@ -1,7 +1,7 @@
 process REMOVE_DUPLICATES {
     maxForks 1
     cpus 1
-    //afterScript 'stage_cleanup.sh'
+    afterScript 'stage_cleanup.sh'
     
     tag "${sample_id}"
 
