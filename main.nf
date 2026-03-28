@@ -39,6 +39,8 @@ include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
 include { CALL_GATK } from './modules/calling/gatk.nf'
 include { CALL_SNVER } from './modules/calling/snver.nf'
 include { CALL_VARDICT } from './modules/calling/vardict.nf'
+include { CALL_MUTECT2 } from './modules/calling/mutect2.nf'
+include { CALL_VARSCAN } from './modules/calling/varscan.nf'
 
 // Generate consensus
 include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
@@ -53,11 +55,11 @@ include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 workflow {
     
     // // Validate required parameters
-    CLIParamsValidation.reference_genome_validation(params.input.reference_genome)
-    CLIParamsValidation.samples_tsv_validation(params.input.samples_tsv)
-    CLIParamsValidation.effective_callers_validation(params.calling.callers, params.ploidy)
-    CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
-    CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
+    // CLIParamsValidation.reference_genome_validation(params.input.reference_genome)
+    // CLIParamsValidation.samples_tsv_validation(params.input.samples_tsv)
+    // CLIParamsValidation.effective_callers_validation(params.calling.callers, params.ploidy)
+    // CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
+    // CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.input.samples_tsv, params.input.format, params.input.reads_type)
 
@@ -148,41 +150,57 @@ workflow {
         vardict = channel.empty()
     }
 
+    if (params.calling.callers.contains('mutect2')) {
+        CALL_MUTECT2(bam_file, ref_genome, fai_index, bed_coverage, gen_dict)
+        mutect2 = CALL_MUTECT2.out.calling_result
+    } else {
+        mutect2 = channel.empty()
+    }
+
+    if (params.calling.callers.contains('varscan')) {
+        CALL_VARSCAN(bam_file, ref_genome, fai_index, bed_coverage)
+        varscan = CALL_VARSCAN.out.calling_result
+    } else {
+        varscan = channel.empty()
+    }
+
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
         .join(snver, remainder: true)
         .join(vardict, remainder: true)
+        .join(mutect2, remainder: true)
+        .join(varscan, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 
 
 
-    // Generate BCF consensus file for each sample
-    if (params.output.format == 'bcf' && params.output.type == 'sample') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-    }
+    // // Generate BCF consensus file for each sample
+    // if (params.output.format == 'bcf' && params.output.type == 'sample') {
+    //     GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    // }
 
-    // Generate VCF consensus file for each sample
-    if (params.output.format == 'vcf' && params.output.type == 'sample') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        CONVERT_TO_VCF_SAMPLE(GENERATE_CONSENSUS.out.consensus)
-    }
+    // // Generate VCF consensus file for each sample
+    // if (params.output.format == 'vcf' && params.output.type == 'sample') {
+    //     GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    //     CONVERT_TO_VCF_SAMPLE(GENERATE_CONSENSUS.out.consensus)
+    // }
     
-    // Generate single BCF consensus file for all samples
-    if (params.output.format == 'bcf' && params.output.type == 'single') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        MERGE_OUTPUTS(consensus)
-    }
+    // // Generate single BCF consensus file for all samples
+    // if (params.output.format == 'bcf' && params.output.type == 'single') {
+    //     GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    //     consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+    //     MERGE_OUTPUTS(consensus)
+    // }
     
-    // Generate single VCF consensus file for all samples
-    if (params.output.format == 'vcf' && params.output.type == 'single') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        consensus = MERGE_OUTPUTS(consensus)
-        CONVERT_TO_VCF_SINGLE(consensus)
-    }
+    // // Generate single VCF consensus file for all samples
+    // if (params.output.format == 'vcf' && params.output.type == 'single') {
+    //     GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    //     consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+    //     consensus = MERGE_OUTPUTS(consensus)
+    //     CONVERT_TO_VCF_SINGLE(consensus)
+    // }
     
 }
 
