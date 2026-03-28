@@ -19,3 +19,4 @@ dependencies:
   - pysam
   - bwa
   - minimap2
+  - varscan
