@@ -14,6 +14,6 @@ process MAP_MINIMAP2_PAIRED {
 
     script:
     """
-    minimap2 -ax sr -t ${task.cpus} -a "\$(realpath tmp/ref_genome.fasta).mmi" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    minimap2 ${params.mapping.extra_args} -ax sr -t ${task.cpus} -a "\$(realpath tmp/ref_genome.fasta).mmi" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }

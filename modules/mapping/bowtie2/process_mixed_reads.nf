@@ -14,6 +14,6 @@ process MAP_BOWTIE2_MIXED {
 
     script:
     """
-    bowtie2 --threads ${task.cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 -U tmp/read3 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bowtie2 ${params.mapping.extra_args} --threads ${task.cpus} --rg-id "${sample_id}" --rg "SM:${sample_id}" -x "\$(realpath tmp/ref_genome.fasta)" -1 tmp/read1 -2 tmp/read2 -U tmp/read3 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }

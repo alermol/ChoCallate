@@ -14,6 +14,6 @@ process MAP_BWA_SINGLE {
 
     script:
     """
-    bwa mem -t ${task.cpus} "\$(realpath tmp/ref_genome.fasta)" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bwa mem ${params.mapping.extra_args} -t ${task.cpus} "\$(realpath tmp/ref_genome.fasta)" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }

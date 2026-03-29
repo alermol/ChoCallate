@@ -15,6 +15,6 @@ process MAP_BWA_PAIRED {
     script:
     def rg_id = "@RG\\tID:${sample_id}\\tSM:${sample_id}"
     """
-    bwa mem -t ${task.cpus} -R "${rg_id}" "\$(realpath tmp/ref_genome.fasta)" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    bwa mem ${params.mapping.extra_args} -t ${task.cpus} -R "${rg_id}" "\$(realpath tmp/ref_genome.fasta)" tmp/read1 tmp/read2 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }

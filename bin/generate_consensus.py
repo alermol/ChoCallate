@@ -12,6 +12,7 @@ import pysam
 class Genotypes(NamedTuple):
     index: int = 0
     ref: str = ""
+    filter: str = ""
     alt: tuple[str, ...] = ("",)
     gt: tuple[int, ...] = (0, 0)
 
@@ -34,6 +35,7 @@ def genotype_at_position(records, index, pos):
     if (i < len(records)) and (records[i].pos == pos):
         return Genotypes(index=i, 
                          ref=records[i].ref.upper(), 
+                         filter=list(records[i].filter)[0],
                          alt=tuple(sorted(records[i].alts)), 
                          gt=tuple(sorted(records[i].samples[0]['GT'])))
     return Genotypes()
@@ -52,7 +54,7 @@ def get_consensus_genotype(genotypes, consensus_threshold):
         A tuple containing the consensus genotype (reference allele, alternate alleles, numeric representation of the genotype) and the number of matching calls.
         If the consensus genotype is not found, returns None and 0.
     """
-    genotypes = [(i.ref, i.alt, i.gt) for i in genotypes]
+    genotypes = [(i.ref, i.alt, i.gt) for i in genotypes if i.filter != "LowQual"]
     counter = Counter(genotypes)
     value, count = counter.most_common(1)[0]
     if count < consensus_threshold:

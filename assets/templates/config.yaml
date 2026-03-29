@@ -15,6 +15,7 @@ ref_genome:
 
 mapping:
   mapper: "bowtie2"
+  extra_args: ""
   cpu: 10
 
 bam_filter:
@@ -32,15 +33,15 @@ coverage:
 calling:
   callers: "bcftools,gatk,freebayes,vardict,mutect2"
   min_base_quality: 0
-  min_snp_qual: 0
+  min_snp_qual: 20
   cpu: 4
   bcftools:
     call:
       extra_args: "--multiallelic-caller --variants-only"
     mpileup:
-      extra_args: "--count-orphans --max-depth 250"
+      extra_args: "--count-orphans"
   freebayes:
-    extra_args: "--use-best-n-alleles 4 --hwe-priors-off --no-population-priors --allele-balance-priors-off --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --limit-coverage 250"
+    extra_args: "--hwe-priors-off --no-population-priors"
   gatk:
     extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
   vardict:

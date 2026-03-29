@@ -23,6 +23,6 @@ process CALL_BCFTOOLS {
     bcftools
     EOF
 
-    bcftools mpileup ${params.calling.bcftools.mpileup.extra_args} -Ou --fasta-ref tmp/ref_genome.fasta --threads ${task.cpus} --min-BQ ${params.calling.min_base_quality} --regions-file tmp/coverage.bed tmp/input.bam | bcftools call ${params.calling.bcftools.call.extra_args} -Ou --threads ${task.cpus} | bcftools reheader -s tmp/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter --threads ${task.cpus} -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools norm --threads ${task.cpus} --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o bcftools.bcf
+    bcftools mpileup ${params.calling.bcftools.mpileup.extra_args} -Ou --fasta-ref tmp/ref_genome.fasta --threads ${task.cpus} --min-BQ ${params.calling.min_base_quality} --regions-file tmp/coverage.bed tmp/input.bam | bcftools call ${params.calling.bcftools.call.extra_args} -Ou --threads ${task.cpus} | bcftools reheader -s tmp/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter --threads ${task.cpus} --soft-filter 'LowQual' -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools norm --threads ${task.cpus} --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o bcftools.bcf
     """
 }
