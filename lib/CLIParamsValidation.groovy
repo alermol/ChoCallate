@@ -13,9 +13,9 @@ class CLIParamsValidation {
         }
     }
 
-    static void effective_callers_validation(String callers, Number ploidy) {
-        def diploid_callers = ['bcftools', 'gatk', 'freebayes', 'snver', 'vardict', 'mutect2', 'varscan']
-        def polyploid_callers = ['gatk', 'freebayes', 'snver']
+    static void effective_callers_validation(String callers) {
+        def diploid_callers = ['bcftools', 'gatk', 'freebayes', 'vardict', 'mutect2']
+        def polyploid_callers = ['gatk', 'freebayes']
         def callersList = callers.split(',')
         if (callers == null) {
             println "ERROR: Effective callers are not specified"
@@ -23,21 +23,6 @@ class CLIParamsValidation {
         }
         if (callersList.size() % 2 == 0) {
             println "WARNING: It is strongly recommended to use odd number of callers in order to avoid ties in the consensus"
-        }
-        if (ploidy == 2) {
-            for (caller in callersList) {
-                if (!(caller in diploid_callers)) {
-                    println "ERROR: Caller ${caller} is not suitable for diploid calling"
-                    System.exit(1)
-                }
-            }
-        } else {
-            for (caller in callersList) {
-                if (!(caller in polyploid_callers)) {
-                    println "ERROR: Caller ${caller} is not suitable for polyploid calling"
-                    System.exit(1)
-                }
-            }
         }
     }
 

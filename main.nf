@@ -37,10 +37,8 @@ include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
 include { CALL_BCFTOOLS } from './modules/calling/bcftools.nf'
 include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
 include { CALL_GATK } from './modules/calling/gatk.nf'
-include { CALL_SNVER } from './modules/calling/snver.nf'
 include { CALL_VARDICT } from './modules/calling/vardict.nf'
 include { CALL_MUTECT2 } from './modules/calling/mutect2.nf'
-include { CALL_VARSCAN } from './modules/calling/varscan.nf'
 
 // Generate consensus
 include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
@@ -54,12 +52,12 @@ include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 
 workflow {
     
-    // // Validate required parameters
-    // CLIParamsValidation.reference_genome_validation(params.input.reference_genome)
-    // CLIParamsValidation.samples_tsv_validation(params.input.samples_tsv)
-    // CLIParamsValidation.effective_callers_validation(params.calling.callers, params.ploidy)
-    // CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
-    // CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
+    // Validate required parameters
+    CLIParamsValidation.reference_genome_validation(params.input.reference_genome)
+    CLIParamsValidation.samples_tsv_validation(params.input.samples_tsv)
+    CLIParamsValidation.effective_callers_validation(params.calling.callers)
+    CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
+    CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.input.samples_tsv, params.input.format, params.input.reads_type)
 
@@ -136,13 +134,6 @@ workflow {
         gatk = channel.empty()
     }
 
-    if (params.calling.callers.contains('snver')) {
-        CALL_SNVER(bam_file, ref_genome, fai_index, bed_coverage)
-        snver = CALL_SNVER.out.calling_result
-    } else {
-        snver = channel.empty()
-    }
-
     if (params.calling.callers.contains('vardict')) {
         CALL_VARDICT(bam_file, ref_genome, fai_index, bed_coverage)
         vardict = CALL_VARDICT.out.calling_result
@@ -157,20 +148,12 @@ workflow {
         mutect2 = channel.empty()
     }
 
-    if (params.calling.callers.contains('varscan')) {
-        CALL_VARSCAN(bam_file, ref_genome, fai_index, bed_coverage)
-        varscan = CALL_VARSCAN.out.calling_result
-    } else {
-        varscan = channel.empty()
-    }
 
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
-        .join(snver, remainder: true)
         .join(vardict, remainder: true)
         .join(mutect2, remainder: true)
-        .join(varscan, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 

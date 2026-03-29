@@ -1,5 +1,3 @@
-ploidy: 2
-
 input:
   samples_tsv: null
   reference_genome: null
@@ -29,10 +27,10 @@ left_align_indels:
   enabled: true
 
 coverage:
-  min_coverage: 1
+  min_coverage: 3
 
 calling:
-  callers: "bcftools,gatk,freebayes,snver,vardict,varscan,mutect2"
+  callers: "bcftools,gatk,freebayes,vardict,mutect2"
   min_base_quality: 0
   min_snp_qual: 0
   cpu: 4
@@ -47,12 +45,8 @@ calling:
     extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
   vardict:
     extra_args: "--nosv"
-  snver:
-    extra_args: "-p 0.01"
   mutect2:
     extra_args: "--smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
-  varscan:
-    extra_args: "--min-coverage 1 --min-reads2 1 --min-var-freq 0.01"
 
 consensus:
   threshold: null
