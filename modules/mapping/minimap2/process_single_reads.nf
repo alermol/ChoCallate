@@ -14,6 +14,8 @@ process MAP_MINIMAP2_SINGLE {
 
     script:
     """
-    minimap2 ${params.mapping.extra_args} -ax sr -t ${task.cpus} "\$(realpath tmp/ref_genome.fasta).mmi" tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    GENOME_BASENAME=\$(basename \$(realpath tmp/ref_genome.fasta))
+    
+    minimap2 ${params.mapping.extra_args} -ax sr -t ${task.cpus} ${params.input.reference_index_dir}/\${GENOME_BASENAME}.mmi tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }

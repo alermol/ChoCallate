@@ -14,6 +14,8 @@ process MAP_BOWTIE2_SINGLE {
 
     script:
     """
-    bowtie2 ${params.mapping.extra_args} --threads ${task.cpus} -x "\$(realpath tmp/ref_genome.fasta)" -U tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
+    GENOME_BASENAME=\$(basename \$(realpath tmp/ref_genome.fasta))
+    
+    bowtie2 ${params.mapping.extra_args} --threads ${task.cpus} -x ${params.input.reference_index_dir}/\${GENOME_BASENAME} -U tmp/read1 | samtools view --threads ${task.cpus} -b -o mapping.bam
     """
 }
