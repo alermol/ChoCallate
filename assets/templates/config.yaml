@@ -33,20 +33,19 @@ coverage:
 
 calling:
   callers: "bcftools,gatk,freebayes,vardict"
-  min_base_quality: 0
   min_snp_qual: 20
   cpu: 4
   bcftools:
     call:
-      extra_args: "--multiallelic-caller --variants-only"
+      extra_args: ""
     mpileup:
-      extra_args: "--count-orphans"
+      extra_args: ""
   freebayes:
-    extra_args: "--hwe-priors-off --no-population-priors"
+    extra_args: ""
   gatk:
-    extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
+    extra_args: ""
   vardict:
-    extra_args: "--nosv"
+    extra_args: ""
 
 consensus:
   threshold: null
