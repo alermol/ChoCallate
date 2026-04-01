@@ -23,6 +23,6 @@ process CALL_VARDICT {
     vardict
     EOF
 
-    vardict-java ${params.calling.vardict.extra_args} -G tmp/ref_genome.fasta -b tmp/input.bam -fisher -th 1 -q "${params.calling.min_base_quality}" -VS SILENT -c 1 -S 2 -E 3 -g 4 -th ${task.cpus} tmp/coverage.bed | var2vcf_valid.pl -S -q "${params.calling.min_base_quality}" -E | bcftools reheader -s tmp/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter --soft-filter 'LowQual' -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools norm --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o vardict.bcf
+    vardict-java ${params.calling.vardict.extra_args} -G tmp/ref_genome.fasta -b tmp/input.bam -fisher -th 1 -q "${params.calling.min_base_quality}" -VS SILENT -c 1 -S 2 -E 3 -g 4 -th ${task.cpus} tmp/coverage.bed | var2vcf_valid.pl -S -q "${params.calling.min_base_quality}" -E | bcftools reheader -s tmp/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools view -Ou --min-alleles 2 --max-alleles 2 | bcftools norm --check-ref w -m+ -Ou --fasta-ref tmp/ref_genome.fasta -o vardict.bcf
     """
 }
