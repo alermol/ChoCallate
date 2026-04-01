@@ -3,19 +3,20 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
+  - bwa
+  - minimap2
+  - bowtie2
   - freebayes
+  - bcftools
+  - gatk4
+  - vardict-java
+  - varscan
   - samtools
   - python
   - tabix
-  - bowtie2
   - bedops
-  - gatk4
-  - snver
-  - vardict-java
   - nextflow
-  - bcftools
   - bedtools
   - parallel
   - pysam
-  - bwa
-  - minimap2
+  - picard

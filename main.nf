@@ -9,13 +9,17 @@ include { CREATE_FAI_INDEX } from './modules/create_fai_index.nf'
 include { CREATE_SEQ_DICT } from './modules/create_seq_dict.nf'
 
 // Map reads to assembly using Bowtie2
-include { MAP_BOWTIE2_SINGLE; MAP_BOWTIE2_PAIRED; MAP_BOWTIE2_MIXED } from './modules/mapping_bowtie2.nf'
+include { MAP_BOWTIE2_SINGLE } from './modules/mapping/bowtie2/process_single_reads.nf'
+include { MAP_BOWTIE2_PAIRED } from './modules/mapping/bowtie2/process_paired_reads.nf'
+include { MAP_BOWTIE2_MIXED } from './modules/mapping/bowtie2/process_mixed_reads.nf'
 
 // Map reads to assembly using BWA
-include { MAP_BWA_SINGLE; MAP_BWA_PAIRED } from './modules/mapping_bwa.nf'
+include { MAP_BWA_SINGLE } from './modules/mapping/bwa/process_single_reads.nf'
+include { MAP_BWA_PAIRED } from './modules/mapping/bwa/process_paired_reads.nf'
 
 // Map reads to assembly using Minimap2
-include { MAP_MINIMAP2_SINGLE; MAP_MINIMAP2_PAIRED } from './modules/mapping_minimap2.nf'
+include { MAP_MINIMAP2_SINGLE } from './modules/mapping/minimap2/process_single_reads.nf'
+include { MAP_MINIMAP2_PAIRED } from './modules/mapping/minimap2/process_paired_reads.nf'
 
 // Remove duplicates
 include { REMOVE_DUPLICATES } from './modules/remove_duplicates.nf'
@@ -30,7 +34,11 @@ include { LEFT_ALIGN_INDELS } from './modules/left_align_indels.nf'
 include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
 
 // Call variants
-include { CALL_BCFTOOLS; CALL_FREEBAYES; CALL_GATK; CALL_SNVER; CALL_VARDICT } from './modules/calling.nf'
+include { CALL_BCFTOOLS } from './modules/calling/bcftools.nf'
+include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
+include { CALL_GATK } from './modules/calling/gatk.nf'
+include { CALL_VARDICT } from './modules/calling/vardict.nf'
+include { CALL_VARSCAN } from './modules/calling/varscan.nf'
 
 // Generate consensus
 include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
@@ -44,10 +52,10 @@ include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
 
 workflow {
     
-    // // Validate required parameters
+    // Validate required parameters
     CLIParamsValidation.reference_genome_validation(params.input.reference_genome)
     CLIParamsValidation.samples_tsv_validation(params.input.samples_tsv)
-    CLIParamsValidation.effective_callers_validation(params.calling.callers, params.ploidy)
+    CLIParamsValidation.effective_callers_validation(params.calling.callers)
     CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
 
@@ -106,14 +114,14 @@ workflow {
     bed_coverage = GENERATE_COVERAGE(bam_file, custom_bed)
 
     if (params.calling.callers.contains('bcftools')) {
-        CALL_BCFTOOLS(bam_file, ref_genome, bed_coverage)
+        CALL_BCFTOOLS(bam_file, ref_genome, fai_index, bed_coverage)
         bcftools = CALL_BCFTOOLS.out.calling_result
     } else {
         bcftools = channel.empty()
     }
 
     if (params.calling.callers.contains('freebayes')) {
-        CALL_FREEBAYES(bam_file, ref_genome, bed_coverage)
+        CALL_FREEBAYES(bam_file, ref_genome, fai_index, bed_coverage)
         freebayes = CALL_FREEBAYES.out.calling_result
     } else {
         freebayes = channel.empty()
@@ -126,13 +134,6 @@ workflow {
         gatk = channel.empty()
     }
 
-    if (params.calling.callers.contains('snver')) {
-        CALL_SNVER(bam_file, ref_genome, fai_index, bed_coverage)
-        snver = CALL_SNVER.out.calling_result
-    } else {
-        snver = channel.empty()
-    }
-
     if (params.calling.callers.contains('vardict')) {
         CALL_VARDICT(bam_file, ref_genome, fai_index, bed_coverage)
         vardict = CALL_VARDICT.out.calling_result
@@ -140,11 +141,19 @@ workflow {
         vardict = channel.empty()
     }
 
+    if (params.calling.callers.contains('varscan')) {
+        CALL_VARSCAN(bam_file, ref_genome, fai_index, bed_coverage)
+        varscan = CALL_VARSCAN.out.calling_result
+    } else {
+        varscan = channel.empty()
+    }
+
+
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
-        .join(snver, remainder: true)
         .join(vardict, remainder: true)
+        .join(varscan, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 

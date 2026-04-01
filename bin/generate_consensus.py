@@ -33,7 +33,7 @@ def genotype_at_position(records, index, pos):
         i += 1
     if (i < len(records)) and (records[i].pos == pos):
         return Genotypes(index=i, 
-                         ref=records[i].ref.upper(), 
+                         ref=records[i].ref.upper(),
                          alt=tuple(sorted(records[i].alts)), 
                          gt=tuple(sorted(records[i].samples[0]['GT'])))
     return Genotypes()
@@ -103,10 +103,10 @@ def main():
                 position_progress = 0
                 for line in bed_file.fetch():
                     contig, start, end = line.split('\t')
-                    vcf_start = int(start)
+                    vcf_start = int(start) + 1
                     vcf_end = int(end)
-                    ref_seq = reference_file.fetch(contig, vcf_start, vcf_end).upper()
-                    records_per_file = [list(vf.fetch(contig, vcf_start, vcf_end)) for vf in variant_files]
+                    ref_seq = reference_file.fetch(contig, int(start), int(end)).upper()
+                    records_per_file = [list(vf.fetch(contig, int(start), int(end))) for vf in variant_files]
                     indices = [0] * len(records_per_file)
                     ref_seq_rel_pos = 0
                     while vcf_start < vcf_end:
@@ -126,7 +126,7 @@ def main():
                             new_record = output_file.new_record(
                                 contig=contig,
                                 start=vcf_start - 1,
-                                stop=vcf_start + 1,
+                                stop=vcf_start,
                                 alleles=[consensus_genotype[0]] + list(consensus_genotype[1]),
                                 qual=42,
                             )
@@ -143,7 +143,7 @@ def main():
                             print(f'Position progress: {position_progress}')
 
     end_time = time.time()
-    print(f'Time taken: {end_time - start_time} seconds')
+    print(f'Processing of {args.bed} took {end_time - start_time} seconds')
 
 
 if __name__ == '__main__':
