@@ -32,7 +32,7 @@ coverage:
   min_coverage: 3
 
 calling:
-  callers: "bcftools,gatk,freebayes,vardict,mutect2"
+  callers: "bcftools,gatk,freebayes,vardict"
   min_base_quality: 0
   min_snp_qual: 20
   cpu: 4
@@ -47,8 +47,6 @@ calling:
     extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
   vardict:
     extra_args: "--nosv"
-  mutect2:
-    extra_args: "--smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
 
 consensus:
   threshold: null
