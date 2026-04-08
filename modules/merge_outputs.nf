@@ -12,9 +12,10 @@ process MERGE_OUTPUTS {
     path("consensus.bcf"), emit: consensus
 
     script:
+    def regex = "ALT ~ \"\\.\""
     """
     for file in tmp/*.bcf; do bcftools index --threads ${task.cpus} --csi \$file; done
 
-    bcftools merge --force-single --threads ${task.cpus} -Ob -o consensus.bcf tmp/*.bcf
+    bcftools merge --force-single --threads ${task.cpus} -Ou tmp/*.bcf | bcftools norm -m -any -Ou | bcftools filter -e '${regex}' -Ou 2>/dev/null | bcftools norm -m +any -Ob -o consensus.bcf
     """
 }

@@ -20,7 +20,8 @@ process GENERATE_CONSENSUS {
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
-    split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed tmp/bed_chunks/
+    bedops --chop 10000 tmp/coverage.bed > tmp/coverage.bed.chopped
+    split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed.chopped tmp/bed_chunks/
 
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
 
