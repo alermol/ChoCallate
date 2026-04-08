@@ -37,7 +37,6 @@ include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
 include { CALL_BCFTOOLS } from './modules/calling/bcftools.nf'
 include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
 include { CALL_GATK } from './modules/calling/gatk.nf'
-include { CALL_VARDICT } from './modules/calling/vardict.nf'
 include { CALL_VARSCAN } from './modules/calling/varscan.nf'
 
 // Generate consensus
@@ -134,13 +133,6 @@ workflow {
         gatk = channel.empty()
     }
 
-    if (params.calling.callers.contains('vardict')) {
-        CALL_VARDICT(bam_file, ref_genome, fai_index, bed_coverage)
-        vardict = CALL_VARDICT.out.calling_result
-    } else {
-        vardict = channel.empty()
-    }
-
     if (params.calling.callers.contains('varscan')) {
         CALL_VARSCAN(bam_file, ref_genome, fai_index, bed_coverage)
         varscan = CALL_VARSCAN.out.calling_result
@@ -152,7 +144,6 @@ workflow {
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
-        .join(vardict, remainder: true)
         .join(varscan, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}

@@ -32,7 +32,7 @@ coverage:
   min_coverage: 3
 
 calling:
-  callers: "bcftools,gatk,freebayes,vardict,varscan"
+  callers: "bcftools,gatk,freebayes,varscan"
   min_snp_qual: 20
   cpu: 4
   bcftools:
@@ -43,8 +43,6 @@ calling:
   freebayes:
     extra_args: ""
   gatk:
-    extra_args: ""
-  vardict:
     extra_args: ""
   varscan:
     extra_args: ""
