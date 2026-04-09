@@ -14,7 +14,7 @@ class CLIParamsValidation {
     }
 
     static void effective_callers_validation(String callers) {
-        def diploid_callers = ['bcftools', 'gatk', 'freebayes', 'varscan']
+        def diploid_callers = ['bcftools', 'gatk', 'freebayes']
         def polyploid_callers = ['gatk', 'freebayes']
         def callersList = callers.split(',')
         if (callers == null) {
