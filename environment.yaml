@@ -11,7 +11,6 @@ dependencies:
   - gatk4=4.6.2.0
   - varscan=2.4.6
   - samtools=1.23
-  - vardict-java=1.8.3
   - python
   - tabix=1.11
   - bedops=2.4.42
