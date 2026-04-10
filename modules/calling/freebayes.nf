@@ -25,7 +25,7 @@ process CALL_FREEBAYES {
     mkdir -p tmp/calling_chunks/
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
-    freebayes
+    ${sample_id}
     EOF
 
     parallel -j ${task.cpus} \

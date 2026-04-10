@@ -26,7 +26,7 @@ process CALL_GATK {
     mkdir -p tmp/calling_chunks/
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
-    gatk
+    ${sample_id}
     EOF
 
     parallel -j ${task.cpus} \
