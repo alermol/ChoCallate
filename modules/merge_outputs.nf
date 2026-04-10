@@ -16,6 +16,6 @@ process MERGE_OUTPUTS {
     """
     for file in tmp/*.bcf; do bcftools index --threads ${task.cpus} --csi \$file; done
 
-    bcftools merge --force-single --threads ${task.cpus} -Ou tmp/*.bcf | bcftools norm -m -any -Ou | bcftools filter -e '${regex}' -Ou 2>/dev/null | bcftools norm -m +any -Ob -o consensus.bcf
+    bcftools merge --force-single --threads ${task.cpus} -Ou tmp/*.bcf | bcftools norm -m -any --threads ${task.cpus} -Ou | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou 2>/dev/null | bcftools norm --threads ${task.cpus} -m +any -Ob -o consensus.bcf
     """
 }
