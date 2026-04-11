@@ -132,16 +132,11 @@ workflow {
         gatk = channel.empty()
     }
 
-
-
-
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
-
-
 
     // Generate BCF consensus file for each sample
     if (params.output.format == 'bcf' && params.output.type == 'sample') {
@@ -158,14 +153,14 @@ workflow {
     if (params.output.format == 'bcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        MERGE_OUTPUTS(consensus)
+        MERGE_OUTPUTS(consensus, bed_coverage)
     }
     
     // Generate single VCF consensus file for all samples
     if (params.output.format == 'vcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        consensus = MERGE_OUTPUTS(consensus)
+        consensus = MERGE_OUTPUTS(consensus, bed_coverage)
         CONVERT_TO_VCF_SINGLE(consensus)
     }
     

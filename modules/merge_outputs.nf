@@ -7,15 +7,24 @@ process MERGE_OUTPUTS {
 
     input:
     path('tmp/?.bcf', arity: '1..*')
+    path('tmp/coverage.bed')
 
     output:
     path("consensus.bcf"), emit: consensus
 
     script:
-    def regex = "ALT ~ \"\\.\""
+    def regex = 'ALT~\\"\\.\\"'
     """
     for file in tmp/*.bcf; do bcftools index --threads ${task.cpus} --csi \$file; done
 
-    bcftools merge --force-single --force-samples --threads ${task.cpus} -Ou tmp/*.bcf | bcftools norm -m -any --threads ${task.cpus} -Ou | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou 2>/dev/null | bcftools norm --threads ${task.cpus} -m +any -Ob -o consensus.bcf
+    mkdir -p tmp/bed_chunks/
+    mkdir -p tmp/vcf_chunks/
+    bedops --chop 10000 tmp/coverage.bed > tmp/coverage.bed.chopped
+    split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed.chopped tmp/bed_chunks/
+
+    parallel -j ${task.cpus} \
+    "bcftools merge --force-single --force-samples --regions-file {} --threads 1 -Ou tmp/*.bcf | bcftools norm -m -any --threads 1 -Ou | bcftools filter --threads 1 -e '${regex}' -Ou | bcftools norm --threads 1 -m +any -Ob -o tmp/vcf_chunks/{#}.bcf" ::: tmp/bed_chunks/*.bed
+
+    bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "consensus.bcf"
     """
 }
