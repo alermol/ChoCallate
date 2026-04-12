@@ -46,6 +46,7 @@ include { CONVERT_TO_VCF_SAMPLE; CONVERT_TO_VCF_SINGLE } from './modules/convert
 
 // Merge outputs
 include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
+include { MERGE_BEDS } from './modules/merge_beds.nf'
 
 
 workflow {
@@ -153,6 +154,7 @@ workflow {
     if (params.output.format == 'bcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+        bed_coverage = MERGE_BEDS(bed_coverage.collect())
         MERGE_OUTPUTS(consensus, bed_coverage)
     }
     
@@ -160,8 +162,9 @@ workflow {
     if (params.output.format == 'vcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        consensus = MERGE_OUTPUTS(consensus, bed_coverage)
-        CONVERT_TO_VCF_SINGLE(consensus)
+        bed_coverage = MERGE_BEDS(bed_coverage.collect())
+        MERGE_OUTPUTS(consensus, bed_coverage)
+        CONVERT_TO_VCF_SINGLE(MERGE_OUTPUTS.out.consensus)
     }
     
 }
