@@ -13,9 +13,6 @@ echo "Done"
 name="sample1"
 read1=$(readlink -f test_data/test_reads_R1.fq.gz)
 read2=$(readlink -f test_data/test_reads_R2.fq.gz)
-read3=$(readlink -f test_data/test_reads_SE.fq.gz)
-bam_path=$(readlink -f test_data/sample1.bam)
-
 echo -e "sample1\t${read1}\t${read2}" > test_data/samples.tsv
 
 nextflow run main.nf -params-file test_data/test_config.yaml

@@ -16,6 +16,7 @@ ref_genome:
 
 mapping:
   mapper: "bowtie2"
+  extra_args: ""
   cpu: 10
 
 bam_filter:
@@ -33,7 +34,7 @@ coverage:
 calling:
   callers: "bcftools,gatk,freebayes"
   min_snp_qual: 20
-  cpu: 7
+  cpu: 4
   bcftools:
     call:
       extra_args: ""
