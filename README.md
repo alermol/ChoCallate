@@ -7,7 +7,9 @@
 
 ChoCallate runs several variant callers and applies configurable consensus rules to produce high-confidence **SNVs** and **INDELs**. It addresses a critical challenge in variant calling: individual variant callers can produce different results for the same genomic data, leading to uncertainty in variant identification. By implementing a consensus-driven approach, ChoCallate combines results from multiple state-of-the-art variant callers and applies configurable consensus rules to generate reliable, high-quality variant calls.
 
-<img src="res/scheme.svg" width="300">
+<p align="center">
+    <img src="res/scheme.svg" width="70%">
+</p>
 
 ## Requirements
 
