@@ -46,5 +46,5 @@ calling:
     extra_args: ""
 
 consensus:
-  threshold: null
+  threshold: 2
   cpu: 4
