@@ -27,15 +27,20 @@ conda env create -y -f environment.yaml
 conda activate ChoCallate
 ```
 
-Optional verification:
+Optional verification and cleanup:
 
 ```bash
 bash run_test.sh
+bash cleanup.sh
 ```
 
 ## Usage
 
-ChoCallate is configured primarily via a Nextflow params YAML file. Start from the template.
+ChoCallate is configured via a Nextflow params YAML file. Start from the template.
+
+```bash
+cp assets/templates/config.yaml my_run.yaml
+```
 
 Minimum set of parameters in `my_run.yaml`:
 
@@ -46,7 +51,6 @@ Minimum set of parameters in `my_run.yaml`:
 After configuration is complete you can run the ChoCallate
 
 ```bash
-cp assets/templates/config.yaml my_run.yaml
 nextflow run main.nf -params-file my_run.yaml
 ```
 

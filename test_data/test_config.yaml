@@ -1,15 +1,14 @@
-ploidy: 2
-
 input:
   samples_tsv: "/home/projects/dev/ChoCallate/test_data/samples.tsv"
   reference_genome: "/home/projects/dev/ChoCallate/test_data/arth_chr1.fasta.gz"
+  reference_index_dir: "/home/projects/dev/ChoCallate/test_data/"
   custom_bed: null
   format: "fastq"
   reads_type: "pe"
 
 output:
   directory: "/home/projects/dev/ChoCallate/test_data/ChoCallate_output"
-  type: "sample"
+  type: "single"
   format: "bcf"
 
 ref_genome:
@@ -29,27 +28,22 @@ left_align_indels:
   enabled: true
 
 coverage:
-  min_coverage: 1
+  min_coverage: 2
 
 calling:
-  callers: "bcftools,gatk,freebayes,snver,vardict"
-  min_base_quality: 0
-  min_snp_qual: 0
-  cpu: 4
+  callers: "bcftools,gatk,freebayes"
+  min_snp_qual: 20
+  cpu: 7
   bcftools:
     call:
-      extra_args: "--multiallelic-caller --variants-only"
+      extra_args: ""
     mpileup:
-      extra_args: "--count-orphans --max-depth 250"
+      extra_args: ""
   freebayes:
-    extra_args: "--use-best-n-alleles 4 --hwe-priors-off --no-population-priors --allele-balance-priors-off --haplotype-length -1 --throw-away-complex-obs --no-partial-observations --limit-coverage 250"
+    extra_args: ""
   gatk:
-    extra_args: "--do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1"
-  vardict:
-    extra_args: "--nosv -k 0"
-  snver:
-    extra_args: "-p 0.01"
+    extra_args: ""
 
 consensus:
-  threshold: 3
+  threshold: 2
   cpu: 4
