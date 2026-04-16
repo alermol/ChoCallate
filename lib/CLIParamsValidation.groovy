@@ -13,6 +13,13 @@ class CLIParamsValidation {
         }
     }
 
+    static void reference_index_dir_validation(String reference_index_dir) {
+        if (reference_index_dir == null) {
+            println "ERROR: Reference index directory is required"
+            System.exit(1)
+        }
+    }
+
     static void effective_callers_validation(String callers) {
         def diploid_callers = ['bcftools', 'gatk', 'freebayes']
         def polyploid_callers = ['gatk', 'freebayes']

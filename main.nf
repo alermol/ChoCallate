@@ -57,6 +57,7 @@ workflow {
     CLIParamsValidation.effective_callers_validation(params.calling.callers)
     CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
+    CLIParamsValidation.reference_index_dir_validation(params.input.reference_index_dir)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.input.samples_tsv, params.input.format, params.input.reads_type)
 
