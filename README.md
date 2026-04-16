@@ -1,6 +1,6 @@
 # ChoCallate 🍫
 
-![GitHub License](https://img.shields.io/github/license/alermol/chocallate)
+![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate)
 
 
 **ChoCallate** (**Cho**rus of **Call**ers) - a **Nextflow** pipeline for **consensus-based variant calling**. 
