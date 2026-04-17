@@ -1,6 +1,6 @@
 # ChoCallate 🍫
 
-![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate)
+![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) [![Static Badge](https://img.shields.io/badge/Changelog-orange)](https://github.com/alermol/ChoCallate/blob/main/CHANGELOG.md) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate)
 
 
 **ChoCallate** (**Cho**rus of **Call**ers) - a **Nextflow** pipeline for **consensus-based variant calling**. 
@@ -99,4 +99,4 @@ See [CONTRIBUTING.md](https://github.com/alermol/ChoCallate/blob/main/CONTRIBUTI
 
 ## Development roadmap
 
-See [Development Roadmap](https://github.com/alermol/ChoCallate/wiki/Development-Roadmap) for planned container support and additional callers/mappers.
+See [Development Roadmap](https://github.com/alermol/ChoCallate/blob/main/ROADMAP.md) for planned container support and additional callers/mappers.
