@@ -30,6 +30,7 @@ conda activate ChoCallate
 Optional verification and cleanup:
 
 ```bash
+cd test_run
 bash run_test.sh
 bash cleanup.sh
 ```
