@@ -2,7 +2,8 @@ input:
   samples_tsv: null
   reference_genome: null
   reference_index_dir: null
-  custom_bed: null
+  include_bed: null
+  exclude_bed: null
   format: "fastq"
   reads_type: "pe"
 

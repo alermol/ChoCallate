@@ -2,7 +2,8 @@ input:
   samples_tsv: "/home/projects/dev/ChoCallate/test_run/samples.tsv"
   reference_genome: "/home/projects/dev/ChoCallate/test_run/arth_chr1.fasta.gz"
   reference_index_dir: "/home/projects/dev/ChoCallate/test_run/"
-  custom_bed: null
+  include_bed: null
+  exclude_bed: null
   format: "fastq"
   reads_type: "pe"
 

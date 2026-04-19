@@ -25,5 +25,5 @@ This document outlines the future direction of our project. It's a living docume
 ## General improvements of calling
 
 - [ ] Integration of [longdust](https://github.com/lh3/longdust) in order to exclude "bad" regions
-- [ ] Integration of `exclude_bed` and `include_bed` region
+- [x] Integration of `exclude_bed` and `include_bed` region
 - [ ] Integration of [adaptive filtering of variant calls](https://github.com/yyren/FVC) into the pipeline

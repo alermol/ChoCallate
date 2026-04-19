@@ -7,14 +7,16 @@ process GENERATE_COVERAGE {
 
     input:
     tuple val(sample_id), path("tmp/input.bam")
-    path(custom_bed)
+    path(include_bed)
+    path(exclude_bed)
 
     output:
     path("coverage.bed"), emit: coverage
 
     script:
-    def intersect_bed = custom_bed.name != "NO_FILE" ? "-b ${custom_bed}" : ""
+    def ibed = include_bed.name != "NO_FILE" ? "-b ${include_bed}" : ""
+    def ebed = exclude_bed.name != "NO_FILE" ? "| bedops --difference - ${exclude_bed}" : ""
     """
-    samtools depth -J ${intersect_bed} --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' | bedops --merge - > coverage.bed
+    samtools depth -J ${ibed} --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' ${ebed} | bedops --merge - > coverage.bed
     """
 }
