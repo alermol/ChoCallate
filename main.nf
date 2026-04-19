@@ -46,6 +46,7 @@ include { CONVERT_TO_VCF_SAMPLE; CONVERT_TO_VCF_SINGLE } from './modules/convert
 
 // Merge outputs
 include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
+include { MERGE_BEDS } from './modules/merge_beds.nf'
 
 
 workflow {
@@ -56,6 +57,7 @@ workflow {
     CLIParamsValidation.effective_callers_validation(params.calling.callers)
     CLIParamsValidation.cons_threshold_validation(params.consensus.threshold, params.calling.callers)
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
+    CLIParamsValidation.reference_index_dir_validation(params.input.reference_index_dir)
 
     sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.input.samples_tsv, params.input.format, params.input.reads_type)
 
@@ -132,16 +134,11 @@ workflow {
         gatk = channel.empty()
     }
 
-
-
-
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
-
-
 
     // Generate BCF consensus file for each sample
     if (params.output.format == 'bcf' && params.output.type == 'sample') {
@@ -158,15 +155,17 @@ workflow {
     if (params.output.format == 'bcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        MERGE_OUTPUTS(consensus)
+        bed_coverage = MERGE_BEDS(bed_coverage.collect())
+        MERGE_OUTPUTS(consensus, bed_coverage)
     }
     
     // Generate single VCF consensus file for all samples
     if (params.output.format == 'vcf' && params.output.type == 'single') {
         GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
         consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        consensus = MERGE_OUTPUTS(consensus)
-        CONVERT_TO_VCF_SINGLE(consensus)
+        bed_coverage = MERGE_BEDS(bed_coverage.collect())
+        MERGE_OUTPUTS(consensus, bed_coverage)
+        CONVERT_TO_VCF_SINGLE(MERGE_OUTPUTS.out.consensus)
     }
     
 }

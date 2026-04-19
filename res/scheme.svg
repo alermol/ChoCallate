@@ -1,0 +1,585 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="183.89218mm"
+   height="294.62375mm"
+   viewBox="0 0 183.89218 294.62375"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <marker
+       style="overflow:visible"
+       id="ConcaveTriangle"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="0.40000001"
+       markerHeight="0.40000001"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid"
+       markerUnits="userSpaceOnUse">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path7" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="ConcaveTriangle-8"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="0.40000001"
+       markerHeight="0.40000001"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid"
+       markerUnits="userSpaceOnUse">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path7-0" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="ConcaveTriangle-8-8"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path7-0-7" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="ConcaveTriangle-8-8-7"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="0.40000001"
+       markerHeight="0.40000001"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid"
+       markerUnits="userSpaceOnUse">
+      <path
+         transform="scale(0.7)"
+         d="M -2,-4 9,0 -2,4 c 2,-2.33 2,-5.66 0,-8 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         id="path7-0-7-3" />
+    </marker>
+  </defs>
+  <g
+     id="layer3-8"
+     transform="translate(-11.424134,270.84283)"
+     style="display:inline">
+    <g
+       id="g77-9"
+       transform="translate(29.020871,1.6203748)">
+      <rect
+         style="fill:#c8beb7;fill-opacity:1;stroke:#000000;stroke-width:0.333358;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         id="rect75-2-2-1"
+         width="42.466087"
+         height="7.0774436"
+         x="53.11631"
+         y="14.916428"
+         ry="2.3865774" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         x="55.321354"
+         y="20.376141"
+         id="text70-5"><tspan
+           id="tspan70-4"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';fill:#000000;stroke-width:0"
+           x="55.321354"
+           y="20.376141">Consensus.vcf</tspan></text>
+    </g>
+  </g>
+  <g
+     id="layer2-9-8-4-8"
+     transform="translate(-43.75487,172.58423)"
+     style="display:inline">
+    <rect
+       style="fill:#ffaaaa;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3-1-0-4-7"
+       width="183.22717"
+       height="21.167038"
+       x="44.087376"
+       y="79.531189"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="96.468102"
+       y="92.218971"
+       id="text11-4-4-9-9"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;text-anchor:middle;stroke-width:0"
+         x="96.468102"
+         y="92.218971"
+         id="tspan31-1-9-3-0">Generate consensus</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="196.05948"
+       y="91.622284"
+       id="text58-0-1-6-41"><tspan
+         id="tspan58-4-9-0-0"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';stroke-width:0"
+         x="196.05948"
+         y="91.622284">Custom Python script</tspan></text>
+    <path
+       style="display:inline;fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="M 103.37022,2.43962 V 13.837719"
+       id="path80"
+       transform="translate(32.330737,98.258604)" />
+  </g>
+  <g
+     id="layer2-9-8-4-4"
+     transform="translate(-43.754863,123.62386)"
+     style="display:inline">
+    <rect
+       style="fill:#ffb380;stroke:#000000;stroke-width:0.775112;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3-1-0-4-3"
+       width="183.11705"
+       height="28.774467"
+       x="44.142429"
+       y="79.58625"
+       ry="5.5364127" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:1;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="96.765755"
+       y="96.234848"
+       id="text11-4-4-9-5"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;text-anchor:middle;stroke-width:0"
+         x="96.765755"
+         y="96.234848"
+         id="tspan68">Variant calling</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="167.67191"
+       y="89.897369"
+       id="text58-0-1-6-4"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;text-anchor:start;stroke-width:0"
+         x="167.67191"
+         y="89.897369"
+         id="tspan64">bcftools call</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;text-anchor:start;stroke-width:0"
+         x="167.67191"
+         y="95.541809"
+         id="tspan65">GATK HaplotypeCaller</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;text-anchor:start;stroke-width:0"
+         x="167.67191"
+         y="101.18625"
+         id="tspan67">Freebayes</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="M 135.4982,108.74827 V 125.6372"
+       id="path101" />
+  </g>
+  <g
+     id="layer2-9-8-4"
+     transform="translate(-43.75487,86.396351)"
+     style="display:inline">
+    <rect
+       style="fill:#e9afdd;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3-1-0-4"
+       width="183.22717"
+       height="21.167038"
+       x="44.087376"
+       y="79.531189"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="96.468102"
+       y="88.965973"
+       id="text11-4-4-9"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;text-anchor:middle;stroke-width:0"
+         id="tspan57-9-0-9"
+         x="96.468102"
+         y="88.965973">Generate coverage</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:0;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;text-anchor:middle;stroke-width:0"
+         x="96.468102"
+         y="96.016296"
+         id="tspan31-1-9-3">(optional custom bed)</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="191.87424"
+       y="91.622284"
+       id="text58-0-1-6"><tspan
+         id="tspan58-4-9-0"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';stroke-width:0"
+         x="191.87424"
+         y="91.622284">samtools depth + bedops</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="m 135.701,100.6982 v 13.2216"
+       id="path86" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.499999;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+       x="136.96925"
+       y="110.07658"
+       id="text103"><tspan
+         id="tspan103"
+         style="fill:#000000;stroke:none;stroke-width:0.5"
+         x="136.96925"
+         y="110.07658">coverage.bed</tspan></text>
+  </g>
+  <g
+     id="layer2-9-8"
+     transform="translate(-71.800717,49.16884)"
+     style="display:inline">
+    <rect
+       style="fill:#aaffcc;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3-1-0"
+       width="183.22717"
+       height="21.167038"
+       x="72.133232"
+       y="79.531189"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="124.40436"
+       y="89.187149"
+       id="text11-4-4"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;text-anchor:middle;stroke-width:0"
+         id="tspan57-9-0"
+         x="124.40436"
+         y="89.187149">Left-align indels</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:0;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;text-anchor:middle;stroke-width:0"
+         x="124.40436"
+         y="96.237473"
+         id="tspan31-1-9">(optional step)</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="226.24226"
+       y="91.665001"
+       id="text58-0-1"><tspan
+         id="tspan58-4-9"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';stroke-width:0"
+         x="226.24226"
+         y="91.665001">gatk LeftAlignIndels</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="m 163.74697,100.69822 v 13.22487"
+       id="path85" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+       x="164.86902"
+       y="110.12095"
+       id="text93"><tspan
+         id="tspan93"
+         style="stroke-width:0"
+         x="164.86902"
+         y="110.12095">leftaligned.bam</tspan></text>
+  </g>
+  <g
+     id="layer2-9"
+     transform="translate(-14.287892,33.92463)"
+     style="display:inline">
+    <rect
+       style="fill:#afc6e9;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3-1"
+       width="183.22717"
+       height="21.167038"
+       x="14.620395"
+       y="57.547886"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="66.891563"
+       y="67.139771"
+       id="text11-4"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;text-anchor:middle;stroke-width:0"
+         id="tspan57-9"
+         x="66.891563"
+         y="67.139771">Remove duplicates</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:0;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;text-anchor:middle;stroke-width:0"
+         x="66.891563"
+         y="74.190094"
+         id="tspan31-1">(optional step)</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="165.97514"
+       y="69.638977"
+       id="text58-0"><tspan
+         id="tspan58-4"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';stroke-width:0"
+         x="165.97514"
+         y="69.638977">picard MarkDuplicates</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle-8-8-7)"
+       d="M 106.23398,78.714917 V 91.964151"
+       id="path84" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+       x="107.50227"
+       y="88.107109"
+       id="text92"><tspan
+         id="tspan92"
+         style="stroke-width:0"
+         x="107.50227"
+         y="88.107109">deduplicated.bam</tspan></text>
+  </g>
+  <g
+     id="layer2"
+     style="display:inline"
+     transform="translate(-13.295687,-6.2794953)">
+    <rect
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;display:inline;fill:#ccffaa;stroke:#000000;stroke-width:0.665;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3"
+       width="183.22717"
+       height="21.167038"
+       x="13.62819"
+       y="60.524498"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="65.899361"
+       y="73.369377"
+       id="text11"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;text-anchor:middle;stroke-width:0"
+         x="65.899361"
+         y="73.369377"
+         id="tspan31">Filtering mappings</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;display:inline;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="181.60344"
+       y="73.117195"
+       id="text58"><tspan
+         id="tspan58"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';stroke-width:0"
+         x="181.60344"
+         y="73.117195">samtools</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="m 105.24177,81.691536 v 13.22599"
+       id="path83" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+       x="106.66716"
+       y="91.616425"
+       id="text91"><tspan
+         id="tspan91"
+         style="stroke-width:0"
+         x="106.66716"
+         y="91.616425">filtered.bam</tspan></text>
+  </g>
+  <g
+     id="layer1"
+     style="display:inline"
+     transform="translate(-12.896896,-14.733069)">
+    <rect
+       style="fill:#ffeeaa;stroke:#000000;stroke-width:0.665;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1"
+       width="183.22717"
+       height="21.167038"
+       x="13.2294"
+       y="31.750559"
+       ry="7.9376392" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:0;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#000000;stroke:#000000;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+       x="65.636993"
+       y="41.480934"
+       id="text2"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:8.46667px;line-height:1.6;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';stroke-width:0;stroke-dasharray:none"
+         id="tspan30"
+         x="65.636993"
+         y="41.480934">Reads mapping</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:0;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';stroke-width:0;stroke-dasharray:none"
+         x="65.636993"
+         y="48.254269"
+         id="tspan6">(optional step)</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+       x="168.07333"
+       y="38.097992"
+       id="text3"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;text-anchor:start;stroke-width:0;stroke-miterlimit:0"
+         id="tspan9"
+         x="168.07333"
+         y="38.097992">Bowtie2</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;text-anchor:start;stroke-width:0;stroke-miterlimit:0"
+         id="tspan10"
+         x="168.07333"
+         y="43.742432">BWA</tspan><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;text-anchor:start;stroke-width:0;stroke-miterlimit:0"
+         x="168.07333"
+         y="49.386871"
+         id="tspan5">Minimap2</tspan></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+       d="M 104.84299,52.917595 V 66.141208"
+       id="path82" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+       x="105.9652"
+       y="62.296974"
+       id="text90"><tspan
+         id="tspan90"
+         style="stroke-width:0;stroke-miterlimit:3.8;stroke-dasharray:none"
+         x="105.9652"
+         y="62.296974">mapping.bam</tspan></text>
+  </g>
+  <g
+     id="layer3"
+     style="display:inline"
+     transform="translate(-12.907469,-14.733069)">
+    <g
+       id="g77"
+       transform="translate(-32.173875,-0.01667976)">
+      <rect
+         style="fill:#c8beb7;fill-opacity:1;stroke:#000000;stroke-width:0.333358;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         id="rect75-2-2"
+         width="42.466087"
+         height="7.0774436"
+         x="53.11631"
+         y="14.916428"
+         ry="2.3865774" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         x="58.794071"
+         y="19.962723"
+         id="text70"><tspan
+           id="tspan70"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';fill:#000000;stroke-width:0"
+           x="58.794071"
+           y="19.962723">samples.tsv</tspan></text>
+      <path
+         style="display:inline;fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle-8-8-7)"
+         d="m 74.349354,21.993872 v 7.003459"
+         id="path79-6-3-5" />
+      <path
+         style="display:none;fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.5;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+         d="M 53.116309,18.45515 H 39.64599 v 61.777203 h 3.320125"
+         id="path98" />
+    </g>
+    <g
+       id="g78"
+       transform="translate(71.306404)"
+       style="display:inline">
+      <rect
+         style="fill:#c8beb7;fill-opacity:1;stroke:#000000;stroke-width:0.333358;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         id="rect75-2-2-8"
+         width="42.466087"
+         height="7.0774436"
+         x="14.255167"
+         y="14.916427"
+         ry="2.3865774" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         x="20.394569"
+         y="20.00544"
+         id="text69"><tspan
+           id="tspan69"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';fill:#000000;fill-opacity:1;stroke-width:0"
+           x="20.394569"
+           y="20.00544">config.yaml</tspan></text>
+      <path
+         style="display:none;fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.266977px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#ConcaveTriangle-8-8)"
+         d="m 35.488211,21.99387 v 7.771277"
+         id="path79-6-3" />
+    </g>
+    <g
+       id="g79"
+       transform="translate(3.1750001)"
+       style="display:inline">
+      <rect
+         style="fill:#c8beb7;fill-opacity:1;stroke:#000000;stroke-width:0.333358;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         id="rect75-2"
+         width="42.466087"
+         height="7.0774436"
+         x="146.63586"
+         y="14.916427"
+         ry="2.3865774" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         x="155.22679"
+         y="19.962721"
+         id="text71"><tspan
+           style="font-size:5.64444px;display:inline;stroke-width:0"
+           x="155.22679"
+           y="19.962721"
+           id="tspan72">Assembly</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#ConcaveTriangle-8)"
+         d="m 167.96077,21.99387 v 6.929749"
+         id="path79-6" />
+    </g>
+    <g
+       id="g76"
+       transform="translate(4.958509)"
+       style="display:none">
+      <rect
+         style="fill:#c8beb7;fill-opacity:1;stroke:#000000;stroke-width:0.333358;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         id="rect75"
+         width="42.466087"
+         height="7.0774436"
+         x="100.72546"
+         y="14.899748"
+         ry="2.3865774" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:5.64444px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;stroke:#000000;stroke-width:0;stroke-miterlimit:0;stroke-dasharray:none;stroke-opacity:1"
+         x="103.87038"
+         y="20.447647"
+         id="text73"><tspan
+           id="tspan73"
+           style="font-size:5.64444px;line-height:1;stroke-width:0"
+           x="103.87038"
+           y="20.447647">Reads or BAM</tspan></text>
+      <path
+         style="display:inline;fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.24015px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#ConcaveTriangle)"
+         d="m 121.9585,21.977192 v 8.051704"
+         id="path81" />
+    </g>
+  </g>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:4.93889px;line-height:1;font-family:'Clear Sans';-inkscape-font-specification:'Clear Sans Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-miterlimit:3.8;stroke-dasharray:none;stroke-dashoffset:1.11005;stroke-opacity:1"
+     x="93.402824"
+     y="238.33461"
+     id="text106"><tspan
+       id="tspan106"
+       style="font-size:4.93889px;line-height:1;stroke-width:0.5"
+       x="93.402824"
+       y="238.33461">bcftools.bcf</tspan><tspan
+       style="font-size:4.93889px;line-height:1;stroke-width:0.5"
+       x="93.402824"
+       y="243.2735"
+       id="tspan107">gatk.bcf</tspan><tspan
+       style="font-size:4.93889px;line-height:1;stroke-width:0.5"
+       x="93.402824"
+       y="248.2124"
+       id="tspan109">freebayes.bcf</tspan></text>
+</svg>

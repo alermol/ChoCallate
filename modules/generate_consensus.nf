@@ -31,7 +31,7 @@ process GENERATE_CONSENSUS {
     generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --allow-overlaps --threads ${task.cpus} -Ou tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "${sample_id}.bcf"
+    bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "${sample_id}.bcf"
     """
 }
 

@@ -96,7 +96,7 @@ def main():
 
     with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
          pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai') as reference_file:
-        with pysam.VariantFile(args.output, mode='w', 
+        with pysam.VariantFile(args.output, mode='wb', 
                                header=generate_mininimal_header(args.sample_name, reference_file, args.consensus_threshold)) as output_file:
             with ExitStack[bool | None]() as stack:
                 variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi')) for bcf in args.input]
