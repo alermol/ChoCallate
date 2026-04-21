@@ -15,7 +15,7 @@ process MERGE_OUTPUTS {
     script:
     def regex = 'ALT~\\"\\.\\"'
     """
-    for file in tmp/*.bcf; do bcftools index --threads ${task.cpus} --csi \$file; done
+    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
 
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/

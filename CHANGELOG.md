@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-04-21
+
+### Changed
+
+- Sequential BCF/VCF indexing was replaced with parallel indexing when merging output files for each sample into a single multi-sample file
+- The version number was changed to 2.0.0 due to the removal of backward compatibility in version 1.1.0 compared to 1.0.1, in accordance with semantic versioning
+
 ## [1.1.0] - 2026-04-19
 
 ### Added
