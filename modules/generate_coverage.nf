@@ -14,7 +14,7 @@ process GENERATE_COVERAGE {
     path("coverage.bed"), emit: coverage
 
     script:
-    def ibed = include_bed.name != "NO_FILE" ? "-b ${include_bed}" : ""
+    def ibed = include_bed.name != "N1_FILE" ? "-b ${include_bed}" : ""
     def ebed = exclude_bed.name != "NO_FILE" ? "| bedops --difference - ${exclude_bed}" : ""
     """
     samtools depth -J ${ibed} --threads ${task.cpus} tmp/input.bam | awk '\$3 >= ${params.coverage.min_coverage} {print \$1,\$2-1,\$2}' ${ebed} | bedops --merge - > coverage.bed
