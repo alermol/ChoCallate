@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-04-22
+
+### Fixed
+
+- Name collision was fixed in the coverage generation process, arising from using the same `NO_FILE` for both include_bed and exclude_bed.
+- During large file processing, the system temporary directory could overflow, which would result in the pipeline crashing. For each process, the system `$TMPDIR` variable is overridden with a temporary directory that uses the process's `$PWD`.
+
 ## [2.0.0] - 2026-04-21
 
 ### Changed
