@@ -110,7 +110,7 @@ workflow {
         bam_file = LEFT_ALIGN_INDELS(bam_file, ref_genome, gen_dict, fai_index)
     }
 
-    include_bed = params.input.include_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.include_bed, checkIfExists: true)
+    include_bed = params.input.include_bed == null ? file("${projectDir}/assets/N1_FILE", checkIfExists: true) : file(params.input.include_bed, checkIfExists: true)
     exclude_bed = params.input.exclude_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.exclude_bed, checkIfExists: true)
     bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
 
