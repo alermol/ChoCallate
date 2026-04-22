@@ -2,6 +2,7 @@ process CALL_BCFTOOLS {
     maxForks 1
     cpus params.calling.cpu
     errorStrategy 'ignore'
+    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"

@@ -1,6 +1,7 @@
 process GENERATE_CONSENSUS {
     maxForks 1
     cpus params.consensus.cpu
+    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"

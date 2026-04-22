@@ -1,6 +1,7 @@
 process GENERATE_COVERAGE {
     cpus 1
     maxForks 1
+    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 
     tag "${sample_id}"
