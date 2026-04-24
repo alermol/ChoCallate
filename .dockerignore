@@ -1,0 +1,10 @@
+.*
+**/.*
+CHANGELOG.md
+CONTRIBUTING.md
+README.md
+LICENSE
+ROADMAP.md
+*-workspace
+work
+test_run
