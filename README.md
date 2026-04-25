@@ -1,15 +1,12 @@
 # ChoCallate 🍫
 
-![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) [![Static Badge](https://img.shields.io/badge/Changelog-orange)](https://github.com/alermol/ChoCallate/blob/main/CHANGELOG.md) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate)
+![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) [![Static Badge](https://img.shields.io/badge/Changelog-orange)](https://github.com/alermol/ChoCallate/blob/main/CHANGELOG.md) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate) [![Static Badge](https://img.shields.io/badge/Wiki-red?link=https%3A%2F%2Fgithub.com%2Falermol%2FChoCallate%2Fwiki)
+](https://github.com/alermol/ChoCallate/wiki)
 
 
 **ChoCallate** (**Cho**rus of **Call**ers) - a **Nextflow** pipeline for **consensus-based variant calling**. 
 
 ChoCallate runs several variant callers and applies configurable consensus rules to produce high-confidence **SNVs** and **INDELs**. It addresses a critical challenge in variant calling: individual variant callers can produce different results for the same genomic data, leading to uncertainty in variant identification. By implementing a consensus-driven approach, ChoCallate combines results from multiple state-of-the-art variant callers and applies configurable consensus rules to generate reliable, high-quality variant calls.
-
-<p align="center">
-    <img src="res/scheme.svg" width="70%">
-</p>
 
 ## Requirements
 
@@ -34,6 +31,27 @@ cd test_run
 bash run_test.sh
 bash cleanup.sh
 ```
+
+## Docker
+
+ChoCallate is available as a Docker image on DockerHub. For a fuller walkthrough, see the Wiki: [Installing ChoCallate](https://github.com/alermol/ChoCallate/wiki/Installing-ChoCallate#use-the-docker-container).
+
+```bash
+docker pull alermol/chocallate:latest
+```
+
+Mount your run directory to `/workspace` and run:
+
+```bash
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -v "${PWD}/input_data:/workspace" \
+  -w /workspace \
+  alermol/chocallate:latest \
+  -params-file config.yaml
+```
+
+Outputs will be written to the configured `outdir` (default: `ChoCallate_output`) inside `input_data`.
 
 ## Usage
 
