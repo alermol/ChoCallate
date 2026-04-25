@@ -4,7 +4,7 @@ This document outlines the future direction of our project. It's a living docume
 
 ## Portability
 
-- [ ] Docker image
+- [x] Docker image
 - [ ] Singularity image
 
 ## Ployploid calling

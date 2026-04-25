@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-04-25
+
+### Added
+
+- Implemented launch in a Docker container.
+
 ## [2.0.1] - 2026-04-22
 
 ### Fixed
