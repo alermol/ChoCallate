@@ -1,6 +1,5 @@
 process CONVERT_TO_VCF_SAMPLE {
     cpus params.consensus.cpu
-    maxForks 1
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 
@@ -22,7 +21,6 @@ process CONVERT_TO_VCF_SAMPLE {
 
 process CONVERT_TO_VCF_SINGLE {
     cpus params.consensus.cpu
-    maxForks 1
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 

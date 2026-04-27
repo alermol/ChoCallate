@@ -1,5 +1,4 @@
 process FILTER_MAPPING_BAM {
-    maxForks 1
     cpus 1
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
@@ -19,7 +18,6 @@ process FILTER_MAPPING_BAM {
 }
 
 process FILTER_INPUT_BAM {
-    maxForks 1
     cpus 1
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'

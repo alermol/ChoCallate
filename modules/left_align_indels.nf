@@ -1,5 +1,4 @@
 process LEFT_ALIGN_INDELS {
-    maxForks 1
     cpus 1
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'

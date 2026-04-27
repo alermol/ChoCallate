@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-04-27
+
+### Changed
+
+- Removed `maxForks 1` in several steps, including BAM file filtering, BED file generation with coverage depth, duplicate removal, left-alignment of indels, and BCF to VCF conversion. These were performance bottlenecks for running on many samples.
+- Cleanup observer for nf-boost has been changed to `'v2'`.
+
 ## [2.0.2] - 2026-04-25
 
 ### Added
