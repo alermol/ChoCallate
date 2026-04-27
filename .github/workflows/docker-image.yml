@@ -29,6 +29,4 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           push: true
-          tags: |
-            alermol/chocallate:latest
-            alermol/chocallate:${{ github.event.release.name }}
+          tags: alermol/chocallate:latest
