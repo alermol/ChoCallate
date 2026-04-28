@@ -59,7 +59,25 @@ workflow {
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
     CLIParamsValidation.reference_index_dir_validation(params.input.reference_index_dir)
 
-    sample_run_ch = GENERATE_SAMPLE_CHANNEL(params.input.samples_tsv, params.input.format, params.input.reads_type)
+    sample_run_ch = channel
+                .fromPath(params.input.samples_tsv)
+                .splitCsv(header: false, sep: '\t')
+                .filter { row ->
+                    if (row.size() == 1) {
+                        println "[WARN] Dropping row with only one column: ${row[0]}"
+                        return false
+                    }
+                    return true
+                }
+                .map { 
+                    row -> if (params.input.input_format == 'bam' || params.input.reads_type == 'se') {
+                        tuple(row[0..1].toArray() + ['/dev/null'] * 2)
+                    } else if (params.input.reads_type == 'pe' && params.input.format != 'bam') {
+                        tuple(row[0..2].toArray() + ['/dev/null'])
+                    } else if (params.input.reads_type == 'mx' && params.input.format != 'bam') {
+                        tuple(row[0..3].toArray())
+                    }
+                 }
 
     ref_genome = file(params.input.reference_genome)
 
