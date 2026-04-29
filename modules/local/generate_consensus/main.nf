@@ -7,6 +7,7 @@ process GENERATE_CONSENSUS {
     tag "${sample_id}"
 
     publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
+    publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.vcf.gz', enabled: params.output.type == 'sample' && params.output.format == 'vcf'
 
     input:
     tuple val(sample_id), path('tmp/?.bcf', arity: '1..*')
@@ -15,9 +16,12 @@ process GENERATE_CONSENSUS {
     path("tmp/coverage.bed")
 
     output:
-    tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus
+    tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true
+    tuple val(sample_id), path("${sample_id}.vcf.gz"), emit: consensus_vcf, optional: true
+    
 
     script:
+    def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
@@ -32,7 +36,7 @@ process GENERATE_CONSENSUS {
     generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf | bcftools sort -Ob -o "${sample_id}.bcf"
+    bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf | bcftools sort ${output_format}
     """
 }
 

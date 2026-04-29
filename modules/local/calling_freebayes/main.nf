@@ -1,4 +1,4 @@
-process CALL_FREEBAYES {
+process CALLING_FREEBAYES {
     cpus params.calling.cpu
     maxForks 1
     errorStrategy 'ignore'

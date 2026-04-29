@@ -1,4 +1,4 @@
-process CALL_GATK {
+process CALLING_GATK {
     cpus params.calling.cpu
     maxForks 1
     errorStrategy 'ignore'

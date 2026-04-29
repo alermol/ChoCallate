@@ -1,52 +1,19 @@
 #!/usr/bin/env nextflow
 
-// Generate sample channel
-include { GENERATE_SAMPLE_CHANNEL } from './modules/generate_channel.nf'
-
-// Prepare assembly
-include { DECOMPRESS_ASSEMBLY } from './modules/decompress_assembly.nf'
-include { CREATE_FAI_INDEX } from './modules/create_fai_index.nf'
-include { CREATE_SEQ_DICT } from './modules/create_seq_dict.nf'
-
-// Map reads to assembly using Bowtie2
-include { MAP_BOWTIE2_SINGLE } from './modules/mapping/bowtie2/process_single_reads.nf'
-include { MAP_BOWTIE2_PAIRED } from './modules/mapping/bowtie2/process_paired_reads.nf'
-include { MAP_BOWTIE2_MIXED } from './modules/mapping/bowtie2/process_mixed_reads.nf'
-
-// Map reads to assembly using BWA
-include { MAP_BWA_SINGLE } from './modules/mapping/bwa/process_single_reads.nf'
-include { MAP_BWA_PAIRED } from './modules/mapping/bwa/process_paired_reads.nf'
-
-// Map reads to assembly using Minimap2
-include { MAP_MINIMAP2_SINGLE } from './modules/mapping/minimap2/process_single_reads.nf'
-include { MAP_MINIMAP2_PAIRED } from './modules/mapping/minimap2/process_paired_reads.nf'
-
-// Remove duplicates
-include { REMOVE_DUPLICATES } from './modules/remove_duplicates.nf'
-
-// Filter BAM file
-include { FILTER_MAPPING_BAM; FILTER_INPUT_BAM } from './modules/filter_bam.nf'
-
-// Left align indels
-include { LEFT_ALIGN_INDELS } from './modules/left_align_indels.nf'
-
-// Generate coverage
-include { GENERATE_COVERAGE } from './modules/generate_coverage.nf'
-
-// Call variants
-include { CALL_BCFTOOLS } from './modules/calling/bcftools.nf'
-include { CALL_FREEBAYES } from './modules/calling/freebayes.nf'
-include { CALL_GATK } from './modules/calling/gatk.nf'
-
-// Generate consensus
-include { GENERATE_CONSENSUS } from './modules/generate_consensus.nf'
-
-// Convert consensus to VCF
-include { CONVERT_TO_VCF_SAMPLE; CONVERT_TO_VCF_SINGLE } from './modules/convert_to_vcf.nf'
-
-// Merge outputs
-include { MERGE_OUTPUTS } from './modules/merge_outputs.nf'
-include { MERGE_BEDS } from './modules/merge_beds.nf'
+include { DECOMPRESS_ASSEMBLY } from './modules/local/decompress_assembly'
+include { CREATE_FAI_INDEX } from './modules/local/create_fai_index'
+include { CREATE_SEQ_DICT } from './modules/local/create_seq_dict'
+include { MAPPING_BOWTIE2 } from './modules/local/mapping_bowtie2'
+include { MAPPING_BWA } from './modules/local/mapping_bwa'
+include { MAPPING_MINIMAP2 } from './modules/local/mapping_minimap2'
+include { PREPARE_BAM } from './modules/local/prepare_bam'
+include { GENERATE_COVERAGE } from './modules/local/generate_coverage'
+include { CALLING_BCFTOOLS } from './modules/local/calling_bcftools'
+include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
+include { CALLING_GATK } from './modules/local/calling_gatk'
+include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
+include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
+include { MERGE_BEDS } from './modules/local/merge_beds'
 
 
 workflow {
@@ -59,6 +26,7 @@ workflow {
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
     CLIParamsValidation.reference_index_dir_validation(params.input.reference_index_dir)
 
+    // Create sample channel
     sample_run_ch = channel
                 .fromPath(params.input.samples_tsv)
                 .splitCsv(header: false, sep: '\t')
@@ -79,113 +47,59 @@ workflow {
                     }
                  }
 
-    ref_genome = file(params.input.reference_genome)
-
-    if (params.ref_genome.bgzip) {
-        DECOMPRESS_ASSEMBLY(ref_genome)
-        ref_genome = DECOMPRESS_ASSEMBLY.out.ref_genome
-    }
-
+    // Prepare genome assembly, fai index and sequence dictionary
+    ref_genome = params.ref_genome.bgzip ? DECOMPRESS_ASSEMBLY(file(params.input.reference_genome)) : file(params.input.reference_genome)
     fai_index = CREATE_FAI_INDEX(ref_genome)
     gen_dict = CREATE_SEQ_DICT(ref_genome)
 
-    if (params.input.format == 'fastq') {
-        if (params.mapping.mapper == 'bowtie2') {
-            if (params.input.reads_type == 'pe') {
-                bam_file = MAP_BOWTIE2_PAIRED(sample_run_ch, file(params.input.reference_genome))
-            } else if (params.input.reads_type == 'se') {
-                bam_file = MAP_BOWTIE2_SINGLE(sample_run_ch, file(params.input.reference_genome))
-            } else if (params.input.reads_type == 'mx') {
-                bam_file = MAP_BOWTIE2_MIXED(sample_run_ch, file(params.input.reference_genome))
-            }
-        }
-        if (params.mapping.mapper == 'bwa') {
-            if (params.input.reads_type == 'pe') {
-                bam_file = MAP_BWA_PAIRED(sample_run_ch, file(params.input.reference_genome))
-            } else if (params.input.reads_type == 'se') {
-                bam_file = MAP_BWA_SINGLE(sample_run_ch, file(params.input.reference_genome))
-            }
-        }
-        if (params.mapping.mapper == 'minimap2') {
-            if (params.input.reads_type == 'pe') {
-                bam_file = MAP_MINIMAP2_PAIRED(sample_run_ch, file(params.input.reference_genome))
-            } else if (params.input.reads_type == 'se') {
-                bam_file = MAP_MINIMAP2_SINGLE(sample_run_ch, file(params.input.reference_genome))
-            }
-        }
-        bam_file = FILTER_MAPPING_BAM(bam_file)
-    }
+    // Prepare BAM files
+    bam_file = params.mapping.mapper == 'bowtie2' && params.input.format != 'bam' ? MAPPING_BOWTIE2(sample_run_ch, 
+                                                                                                    file(params.input.reference_genome), 
+                                                                                                    ref_genome, 
+                                                                                                    gen_dict, 
+                                                                                                    fai_index) : 
+               params.mapping.mapper == 'bwa' && params.input.format != 'bam' ? MAPPING_BWA(sample_run_ch, 
+                                                                                            file(params.input.reference_genome), 
+                                                                                            ref_genome, 
+                                                                                            gen_dict, 
+                                                                                            fai_index) : 
+               params.mapping.mapper == 'minimap2' && params.input.format != 'bam' ? MAPPING_MINIMAP2(sample_run_ch, 
+                                                                                                      file(params.input.reference_genome), 
+                                                                                                      ref_genome, 
+                                                                                                      gen_dict, 
+                                                                                                      fai_index) : 
+               params.input.format == 'bam' ? PREPARE_BAM(sample_run_ch, 
+                                                          file(params.input.reference_genome), 
+                                                          ref_genome, 
+                                                          gen_dict, 
+                                                          fai_index) : 
+               error("Unknown input format or mapper")
 
-    if (params.input.format == 'bam') {
-        bam_file = FILTER_INPUT_BAM(sample_run_ch)
-    }
-
-    if (params.rmdup.enabled) {
-        bam_file = REMOVE_DUPLICATES(bam_file)
-    }
-
-    if (params.left_align_indels.enabled) {
-        bam_file = LEFT_ALIGN_INDELS(bam_file, ref_genome, gen_dict, fai_index)
-    }
-
+    // Generate BED coverage
     include_bed = params.input.include_bed == null ? file("${projectDir}/assets/N1_FILE", checkIfExists: true) : file(params.input.include_bed, checkIfExists: true)
     exclude_bed = params.input.exclude_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.exclude_bed, checkIfExists: true)
     bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
 
-    if (params.calling.callers.contains('bcftools')) {
-        CALL_BCFTOOLS(bam_file, ref_genome, fai_index, bed_coverage)
-        bcftools = CALL_BCFTOOLS.out.calling_result
-    } else {
-        bcftools = channel.empty()
-    }
-
-    if (params.calling.callers.contains('freebayes')) {
-        CALL_FREEBAYES(bam_file, ref_genome, fai_index, bed_coverage)
-        freebayes = CALL_FREEBAYES.out.calling_result
-    } else {
-        freebayes = channel.empty()
-    }
-
-    if (params.calling.callers.contains('gatk')) {
-        CALL_GATK(bam_file, ref_genome, fai_index, bed_coverage, gen_dict)
-        gatk = CALL_GATK.out.calling_result
-    } else {
-        gatk = channel.empty()
-    }
-
+    // Perform variant calling
+    bcftools = params.calling.callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_file, ref_genome, fai_index, bed_coverage) : channel.empty()
+    freebayes = params.calling.callers.contains('freebayes') ? CALLING_FREEBAYES(bam_file, ref_genome, fai_index, bed_coverage) : channel.empty()
+    gatk = params.calling.callers.contains('gatk') ? CALLING_GATK(bam_file, ref_genome, fai_index, bed_coverage, gen_dict) : channel.empty()
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 
-    // Generate BCF consensus file for each sample
-    if (params.output.format == 'bcf' && params.output.type == 'sample') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-    }
+    // Generate consensus
+    GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
 
-    // Generate VCF consensus file for each sample
-    if (params.output.format == 'vcf' && params.output.type == 'sample') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        CONVERT_TO_VCF_SAMPLE(GENERATE_CONSENSUS.out.consensus)
-    }
-    
-    // Generate single BCF consensus file for all samples
-    if (params.output.format == 'bcf' && params.output.type == 'single') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
+    // Merge consensuses from different samples into single VCF of BCF
+    if (params.output.type == 'single') {
+        consensus = params.output.format == 'vcf' ? 
+                    GENERATE_CONSENSUS.out.consensus_vcf.map { item -> item[1] }.collect() : 
+                    GENERATE_CONSENSUS.out.consensus_bcf.map { item -> item[1] }.collect()
         bed_coverage = MERGE_BEDS(bed_coverage.collect())
         MERGE_OUTPUTS(consensus, bed_coverage)
-    }
-    
-    // Generate single VCF consensus file for all samples
-    if (params.output.format == 'vcf' && params.output.type == 'single') {
-        GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
-        consensus = GENERATE_CONSENSUS.out.consensus.map { item -> item[1] }.collect()
-        bed_coverage = MERGE_BEDS(bed_coverage.collect())
-        MERGE_OUTPUTS(consensus, bed_coverage)
-        CONVERT_TO_VCF_SINGLE(MERGE_OUTPUTS.out.consensus)
-    }
-    
+    }    
 }
 
