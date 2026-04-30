@@ -1,5 +1,4 @@
 process CALLING_BCFTOOLS {
-    maxForks 1
     cpus params.calling.cpu
     errorStrategy 'ignore'
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'

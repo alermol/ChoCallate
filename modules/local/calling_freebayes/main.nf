@@ -1,6 +1,5 @@
 process CALLING_FREEBAYES {
     cpus params.calling.cpu
-    maxForks 1
     errorStrategy 'ignore'
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'

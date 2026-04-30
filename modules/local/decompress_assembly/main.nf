@@ -1,6 +1,5 @@
 process DECOMPRESS_ASSEMBLY {
-    maxForks 1
-    cpus 1
+    cpus Runtime.runtime.availableProcessors()
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 

@@ -16,13 +16,16 @@ process PREPARE_BAM {
     tuple val(sample_id), path("output.bam"), emit: bam
     
     script:
-    def rmdup = params.rmdup.enabled ? '| picard MarkDuplicates -I - -O - -M /dev/null --VALIDATION_STRINGENCY SILENT --REMOVE_DUPLICATES true' : ''
-    def lai = params.left_align_indels.enabled ? '| gatk LeftAlignIndels -I /dev/stdin -O /dev/stdout -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false' : ''
+    def rmdup = params.rmdup.enabled ? 'picard MarkDuplicates -I tmp/stage1.bam -O tmp/stage2.bam -M /dev/null --VALIDATION_STRINGENCY SILENT --REMOVE_DUPLICATES true' : 'mv tmp/stage1.bam tmp/stage2.bam'
+    def lai = params.left_align_indels.enabled ? 'gatk LeftAlignIndels -I tmp/stage2.bam -O mapping.bam -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false' : 'mv tmp/stage2.bam mapping.bam'
     def fixmate = params.input.reads_type != 'se' ? "| samtools sort -n - | samtools fixmate --threads ${task.cpus} -m - -" : ''
     def reads = "tmp/read1"
     """
     samtools view -F 4 --threads ${task.cpus} -b -q ${params.bam_filter.min_map_qual} ${reads} ${fixmate} | \
-        samtools sort --threads ${task.cpus} ${rmdup} ${lai} | \
-        samtools addreplacerg -w -r "@RG\tID:${sample_id}\tSM:${sample_id}" --threads ${task.cpus} -o mapping.bam
+        samtools sort --threads ${task.cpus} -o tmp/stage1.bam
+    
+    ${rmdup}
+     
+    ${lai}
     """
 }

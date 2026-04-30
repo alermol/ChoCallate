@@ -1,5 +1,4 @@
 process MAPPING_BOWTIE2 {
-    maxForks 1
     cpus params.mapping.cpu
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
