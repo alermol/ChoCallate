@@ -100,6 +100,6 @@ workflow {
                     GENERATE_CONSENSUS.out.consensus_bcf.map { item -> item[1] }.collect()
         bed_coverage = MERGE_BEDS(bed_coverage.collect())
         MERGE_OUTPUTS(consensus, bed_coverage)
-    }    
+    }
 }
 
