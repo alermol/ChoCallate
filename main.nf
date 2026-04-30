@@ -68,8 +68,7 @@ workflow {
                                                                                                       ref_genome, 
                                                                                                       gen_dict, 
                                                                                                       fai_index) : 
-               params.input.format == 'bam' ? PREPARE_BAM(sample_run_ch, 
-                                                          file(params.input.reference_genome), 
+               params.input.format == 'bam' ? PREPARE_BAM(sample_run_ch,
                                                           ref_genome, 
                                                           gen_dict, 
                                                           fai_index) : 

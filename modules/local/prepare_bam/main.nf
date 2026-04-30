@@ -1,4 +1,5 @@
 process PREPARE_BAM {
+    maxForks 1
     cpus params.mapping.cpu
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
@@ -7,7 +8,6 @@ process PREPARE_BAM {
 
     input:
     tuple val(sample_id), path("tmp/read1"), path("tmp/read2"), path("tmp/read3")
-    path("tmp/ref_genome_real.fasta")
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.dict")
     path("tmp/ref_genome.fasta.fai")
