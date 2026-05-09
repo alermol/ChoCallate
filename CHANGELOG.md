@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Refractored the pipeline code and file structure towards nf-core standards.
 
+### Fixed
+
+- Fixed hardcoded paths to input files in the config for test run.
+
 ## [2.0.3] - 2026-04-27
 
 ### Changed
