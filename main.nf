@@ -53,26 +53,32 @@ workflow {
     gen_dict = CREATE_SEQ_DICT(ref_genome)
 
     // Prepare BAM files
-    bam_file = params.mapping.mapper == 'bowtie2' && params.input.format != 'bam' ? MAPPING_BOWTIE2(sample_run_ch, 
-                                                                                                    file(params.input.reference_genome), 
-                                                                                                    ref_genome, 
-                                                                                                    gen_dict, 
-                                                                                                    fai_index) : 
-               params.mapping.mapper == 'bwa' && params.input.format != 'bam' ? MAPPING_BWA(sample_run_ch, 
-                                                                                            file(params.input.reference_genome), 
-                                                                                            ref_genome, 
-                                                                                            gen_dict, 
-                                                                                            fai_index) : 
-               params.mapping.mapper == 'minimap2' && params.input.format != 'bam' ? MAPPING_MINIMAP2(sample_run_ch, 
-                                                                                                      file(params.input.reference_genome), 
-                                                                                                      ref_genome, 
-                                                                                                      gen_dict, 
-                                                                                                      fai_index) : 
-               params.input.format == 'bam' ? PREPARE_BAM(sample_run_ch,
-                                                          ref_genome, 
-                                                          gen_dict, 
-                                                          fai_index) : 
-               error("Unknown input format or mapper")
+    if (params.mapping.mapper == 'bowtie2' && params.input.format != 'bam') {
+        bam_file = MAPPING_BOWTIE2(sample_run_ch,
+                              file(params.input.reference_genome),
+                              ref_genome,
+                              gen_dict,
+                              fai_index)
+    } else if (params.mapping.mapper == 'bwa' && params.input.format != 'bam') {
+        bam_file = MAPPING_BWA(sample_run_ch, 
+                          file(params.input.reference_genome), 
+                          ref_genome, 
+                          gen_dict, 
+                          fai_index)  
+    } else if (params.mapping.mapper == 'minimap2' && params.input.format != 'bam') {
+        bam_file = MAPPING_MINIMAP2(sample_run_ch, 
+                               file(params.input.reference_genome), 
+                               ref_genome, 
+                               gen_dict, 
+                               fai_index)
+    } else if (params.input.format == 'bam') {
+        bam_file = PREPARE_BAM(sample_run_ch,
+                          ref_genome, 
+                          gen_dict, 
+                          fai_index)
+    } else {
+        error("Unknown input format or mapper")
+    }
 
     // Generate BED coverage
     include_bed = params.input.include_bed == null ? file("${projectDir}/assets/N1_FILE", checkIfExists: true) : file(params.input.include_bed, checkIfExists: true)
