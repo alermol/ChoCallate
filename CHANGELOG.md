@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-05-09
+
 ### Changed
 
 - Refractored the pipeline code and file structure towards nf-core standards.
