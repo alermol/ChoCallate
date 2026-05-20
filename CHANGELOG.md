@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-05-20
+
+### Fixed
+
+- Fixed typos in the MAPPING_BWA and MAPPING_MINIMAP2 processes that caused them to crash when launched.
+
+### Added
+
+- The MERGE_OUTPUTS process now uses a retry strategy with a decreasing number of processors for each attempt.
+
 ## [2.0.4] - 2026-05-09
 
 ### Changed
