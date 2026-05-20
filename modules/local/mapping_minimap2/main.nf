@@ -24,13 +24,13 @@ process MAPPING_MINIMAP2 {
     def reads = params.input.reads_type == 'se' ? "tmp/read1" : 
                 params.input.reads_type == 'pe' ? "tmp/read1 tmp/read2" : ''
     """
-    GENOME_BASENAME=\$(basename \$(realpath tmp/ref_genome.fasta))
+    GENOME_BASENAME=\$(basename \$(realpath tmp/ref_genome_real.fasta))
     
     minimap2 \
-        ${params.mapping.extra_args} 
+        ${params.mapping.extra_args} \
         -ax sr \
         -t ${task.cpus} \
-        -R "${rg_id}" 
+        -R "${rg_id}" \
         -a ${params.input.reference_index_dir}/\${GENOME_BASENAME}.mmi \
         ${reads} | \
     samtools view -F 4 --threads ${task.cpus} -b -q ${params.bam_filter.min_map_qual} ${fixmate} | \
