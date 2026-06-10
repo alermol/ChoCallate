@@ -18,7 +18,7 @@ process MERGE_OUTPUTS {
     path("consensus.vcf.gz"), optional: true
 
     script:
-    def regex = 'ALT~\\"\\.\\"'
+    def regex = params.output.remove_invariant ? 'ALT~\\"\\.\\" || N_PASS(GT=\\"hom\\")==N_SAMPLES' : 'ALT~\\"\\.\\"'
     def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
     """
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf

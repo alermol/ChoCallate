@@ -11,6 +11,7 @@ output:
   directory: "ChoCallate_output"
   type: "sample"
   format: "bcf"
+  remove_invariant: true
 
 ref_genome:
   bgzip: true
