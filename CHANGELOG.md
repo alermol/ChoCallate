@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Type of NM tag in resulting VCF was changed from A to R in order to count number of matching calls reference allele along with alternative ones
+
+### Added
+
+- Add optional removing of monomorphic (invariant) positions both in single- and multi-sample output in order to reduce output file size
+
 ## [2.0.5] - 2026-05-20
 
 ### Fixed
