@@ -78,7 +78,7 @@ def generate_mininimal_header(sample_name, reference_file, consensus_threshold):
     for ref in reference_file.references:
         header.add_line(f'##contig=<ID={ref},length={reference_file.get_reference_length(ref)}>')
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
-    header.add_line('##FORMAT=<ID=NM,Number=A,Type=Integer,Description="Number of matching calls">')
+    header.add_line('##FORMAT=<ID=NM,Number=R,Type=Integer,Description="Number of matching calls">')
     return header
 
 
@@ -130,7 +130,7 @@ def main():
                                 alleles=[consensus_genotype[0]] + list(consensus_genotype[1]),
                                 qual=42,
                             )
-                            new_record.samples[0]['NM'] = num_matching_calls
+                            new_record.samples[0]['NM'] = (len(args.input), num_matching_calls,)
                             new_record.ref = consensus_genotype[0]
                             new_record.samples[0]['GT'] = consensus_genotype[2]
                             output_file.write(new_record)
