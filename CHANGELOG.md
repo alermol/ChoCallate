@@ -6,11 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Type of NM tag in resulting VCF was changed from A to R in order to count number of matching calls reference allele along with alternative ones
+- Type of NM tag in resulting VCF was changed from A to R in order to count number of matching calls reference allele along with alternative ones.
 
 ### Added
 
-- Add optional removing of monomorphic (invariant) positions both in single- and multi-sample output in order to reduce output file size
+- Add optional removing of monomorphic (invariant) positions both in single- and multi-sample output in order to reduce output file size.
+
+### Fixed
+
+- Fixed a bug that caused GATK to crash when the system's temporary directory became full.
 
 ## [2.0.5] - 2026-05-20
 
