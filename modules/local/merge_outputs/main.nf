@@ -1,10 +1,10 @@
 process MERGE_OUTPUTS {
     maxForks 1
-    cpus { Runtime.runtime.availableProcessors() - task.attempt }
+    cpus { params.consensus.cpu - task.attempt }
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
     errorStrategy 'retry'
-    maxRetries Runtime.runtime.availableProcessors() - 1
+    maxRetries params.consensus.cpu - 1
     
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.type == 'single' && params.output.format == 'vcf'
