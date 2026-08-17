@@ -13,9 +13,6 @@ include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
-include { MERGE_BEDS } from './modules/local/merge_beds'
-
-
 workflow {
     
     // Validate required parameters
@@ -103,8 +100,7 @@ workflow {
         consensus = params.output.format == 'vcf' ? 
                     GENERATE_CONSENSUS.out.consensus_vcf.map { item -> item[1] }.collect() : 
                     GENERATE_CONSENSUS.out.consensus_bcf.map { item -> item[1] }.collect()
-        bed_coverage = MERGE_BEDS(bed_coverage.collect())
-        MERGE_OUTPUTS(consensus, bed_coverage)
+        MERGE_OUTPUTS(consensus)
     }
 }
 
