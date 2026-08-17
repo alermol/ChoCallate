@@ -19,6 +19,7 @@ output:
   directory: "$PWD/ChoCallate_output"
   type: "single"
   format: "bcf"
+  remove_invariant: true
 
 ref_genome:
   bgzip: true
