@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-27
+
+### Changed
+
+- Dependency version pins in `environment.yaml` were relaxed to minimum versions (`>=`), and the Nextflow requirement was raised to `>=26.04.6`.
+- The merging of single-sample VCF/BCF files into multi-sample files was significantly accelerated by using hierarchical merging.
+- `MERGE_OUTPUTS` now uses `consensus.cpu` for thread allocation. The previous retry strategy that decreased CPU count on each attempt was removed.
+- Default `output.type` changed from `"sample"` to `"single"` (one multi-sample consensus file).
+
+### Added
+
+- Optional removal of monomorphic (invariant) positions in both single- and multi-sample outputs to reduce file size (`output.remove_invariant`).
+- Optional splitting of multi-allelic variants in output multi-sample VCF/BCF files (`output.split_multiallelic`).
+- Added information to the output VCF/BCF file headers about the ChoCallate version (`##tool`), multi-allelic variant splitting (`##multialleleSplit`), and monomorphic variant removal (`##noMonomorphic`). The consensus threshold header key was renamed to `##consensusThreshold`.
+
+### Removed
+
+- The NM tag was temporarily removed due to issues during merging. It will be restored in future updates. The consensus threshold remains in the VCF/BCF header.
+
+### Fixed
+
+- Fixed a bug that caused GATK to crash when the system's temporary directory became full.
+
 ## [2.0.5] - 2026-05-20
 
 ### Fixed

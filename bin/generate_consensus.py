@@ -60,7 +60,12 @@ def get_consensus_genotype(genotypes, consensus_threshold):
     return value, count
 
 
-def generate_mininimal_header(sample_name, reference_file, consensus_threshold):
+def generate_mininimal_header(sample_name,
+                              reference_file,
+                              consensus_threshold,
+                              split_multiallelic,
+                              remove_invariant,
+                              version):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -68,17 +73,23 @@ def generate_mininimal_header(sample_name, reference_file, consensus_threshold):
         sample_name: String sample name.
         reference_file: pysam.FastaFile object.
         consensus_threshold: Integer threshold for the consensus genotype.
+        split_multiallelic: Whether multiallelic sites were split.
+        remove_invariant: Whether monomorphic sites were removed.
+        version: String version of the ChoCallate pipeline.
 
     Returns:
         A pysam.VariantHeader object.
     """
     header = pysam.VariantHeader()
     header.add_sample(sample_name)
-    header.add_line(f'##Consensus threshold={consensus_threshold}')
+    header.add_line(f'##tool=ChoCallate {version}')
+    header.add_line(f'##consensusThreshold={consensus_threshold}')
+    header.add_line(f'##multialleleSplit={split_multiallelic}')
+    header.add_line(f'##noMonomorphic={remove_invariant}')
     for ref in reference_file.references:
         header.add_line(f'##contig=<ID={ref},length={reference_file.get_reference_length(ref)}>')
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
-    header.add_line('##FORMAT=<ID=NM,Number=A,Type=Integer,Description="Number of matching calls">')
+    # header.add_line('##FORMAT=<ID=NM,Number=R,Type=Integer,Description="Number of matching calls">')
     return header
 
 
@@ -92,12 +103,20 @@ def main():
     parser.add_argument('--sample_name', required=True, help='Sample name')
     parser.add_argument('--reference', required=True, help='Reference genome assembly (fasta file and fai index)')
     parser.add_argument('--consensus_threshold', required=True, type=int, help='Number of matching calls for consensus')
+    parser.add_argument('--version', required=True, type=str, help='Version of ChoCallate pipeline')
+    parser.add_argument('--split_multiallelic', action='store_true')
+    parser.add_argument('--remove_invariant', action='store_true')
     args = parser.parse_args()
 
     with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
          pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai') as reference_file:
         with pysam.VariantFile(args.output, mode='wb', 
-                               header=generate_mininimal_header(args.sample_name, reference_file, args.consensus_threshold)) as output_file:
+                               header=generate_mininimal_header(args.sample_name,
+                                                                reference_file,
+                                                                args.consensus_threshold,
+                                                                args.split_multiallelic,
+                                                                args.remove_invariant,
+                                                                args.version)) as output_file:
             with ExitStack[bool | None]() as stack:
                 variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi')) for bcf in args.input]
                 position_progress = 0
@@ -130,7 +149,7 @@ def main():
                                 alleles=[consensus_genotype[0]] + list(consensus_genotype[1]),
                                 qual=42,
                             )
-                            new_record.samples[0]['NM'] = num_matching_calls
+                            # new_record.samples[0]['NM'] = (len(args.input), num_matching_calls,)
                             new_record.ref = consensus_genotype[0]
                             new_record.samples[0]['GT'] = consensus_genotype[2]
                             output_file.write(new_record)

@@ -97,8 +97,8 @@ Published outputs are written to `outdir` (default: `ChoCallate_output`), includ
 
 Consensus outputs depend on `output.type` and `output.format`:
 
-- **Per-sample**: `<outdir>/per_sample/<sample_id>/consensus.bcf` (default) or `consensus.vcf.gz`
-- **Single merged**: `<outdir>/consensus.bcf` or `<outdir>/consensus.vcf.gz`
+- **Single merged** (default): `<outdir>/consensus.bcf` or `<outdir>/consensus.vcf.gz`
+- **Per-sample**: `<outdir>/per_sample/<sample_id>.bcf` or `<sample_id>.vcf.gz`
 
 ## Additional documentation
 
