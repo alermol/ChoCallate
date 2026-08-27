@@ -17,6 +17,7 @@ process MERGE_OUTPUTS {
     script:
     def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || N_PASS(GT=\"hom\")==N_SAMPLES' : 'ALT~\"\\.\"'
     def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
+    def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
     """
     mkdir -p tmp/merge1/
     ls tmp/*.bcf > tmp/merge1/list_bcf.txt
@@ -31,9 +32,7 @@ process MERGE_OUTPUTS {
     elif [ "\$n_bcf" -le ${task.cpus} ]; then
         bcftools merge --force-samples --threads ${task.cpus} -Ou tmp/*.bcf \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
-        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou \
-        | bcftools norm --threads ${task.cpus} -m +any -Ou \
-        | bcftools sort ${output_format}
+        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} | bcftools sort ${output_format}
     else
         split -n l/${task.cpus} --additional-suffix=".txt" -a 4 -d tmp/merge1/list_bcf.txt tmp/merge1/chunk_
 
@@ -44,9 +43,7 @@ process MERGE_OUTPUTS {
 
         bcftools merge --force-samples --threads ${task.cpus} -m all -Ou tmp/merge1/merged_*.bcf \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
-        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou \
-        | bcftools norm --threads ${task.cpus} -m +any -Ou \
-        | bcftools sort ${output_format}
+        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} | bcftools sort ${output_format}
     fi
     """
 }

@@ -12,6 +12,7 @@ output:
   type: "sample"
   format: "bcf"
   remove_invariant: true
+  split_multiallelic: false
 
 ref_genome:
   bgzip: true
