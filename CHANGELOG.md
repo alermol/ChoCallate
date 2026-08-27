@@ -4,16 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-27
+
 ### Changed
 
-- Some software versions in the environment were updated to newer versions.
+- Dependency version pins in `environment.yaml` were relaxed to minimum versions (`>=`), and the Nextflow requirement was raised to `>=26.04.6`.
 - The merging of single-sample VCF/BCF files into multi-sample files was significantly accelerated by using hierarchical merging.
+- `MERGE_OUTPUTS` now uses `consensus.cpu` for thread allocation. The previous retry strategy that decreased CPU count on each attempt was removed.
+- Default `output.type` changed from `"sample"` to `"single"` (one multi-sample consensus file).
 
 ### Added
 
-- Optional removal of monomorphic (invariant) positions in both single- and multi-sample outputs to reduce file size.
-- Optional splitting of multi-allelic variants in output multi-sample VCF/BCF files.
-- Added information to the output VCF/BCF file headers about the ChoCallate version, multi-allelic variant splitting, and monomorphic variant removal.
+- Optional removal of monomorphic (invariant) positions in both single- and multi-sample outputs to reduce file size (`output.remove_invariant`).
+- Optional splitting of multi-allelic variants in output multi-sample VCF/BCF files (`output.split_multiallelic`).
+- Added information to the output VCF/BCF file headers about the ChoCallate version (`##tool`), multi-allelic variant splitting (`##multialleleSplit`), and monomorphic variant removal (`##noMonomorphic`). The consensus threshold header key was renamed to `##consensusThreshold`.
 
 ### Removed
 
