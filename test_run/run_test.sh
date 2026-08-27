@@ -20,6 +20,7 @@ output:
   type: "single"
   format: "bcf"
   remove_invariant: true
+  split_multiallelic: false
 
 ref_genome:
   bgzip: true
