@@ -21,7 +21,9 @@ process GENERATE_CONSENSUS {
 
     script:
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
-    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'AC==0' -Ou" : ""
+    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' -Ou" : ""
+    def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
+    def remove_invariant = params.output.remove_invariant ? "--remove_invariant" : ""
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
@@ -33,7 +35,7 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}"
+    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf ${filter_invariant} | bcftools sort ${output_format}

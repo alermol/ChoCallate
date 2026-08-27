@@ -6,11 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Type of NM tag in resulting VCF was changed from A to R in order to count number of matching calls reference allele along with alternative ones.
+- Some software versions in the environment were updated to newer versions.
+- The merging of single-sample VCF/BCF files into multi-sample files was significantly accelerated by using hierarchical merging.
 
 ### Added
 
-- Add optional removing of monomorphic (invariant) positions both in single- and multi-sample output in order to reduce output file size.
+- Optional removal of monomorphic (invariant) positions in both single- and multi-sample outputs to reduce file size.
+- Optional splitting of multi-allelic variants in output multi-sample VCF/BCF files.
+- Added information to the output VCF/BCF file headers about the ChoCallate version, multi-allelic variant splitting, and monomorphic variant removal.
+
+### Removed
+
+- The NM tag was temporarily removed due to issues during merging. It will be restored in future updates. The consensus threshold remains in the VCF/BCF header.
 
 ### Fixed
 
