@@ -20,7 +20,7 @@ ChoCallate runs several variant callers and applies configurable consensus rules
 ```bash
 git clone --depth 1 https://github.com/alermol/ChoCallate.git
 cd ChoCallate
-conda env create -y -f environment.yaml
+conda env create -y -f environment.yaml --no-default-packages
 conda activate ChoCallate
 ```
 
