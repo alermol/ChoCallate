@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-01
+
+### Added
+
+- Wiki: [Merge Strategies and Testing](https://github.com/alermol/ChoCallate/wiki/Merge-Strategies-and-Testing).
+
+### Changed
+
+- `MERGE_OUTPUTS` now uses chunked pipe merge for N samples ≥ 2 (no intermediate files, named pipes only).
+
 ## [3.0.0] - 2026-08-27
 
 ### Changed
