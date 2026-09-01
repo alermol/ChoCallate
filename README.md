@@ -1,8 +1,6 @@
 # ChoCallate 🍫
 
-![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) [![Static Badge](https://img.shields.io/badge/Changelog-orange)](https://github.com/alermol/ChoCallate/blob/main/CHANGELOG.md) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate) [![Static Badge](https://img.shields.io/badge/Wiki-red?link=https%3A%2F%2Fgithub.com%2Falermol%2FChoCallate%2Fwiki)
-](https://github.com/alermol/ChoCallate/wiki)
-
+![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) ![Static Badge](https://img.shields.io/badge/Changelog-orange) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate) ![Static Badge](https://img.shields.io/badge/Wiki-red?link=https%3A%2F%2Fgithub.com%2Falermol%2FChoCallate%2Fwiki)
 
 **ChoCallate** (**Cho**rus of **Call**ers) - a **Nextflow** pipeline for **consensus-based variant calling**. 
 
@@ -14,6 +12,8 @@ ChoCallate runs several variant callers and applies configurable consensus rules
 - **Conda** (Miniconda/Anaconda) or **Mamba**
 - **Git**
 - **Nextflow**
+
+
 
 ## Installation
 
@@ -31,6 +31,8 @@ cd test_run
 bash run_test.sh
 bash cleanup.sh
 ```
+
+
 
 ## Docker
 
@@ -63,15 +65,17 @@ cp assets/templates/config.yaml my_run.yaml
 
 Minimum set of parameters in `my_run.yaml`:
 
-- **`samples_tsv`**: input samples TSV (formats below)
-- **`reference_genome`**: reference FASTA (plain or bgzip-compressed)
-- **`reference_index_dir`**: path to directory with index files for reference genome
+- `samples_tsv`: input samples TSV (formats below)
+- `reference_genome`: reference FASTA (plain or bgzip-compressed)
+- `reference_index_dir`: path to directory with index files for reference genome
 
 After configuration is complete you can run the ChoCallate
 
 ```bash
 nextflow run main.nf -params-file my_run.yaml
 ```
+
+
 
 ## Inputs
 
@@ -87,6 +91,8 @@ nextflow run main.nf -params-file my_run.yaml
 - **FASTQ + mixed** (`reads_type: "mx"`): `sample_id<TAB>R1<TAB>R2<TAB>U` (Bowtie2 mapping only)
 - **BAM** (`input_format: "bam"`): `sample_id<TAB>bam_path`
 
+
+
 ## Outputs
 
 Published outputs are written to `outdir` (default: `ChoCallate_output`), including standard Nextflow reports:
@@ -100,12 +106,17 @@ Consensus outputs depend on `output.type` and `output.format`:
 - **Single merged** (default): `<outdir>/consensus.bcf` or `<outdir>/consensus.vcf.gz`
 - **Per-sample**: `<outdir>/per_sample/<sample_id>.bcf` or `<sample_id>.vcf.gz`
 
+When `output.type` is `"single"` and `N samples ≥ 2`, single consensus BCF is merged using chunked merge through named pipes. No intermediate BCF files are written to disk. Details: [Merge Strategies and Testing](https://github.com/alermol/ChoCallate/wiki/Merge-Strategies-and-Testing).
+
 ## Additional documentation
 
 - **Wiki home**: [ChoCallate Wiki](https://github.com/alermol/ChoCallate/wiki)
 - **Install**: [Installing ChoCallate](https://github.com/alermol/ChoCallate/wiki/Installing-ChoCallate)
 - **Quick start / config & CLI**: [CLI Reference](https://github.com/alermol/ChoCallate/wiki/CLI-Reference)
+- **Multi-sample merge**: [Merge Strategies and Testing](https://github.com/alermol/ChoCallate/wiki/Merge-Strategies-and-Testing)
 - **Outputs**: [Output Structure](https://github.com/alermol/ChoCallate/wiki/Output-Structure)
+
+
 
 ## Contribution
 
@@ -114,7 +125,6 @@ See [CONTRIBUTING.md](https://github.com/alermol/ChoCallate/blob/main/CONTRIBUTI
 ## License
 
 [MIT](https://github.com/alermol/ChoCallate/blob/main/LICENSE)
-
 
 ## Development roadmap
 
