@@ -15,36 +15,24 @@ process MERGE_OUTPUTS {
     path("consensus.vcf.gz"), optional: true
 
     script:
-    def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || N_PASS(GT=\"hom\")==N_SAMPLES' : 'ALT~\"\\.\"'
+    def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' : 'ALT~\"\\.\"'
     def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
-    def filter_invariant = params.output.remove_invariant ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' -Ou" : "| bcftools view ${output_format}"
     def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
     """
-    mkdir -p tmp/merge1/
-    ls tmp/*.bcf > tmp/merge1/list_bcf.txt
-    n_bcf=\$(wc -l < tmp/merge1/list_bcf.txt)
+    n_bcf=\$(ls -1 tmp/*.bcf | wc -l)
 
     if [ "\$n_bcf" -gt 1 ]; then
         parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
     fi
 
     if [ "\$n_bcf" -eq 1 ]; then
-        bcftools filter --threads ${task.cpus} -e '${regex}' -Ou tmp/1.bcf ${filter_invariant}
-    elif [ "\$n_bcf" -le ${task.cpus} ]; then
-        bcftools merge --force-samples --threads ${task.cpus} -Ou tmp/*.bcf \
-        | bcftools norm -m -any --threads ${task.cpus} -Ou \
-        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} | bcftools sort ${filter_invariant}
+        bcftools filter --threads ${task.cpus} -e '${regex}' ${output_format} tmp/1.bcf
     else
-        split -n l/${task.cpus} --additional-suffix=".txt" -a 4 -d tmp/merge1/list_bcf.txt tmp/merge1/chunk_
-
-        parallel -j ${task.cpus} \
-        "bcftools merge --force-samples --force-single --threads 1 -Ou -m all -l {} -o tmp/merge1/merged_{#}.bcf" ::: tmp/merge1/chunk_*.txt
-
-        parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/merge1/merged_*.bcf
-
-        bcftools merge --force-samples --threads ${task.cpus} -m all -Ou tmp/merge1/merged_*.bcf \
+        ls -1 tmp/*.bcf > tmp/merge_list.txt
+        merge_bcf_tree.py --cpus ${task.cpus} --file-list tmp/merge_list.txt \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
-        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} | bcftools sort ${filter_invariant}
+        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} \
+        | bcftools sort ${output_format}
     fi
     """
 }
