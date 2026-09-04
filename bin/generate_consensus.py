@@ -52,15 +52,15 @@ def get_consensus_genotype(genotypes, consensus_threshold):
         consensus_threshold: Integer threshold for the consensus genotype.
 
     Returns:
-        A tuple containing the consensus genotype (reference allele, alternate alleles, numeric representation of the genotype) and the number of matching calls.
-        If the consensus genotype is not found, returns None and 0.
+        The consensus genotype (reference allele, alternate alleles, numeric representation of the genotype).
+        If the consensus genotype is not found, returns None.
     """
     genotypes = [(i.ref, i.alt, i.gt) for i in genotypes]
     counter = Counter(genotypes)
     value, count = counter.most_common(1)[0]
     if count < consensus_threshold:
-        return None, 0
-    return value, count
+        return None
+    return value
 
 
 def collect_region_pileup(bam_file, contig, start0, end0):
@@ -225,7 +225,6 @@ def generate_mininimal_header(sample_name,
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
     header.add_line('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">')
     header.add_line('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">')
-    # header.add_line('##FORMAT=<ID=NM,Number=R,Type=Integer,Description="Number of matching calls">')
     return header
 
 
@@ -277,7 +276,7 @@ def main():
                         genotypes = [i if i.gt != (0, 0) else i._replace(ref=ref_seq[ref_seq_rel_pos].upper(), alt=('.',)) for i in genotypes]
 
                         # get consensus genotype at current position
-                        consensus_genotype, num_matching_calls = get_consensus_genotype(genotypes, args.consensus_threshold)
+                        consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
 
                         # write consensus genotype to output file
                         if consensus_genotype is not None:
@@ -290,7 +289,6 @@ def main():
                                 alleles=alleles,
                                 qual=None,
                             )
-                            # new_record.samples[0]['NM'] = (len(args.input), num_matching_calls,)
                             new_record.ref = consensus_genotype[0]
                             new_record.samples[0]['GT'] = consensus_genotype[2]
                             new_record.samples[0]['AD'] = ad
