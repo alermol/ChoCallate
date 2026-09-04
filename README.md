@@ -106,6 +106,8 @@ Consensus outputs depend on `output.type` and `output.format`:
 - **Single merged** (default): `<outdir>/consensus.bcf` or `<outdir>/consensus.vcf.gz`
 - **Per-sample**: `<outdir>/per_sample/<sample_id>.bcf` or `<sample_id>.vcf.gz`
 
+Consensus VCF/BCF records include `FORMAT/GT`, `AD`, and `DP` (AD/DP from BAM), plus site-level `INFO` tags (`AN`, `AC`, `AF`, `NS`, total `DP`, etc.). Details: [Output Structure](https://github.com/alermol/ChoCallate/wiki/Output-Structure).
+
 When `output.type` is `"single"` and `N samples ≥ 2`, single consensus BCF is merged using chunked merge through named pipes. No intermediate BCF files are written to disk. Details: [Merge Strategies and Testing](https://github.com/alermol/ChoCallate/wiki/Merge-Strategies-and-Testing).
 
 ## Additional documentation
