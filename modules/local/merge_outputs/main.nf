@@ -32,6 +32,7 @@ process MERGE_OUTPUTS {
         merge_bcf_tree.py --cpus ${task.cpus} --file-list tmp/merge_list.txt \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
         | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} \
+        | fill_missing_ad.py \
         | bcftools sort ${output_format}
     fi
     """

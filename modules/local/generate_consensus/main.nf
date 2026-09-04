@@ -13,6 +13,7 @@ process GENERATE_CONSENSUS {
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/coverage.bed")
+    path("tmp/input.bam")
 
     output:
     tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true
@@ -30,12 +31,14 @@ process GENERATE_CONSENSUS {
     bedops --chop 10000 tmp/coverage.bed > tmp/coverage.bed.chopped
     split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed.chopped tmp/bed_chunks/
 
+    samtools index --threads ${task.cpus} --csi tmp/input.bam
+
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
 
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
+    generate_consensus.py --input tmp/*.bcf --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf ${filter_invariant} | bcftools sort ${output_format}
