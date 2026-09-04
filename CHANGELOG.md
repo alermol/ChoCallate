@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-04
+
+### Added
+
+- Consensus outputs now include `FORMAT/AD` and `FORMAT/DP`, recovered from the sample BAM pileup (overlapping PE mates are deduplicated for allele counts; `DP` counts all covering reads to match `samtools depth` used for the coverage BED).
+- Site-level `INFO` annotations via `bcftools +fill-tags` on both per-sample and merged outputs: `AN`, `AC`, `AF`, `NS`, `AC_Hom`, `AC_Het`, `MAF`, `TYPE`, `F_MISSING`, and `DP` (sum of `FORMAT/DP`).
+
+### Changed
+
+- Consensus `QUAL` is always missing (`.`) instead of a placeholder score.
+- `GENERATE_CONSENSUS` takes the sample BAM as input so AD/DP can be recovered during consensus writing.
+
 ## [3.1.0] - 2026-09-01
 
 ### Added

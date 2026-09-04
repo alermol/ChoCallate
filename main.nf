@@ -93,7 +93,7 @@ workflow {
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 
     // Generate consensus
-    GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage)
+    GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage, bam_file.map { item -> item[1] })
 
     // Merge consensuses from different samples into single VCF of BCF
     if (params.output.type == 'single') {

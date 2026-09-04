@@ -20,7 +20,7 @@ This document outlines the future direction of our project. It's a living docume
 
 ## Improvement of consensus file
 
-- [ ] Expandind set of tags in consensus file based on tags from individual callers
+- [x] Expanding set of tags in consensus file (FORMAT/AD, FORMAT/DP, and INFO annotations via `bcftools +fill-tags`)
 
 ## General improvements of calling
 
