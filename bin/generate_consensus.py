@@ -278,7 +278,7 @@ def main():
                                 start=vcf_start - 1,
                                 stop=vcf_start,
                                 alleles=alleles,
-                                qual=42,
+                                qual=None,
                             )
                             # new_record.samples[0]['NM'] = (len(args.input), num_matching_calls,)
                             new_record.ref = consensus_genotype[0]
