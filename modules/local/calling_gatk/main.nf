@@ -20,11 +20,12 @@ process CALLING_GATK {
     script:
     """
     mkdir -p tmp/bed_chunks/
-    split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed tmp/bed_chunks/
+    mkdir -p tmp/calling_chunks/
+
+    gatk SplitIntervals -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
+    parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
 
     samtools index --threads ${task.cpus} --csi tmp/input.bam
-
-    mkdir -p tmp/calling_chunks/
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
     ${sample_id}
