@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
-import time
 from collections import Counter, namedtuple
 from contextlib import ExitStack
 from typing import NamedTuple
 
 import pysam
-
 
 PileupSite = namedtuple('PileupSite', ['snp', 'ins', 'dele', 'dp'])
 
@@ -35,9 +33,9 @@ def genotype_at_position(records, index, pos):
     while i < len(records) and records[i].pos < pos:
         i += 1
     if (i < len(records)) and (records[i].pos == pos):
-        return Genotypes(index=i, 
+        return Genotypes(index=i,
                          ref=records[i].ref.upper(),
-                         alt=tuple(sorted(records[i].alts)), 
+                         alt=tuple(sorted(records[i].alts)),
                          gt=tuple(sorted(records[i].samples[0]['GT'])))
     return Genotypes()
 
@@ -47,7 +45,7 @@ def get_consensus_genotype(genotypes, consensus_threshold):
     Get the consensus genotype from a list of genotypes.
 
     Args:
-        genotypes: List of Genotypes named tuples. Each tuple contains the index, reference allele, 
+        genotypes: List of Genotypes named tuples. Each tuple contains the index, reference allele,
         alternate alleles, and numeric representation of the genotype.
         consensus_threshold: Integer threshold for the consensus genotype.
 
@@ -230,7 +228,6 @@ def generate_mininimal_header(sample_name,
 
 
 def main():
-    start_time = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, nargs='+', help='Input BCF/VCF files')
     parser.add_argument('--bed', required=True, help='Input BED file (gzipped and tabixed)')
@@ -246,15 +243,15 @@ def main():
 
     with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
          pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai') as reference_file, \
-         pysam.AlignmentFile(args.bam, 'rb') as bam_file:
-        with pysam.VariantFile(args.output, mode='wb', 
+         pysam.AlignmentFile(args.bam, 'rb') as bam_file, \
+         pysam.VariantFile(args.output, mode='wb',
                                header=generate_mininimal_header(args.sample_name,
                                                                 reference_file,
                                                                 args.consensus_threshold,
                                                                 args.split_multiallelic,
                                                                 args.remove_invariant,
-                                                                args.version)) as output_file:
-            with ExitStack[bool | None]() as stack:
+                                                                args.version)) as output_file, \
+         ExitStack[bool | None]() as stack:
                 variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi')) for bcf in args.input]
                 position_progress = 0
                 for line in bed_file.fetch():
@@ -297,13 +294,8 @@ def main():
                         shift = len(consensus_genotype[0]) if consensus_genotype is not None else 1
                         vcf_start += shift # shift on referene genotype length
                         ref_seq_rel_pos += shift # shift on reference genotype length
-                        
-                        position_progress += shift
-                        if position_progress % 1000000 == 0:
-                            print(f'Position progress: {position_progress}')
 
-    end_time = time.time()
-    print(f'Processing of {args.bed} took {end_time - start_time} seconds')
+                        position_progress += shift
 
 
 if __name__ == '__main__':
