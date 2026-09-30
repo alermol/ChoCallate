@@ -27,7 +27,7 @@ def genotype_at_position(records, index, pos):
         pos: Integer position to get the genotype from.
 
     Returns:
-        A Genotypes named tuple containing the index, reference allele, alternate alleles, and numeric representation of the genotype.
+        A Genotypes named tuple containing the index, reference allele, alternate alleles, and numeric representation of the genotype. On a miss the index is the first record at or after pos, so the caller can resume the scan without rescanning from the start.
     """
     i = index
     while i < len(records) and records[i].pos < pos:
@@ -37,7 +37,7 @@ def genotype_at_position(records, index, pos):
                          ref=records[i].ref.upper(),
                          alt=tuple(sorted(records[i].alts)),
                          gt=tuple(sorted(records[i].samples[0]['GT'])))
-    return Genotypes()
+    return Genotypes(index=i)
 
 
 def get_consensus_genotype(genotypes, consensus_threshold):
@@ -61,74 +61,57 @@ def get_consensus_genotype(genotypes, consensus_threshold):
     return value
 
 
-def collect_region_pileup(bam_file, contig, start0, end0):
+def build_pileup_site(column):
     """
-    Build per-position pileup summaries for a region.
+    Summarise a single pileup column into per-allele counters.
+
+    Overlapping PE mates are deduplicated for allele counts (one observation per
+    query name, keeping the highest base quality). DP counts every covering read
+    so it matches samtools depth used for the coverage BED.
 
     Args:
-        bam_file: pysam.AlignmentFile object.
-        contig: Contig/chromosome name.
-        start0: 0-based inclusive start.
-        end0: 0-based exclusive end.
+        column: pysam.PileupColumn.
 
     Returns:
-        Dict mapping 1-based positions to PileupSite(snp Counter, insertion Counter,
-        deletion-length Counter, depth).
+        PileupSite(snp Counter, insertion Counter, deletion-length Counter, depth).
     """
-    sites = {}
-    for column in bam_file.pileup(
-        contig,
-        start0,
-        end0,
-        truncate=True,
-        stepper='all',
-        min_base_quality=0,
-        max_depth=1000000,
-    ):
-        if column.reference_pos < start0 or column.reference_pos >= end0:
+    best = {}
+    dp = 0
+    for read in column.pileups:
+        if read.is_refskip:
             continue
-        # Deduplicate overlapping mates for allele counts (one obs per query name).
-        # DP counts every covering read so it matches samtools depth used for the BED.
-        best = {}
-        dp = 0
-        for read in column.pileups:
-            if read.is_refskip:
-                continue
-            dp += 1
-            aln = read.alignment
-            if read.is_del or read.query_position is None:
-                continue
-            bq = aln.query_qualities[read.query_position] if aln.query_qualities else 0
-            if read.indel > 0:
-                allele = (
-                    'ins',
-                    aln.query_sequence[
-                        read.query_position + 1 : read.query_position + 1 + read.indel
-                    ].upper(),
-                )
-            elif read.indel < 0:
-                allele = ('del', -read.indel)
-            else:
-                allele = ('snp', aln.query_sequence[read.query_position].upper())
-            qname = aln.query_name
-            prev = best.get(qname)
-            if prev is None or bq > prev[0]:
-                best[qname] = (bq, allele)
-        snp = Counter()
-        ins = Counter()
-        dele = Counter()
-        for _, allele in best.values():
-            kind, value = allele
-            if kind == 'snp':
-                snp[value] += 1
-            elif kind == 'ins':
-                ins[value] += 1
-            else:
-                dele[value] += 1
-        sites[column.reference_pos + 1] = PileupSite(
-            snp=snp, ins=ins, dele=dele, dp=dp
-        )
-    return sites
+        dp += 1
+        aln = read.alignment
+        if read.is_del or read.query_position is None:
+            continue
+        bq = aln.query_qualities[read.query_position] if aln.query_qualities else 0
+        if read.indel > 0:
+            allele = (
+                'ins',
+                aln.query_sequence[
+                    read.query_position + 1 : read.query_position + 1 + read.indel
+                ].upper(),
+            )
+        elif read.indel < 0:
+            allele = ('del', -read.indel)
+        else:
+            allele = ('snp', aln.query_sequence[read.query_position].upper())
+        qname = aln.query_name
+        prev = best.get(qname)
+        if prev is None or bq > prev[0]:
+            best[qname] = (bq, allele)
+    snp = Counter()
+    ins = Counter()
+    dele = Counter()
+    for _, allele in best.values():
+        kind, value = allele
+        if kind == 'snp':
+            snp[value] += 1
+        elif kind == 'ins':
+            ins[value] += 1
+        else:
+            dele[value] += 1
+    return PileupSite(snp=snp, ins=ins, dele=dele, dp=dp)
 
 
 def count_allele_depth(site, ref, allele):
@@ -163,19 +146,17 @@ def count_allele_depth(site, ref, allele):
     return 0
 
 
-def recover_ad_dp(pileup_sites, pos, alleles):
+def recover_ad_dp(site, alleles):
     """
-    Recover FORMAT/AD and FORMAT/DP for consensus alleles from pileup.
+    Recover FORMAT/AD and FORMAT/DP for consensus alleles from a pileup site.
 
     Args:
-        pileup_sites: Dict from collect_region_pileup.
-        pos: 1-based variant position.
+        site: PileupSite for the position, or None for a position without coverage.
         alleles: List/tuple of alleles (REF followed by ALTs).
 
     Returns:
         Tuple of (AD tuple, DP int).
     """
-    site = pileup_sites.get(pos)
     ref = alleles[0]
     ad = tuple(count_allele_depth(site, ref, allele) for allele in alleles)
     dp = site.dp if site is not None else 0
@@ -253,17 +234,34 @@ def main():
                                                                 args.version)) as output_file, \
          ExitStack[bool | None]() as stack:
                 variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi')) for bcf in args.input]
-                position_progress = 0
                 for line in bed_file.fetch():
                     contig, start, end = line.split('\t')
-                    vcf_start = int(start) + 1
-                    vcf_end = int(end)
-                    ref_seq = reference_file.fetch(contig, int(start), int(end)).upper()
-                    records_per_file = [list(vf.fetch(contig, int(start), int(end))) for vf in variant_files]
-                    pileup_sites = collect_region_pileup(bam_file, contig, int(start), int(end))
+                    start0 = int(start)
+                    end0 = int(end)
+                    vcf_start = start0 + 1
+                    vcf_end = end0
+                    ref_seq = reference_file.fetch(contig, start0, end0).upper()
+                    records_per_file = [list(vf.fetch(contig, start0, end0)) for vf in variant_files]
                     indices = [0] * len(records_per_file)
                     ref_seq_rel_pos = 0
+                    # Stream the pileup in step with the genotype walk instead of
+                    # materialising every covered position up front. AD/DP is built
+                    # only at the positions that are actually written.
+                    pileup = bam_file.pileup(
+                        contig,
+                        start0,
+                        end0,
+                        truncate=True,
+                        stepper='all',
+                        min_base_quality=0,
+                        max_depth=1000000,
+                    )
+                    column = next(pileup, None)
                     while vcf_start < vcf_end:
+                        # advance the pileup to the current position
+                        while column is not None and column.reference_pos + 1 < vcf_start:
+                            column = next(pileup, None)
+
                         # collect genotypes at current position
                         genotypes = []
                         for fi in range(len(variant_files)):
@@ -275,10 +273,13 @@ def main():
                         # get consensus genotype at current position
                         consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
 
+                        shift = len(consensus_genotype[0]) if consensus_genotype is not None else 1
+
                         # write consensus genotype to output file
                         if consensus_genotype is not None:
                             alleles = [consensus_genotype[0]] + list(consensus_genotype[1])
-                            ad, dp = recover_ad_dp(pileup_sites, vcf_start, alleles)
+                            site = build_pileup_site(column) if (column is not None and column.reference_pos + 1 == vcf_start) else None
+                            ad, dp = recover_ad_dp(site, alleles)
                             new_record = output_file.new_record(
                                 contig=contig,
                                 start=vcf_start - 1,
@@ -291,11 +292,8 @@ def main():
                             new_record.samples[0]['AD'] = ad
                             new_record.samples[0]['DP'] = dp
                             output_file.write(new_record)
-                        shift = len(consensus_genotype[0]) if consensus_genotype is not None else 1
-                        vcf_start += shift # shift on referene genotype length
+                        vcf_start += shift # shift on reference genotype length
                         ref_seq_rel_pos += shift # shift on reference genotype length
-
-                        position_progress += shift
 
 
 if __name__ == '__main__':
