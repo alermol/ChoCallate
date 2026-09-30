@@ -19,7 +19,7 @@ process GENERATE_CONSENSUS {
     output:
     tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true
     tuple val(sample_id), path("${sample_id}.vcf.gz"), emit: consensus_vcf, optional: true
-    
+
 
     script:
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
@@ -31,7 +31,7 @@ process GENERATE_CONSENSUS {
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
 
-    gatk SplitIntervals -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
+    gatk SplitIntervals --java-options "-Djava.io.tmpdir=\$TMPDIR" --tmp-dir \$TMPDIR -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
     parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
 
     samtools index --threads ${task.cpus} --csi tmp/input.bam
@@ -49,5 +49,3 @@ process GENERATE_CONSENSUS {
     | bcftools sort ${output_format}
     """
 }
-
-
