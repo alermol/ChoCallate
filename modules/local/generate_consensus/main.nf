@@ -13,6 +13,7 @@ process GENERATE_CONSENSUS {
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/coverage.bed")
+    path("tmp/ref_genome.dict")
     path("tmp/input.bam")
 
     output:
@@ -22,7 +23,7 @@ process GENERATE_CONSENSUS {
 
     script:
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
-    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' -Ou" : ""
+    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
     def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
     def remove_invariant = params.output.remove_invariant ? "--remove_invariant" : ""
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
