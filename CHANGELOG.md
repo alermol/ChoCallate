@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-09-30
+
+### Changed
+
+- The `bcftools` caller now emits `FORMAT/AD` and `FORMAT/DP`, which are requested directly from `bcftools mpileup` (`-a FORMAT/AD,FORMAT/DP`) instead of being recovered downstream.
+- The reference sequence dictionary (`ref_genome.dict`) is now passed to all calling processes and to `GENERATE_CONSENSUS`, as required by `gatk SplitIntervals`.
+- All calling processes (`CALLING_BCFTOOLS`, `CALLING_FREEBAYES`, `CALLING_GATK`) and `GENERATE_CONSENSUS` now split the coverage BED with `gatk SplitIntervals` (balanced, size-aware intervals) instead of `split`/`bedops --chop` + `split`.
+- `FORMAT/AD` and `FORMAT/DP` recovery in `generate_consensus.py` is faster: the genotype walk resumes from the last record instead of rescanning from the start at every position, and the BAM pileup is streamed position-by-position instead of materialising the whole region (bounded memory, no second pass).
+
+### Fixed
+
+- Removal of monomorphic (invariant) positions now filters hom-ref sites with `COUNT(GT="RR")=N_SAMPLES` instead of counting all-homozygous/all-heterozygous genotypes, so only truly invariant positions are dropped and genuine variants are no longer removed.
+
 ## [3.2.0] - 2026-09-04
 
 ### Added

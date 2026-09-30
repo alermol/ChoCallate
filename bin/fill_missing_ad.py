@@ -23,8 +23,8 @@ def fill_record_ad(record):
 
 def main():
     try:
-        with pysam.VariantFile('/dev/stdin') as inp:
-            with pysam.VariantFile('/dev/stdout', 'wb0', header=inp.header) as out:
+        with pysam.VariantFile('/dev/stdin') as inp, \
+            pysam.VariantFile('/dev/stdout', 'wb0', header=inp.header) as out:
                 for record in inp:
                     fill_record_ad(record)
                     out.write(record)

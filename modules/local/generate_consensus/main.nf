@@ -13,6 +13,7 @@ process GENERATE_CONSENSUS {
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/coverage.bed")
+    path("tmp/ref_genome.dict")
     path("tmp/input.bam")
 
     output:
@@ -22,15 +23,16 @@ process GENERATE_CONSENSUS {
 
     script:
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
-    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' -Ou" : ""
+    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
     def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
     def remove_invariant = params.output.remove_invariant ? "--remove_invariant" : ""
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
-    bedops --chop 10000 tmp/coverage.bed > tmp/coverage.bed.chopped
-    split -n l/${task.cpus} --additional-suffix=".bed" -a 4 -d tmp/coverage.bed.chopped tmp/bed_chunks/
+
+    gatk SplitIntervals -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
+    parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
 
     samtools index --threads ${task.cpus} --csi tmp/input.bam
 

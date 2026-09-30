@@ -3,7 +3,7 @@ process MERGE_OUTPUTS {
     cpus params.consensus.cpu
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
-    
+
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.type == 'single' && params.output.format == 'vcf'
 
@@ -15,7 +15,7 @@ process MERGE_OUTPUTS {
     path("consensus.vcf.gz"), optional: true
 
     script:
-    def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || COUNT(GT=\"hom\")=N_SAMPLES || COUNT(GT=\"het\")=N_SAMPLES' : 'ALT~\"\\.\"'
+    def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || COUNT(GT=\"RR\")=N_SAMPLES' : 'ALT~\"\\.\"'
     def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
     def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
