@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-09-30
+
+### Fixed
+
+- `gatk SplitIntervals` in all calling processes (`CALLING_BCFTOOLS`, `CALLING_FREEBAYES`, `CALLING_GATK`) now writes its temp files to the process `$TMPDIR` (`--java-options "-Djava.io.tmpdir=$TMPDIR"` and `--tmp-dir $TMPDIR`) instead of the system temporary directory.
+
 ## [3.2.1] - 2026-09-30
 
 ### Changed
