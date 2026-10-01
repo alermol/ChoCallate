@@ -8,10 +8,9 @@ process CALLING_FREEBAYES {
     tag "${sample_id}"
 
     input:
-    tuple val(sample_id), path("tmp/input.bam")
+    tuple val(sample_id), path("tmp/input.bam"), path("tmp/coverage.bed")
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
-    path("tmp/coverage.bed")
     path("tmp/ref_genome.dict")
 
     output:

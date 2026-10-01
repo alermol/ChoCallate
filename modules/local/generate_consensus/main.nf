@@ -9,12 +9,10 @@ process GENERATE_CONSENSUS {
     publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.vcf.gz', enabled: params.output.type == 'sample' && params.output.format == 'vcf'
 
     input:
-    tuple val(sample_id), path('tmp/?.bcf', arity: '1..*')
+    tuple val(sample_id), path('tmp/?.bcf', arity: '1..*'), path("tmp/input.bam"), path("tmp/coverage.bed")
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
-    path("tmp/coverage.bed")
     path("tmp/ref_genome.dict")
-    path("tmp/input.bam")
 
     output:
     tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true

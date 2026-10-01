@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-10-01
+
+### Fixed
+
+- Each sample's BAM is now joined with its own coverage BED by `sample_id` before variant calling and consensus generation. `GENERATE_COVERAGE` no longer drops `sample_id` from its output, so the coverage BED can no longer be paired with another sample's BAM and callers no longer report variants at positions below `coverage.min_coverage`.
+- Merged multi-sample outputs now have a deterministic sample order that follows `samples_tsv`. `MERGE_OUTPUTS` ranks the per-sample consensus files by their `samples_tsv` position instead of relying on process completion order, and the merge list is sorted naturally (`ls -1v`) so the order is preserved for ≥ 10 samples.
+- BAM input (`format: "bam"`) now works: the sample channel no longer reads a separate `input.input_format` key that disagreed with the `input.format` key used everywhere else.
+- `CLIParamsValidation.effective_callers_validation` now actually validates caller names and no longer calls `split()` before its null check; `cons_threshold_validation` also checks `callers` for null before using it.
+
+### Changed
+
+- The documented input format key is now `format` (was `input_format`) in the README, matching `assets/templates/config.yaml`.
+
 ## [3.2.2] - 2026-09-30
 
 ### Fixed
