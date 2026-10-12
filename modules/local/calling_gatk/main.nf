@@ -8,10 +8,9 @@ process CALLING_GATK {
     tag "${sample_id}"
 
     input:
-    tuple val(sample_id), path("tmp/input.bam")
+    tuple val(sample_id), path("tmp/input.bam"), path("tmp/coverage.bed")
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
-    path("tmp/coverage.bed")
     path("tmp/ref_genome.dict")
 
     output:
@@ -22,7 +21,7 @@ process CALLING_GATK {
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
 
-    gatk SplitIntervals -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
+    gatk SplitIntervals --java-options "-Djava.io.tmpdir=\$TMPDIR" --tmp-dir \$TMPDIR -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
     parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
 
     samtools index --threads ${task.cpus} --csi tmp/input.bam

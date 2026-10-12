@@ -11,7 +11,7 @@ process GENERATE_COVERAGE {
     path(exclude_bed)
 
     output:
-    path("coverage.bed"), emit: coverage
+    tuple val(sample_id), path("coverage.bed"), emit: coverage
 
     script:
     def ibed = include_bed.name != "N1_FILE" ? "-b ${include_bed}" : ""

@@ -21,11 +21,15 @@ class CLIParamsValidation {
     }
 
     static void effective_callers_validation(String callers) {
-        def diploid_callers = ['bcftools', 'gatk', 'freebayes']
-        def polyploid_callers = ['gatk', 'freebayes']
-        def callersList = callers.split(',')
         if (callers == null) {
             println "ERROR: Effective callers are not specified"
+            System.exit(1)
+        }
+        def available_callers = ['bcftools', 'gatk', 'freebayes']
+        def callersList = callers.split(',').collect { it.trim() }
+        def unknown_callers = callersList.findAll { !(it in available_callers) }
+        if (unknown_callers) {
+            println "ERROR: Unknown caller(s): ${unknown_callers}. Available callers are: ${available_callers}"
             System.exit(1)
         }
     }
@@ -47,11 +51,15 @@ class CLIParamsValidation {
     }
 
     static void cons_threshold_validation(Number cons_threshold, String callers) {
-        def callersList = callers.split(',')
         if (cons_threshold == null) {
             println "ERROR: Consensus threshold is required"
             System.exit(1)
         }
+        if (callers == null) {
+            println "ERROR: Effective callers are not specified"
+            System.exit(1)
+        }
+        def callersList = callers.split(',').collect { it.trim() }
         if (cons_threshold > callersList.size()) {
             println "ERROR: Consensus threshold must be less or equal to the number of effective callers"
             System.exit(1)

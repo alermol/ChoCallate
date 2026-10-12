@@ -35,7 +35,7 @@ workflow {
                     return true
                 }
                 .map { 
-                    row -> if (params.input.input_format == 'bam' || params.input.reads_type == 'se') {
+                    row -> if (params.input.format == 'bam' || params.input.reads_type == 'se') {
                         tuple(row[0..1].toArray() + ['/dev/null'] * 2)
                     } else if (params.input.reads_type == 'pe' && params.input.format != 'bam') {
                         tuple(row[0..2].toArray() + ['/dev/null'])
@@ -82,10 +82,15 @@ workflow {
     exclude_bed = params.input.exclude_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.exclude_bed, checkIfExists: true)
     bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
 
+    // Join each sample's BAM with its own coverage BED by sample_id. This keeps the
+    // pair coupled per sample: passing the two channels independently would combine
+    // them positionally and could mix a BAM with another sample's coverage BED.
+    bam_coverage = bam_file.join(bed_coverage)
+
     // Perform variant calling
-    bcftools = params.calling.callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_file, ref_genome, fai_index, bed_coverage, gen_dict) : channel.empty()
-    freebayes = params.calling.callers.contains('freebayes') ? CALLING_FREEBAYES(bam_file, ref_genome, fai_index, bed_coverage, gen_dict) : channel.empty()
-    gatk = params.calling.callers.contains('gatk') ? CALLING_GATK(bam_file, ref_genome, fai_index, bed_coverage, gen_dict) : channel.empty()
+    bcftools = params.calling.callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    freebayes = params.calling.callers.contains('freebayes') ? CALLING_FREEBAYES(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    gatk = params.calling.callers.contains('gatk') ? CALLING_GATK(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
@@ -93,13 +98,21 @@ workflow {
         .map {tuple -> [tuple[0], tuple[1..-1]]}
 
     // Generate consensus
-    GENERATE_CONSENSUS(all_calls, ref_genome, fai_index, bed_coverage, gen_dict, bam_file.map { item -> item[1] })
+    GENERATE_CONSENSUS(all_calls.join(bam_coverage), ref_genome, fai_index, gen_dict)
 
     // Merge consensuses from different samples into single VCF of BCF
     if (params.output.type == 'single') {
-        consensus = params.output.format == 'vcf' ? 
-                    GENERATE_CONSENSUS.out.consensus_vcf.map { item -> item[1] }.collect() : 
-                    GENERATE_CONSENSUS.out.consensus_bcf.map { item -> item[1] }.collect()
+        consensus_ch = params.output.format == 'vcf' ?
+                       GENERATE_CONSENSUS.out.consensus_vcf :
+                       GENERATE_CONSENSUS.out.consensus_bcf
+        sample_rank = sample_run_ch
+                        .map { item -> item[0] }
+                        .collect()
+                        .flatMap { ids -> ids.withIndex().collect { id, i -> tuple(id, i) } }
+        consensus = consensus_ch
+                        .join(sample_rank)
+                        .toSortedList { item -> item[2] }
+                        .map { items -> items.collect { item -> item[1] } }
         MERGE_OUTPUTS(consensus)
     }
 }

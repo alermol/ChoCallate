@@ -31,7 +31,7 @@ process MERGE_OUTPUTS {
         | bcftools +fill-tags -Ou -- -t ${fill_tags} \
         | bcftools view ${output_format}
     else
-        ls -1 tmp/*.bcf > tmp/merge_list.txt
+        ls -1v tmp/*.bcf > tmp/merge_list.txt
         merge_bcf_tree.py --cpus ${task.cpus} --file-list tmp/merge_list.txt \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
         | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} \

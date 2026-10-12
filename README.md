@@ -79,7 +79,7 @@ nextflow run main.nf -params-file my_run.yaml
 
 ## Inputs
 
-- **Reads**: FASTQs (`input_format: "fastq"`) or a pre-aligned BAM (`input_format: "bam"`). If you provide a BAM, mapping is skipped.
+- **Reads**: FASTQs (`format: "fastq"`) or a pre-aligned BAM (`format: "bam"`). If you provide a BAM, mapping is skipped.
 - **Reference genome**: Plain or bgzipped FASTA file.
 - **Indexes of reference genome**: All indexes required by the selected mapper/callers.
 - **Tip**: Use **absolute paths** for inputs.
@@ -89,7 +89,7 @@ nextflow run main.nf -params-file my_run.yaml
 - **FASTQ + paired-end** (`reads_type: "pe"`): `sample_id<TAB>R1<TAB>R2`
 - **FASTQ + single-end** (`reads_type: "se"`): `sample_id<TAB>R1`
 - **FASTQ + mixed** (`reads_type: "mx"`): `sample_id<TAB>R1<TAB>R2<TAB>U` (Bowtie2 mapping only)
-- **BAM** (`input_format: "bam"`): `sample_id<TAB>bam_path`
+- **BAM** (`format: "bam"`): `sample_id<TAB>bam_path`
 
 
 
