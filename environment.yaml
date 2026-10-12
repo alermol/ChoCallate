@@ -18,3 +18,7 @@ dependencies:
   - parallel
   - pysam>=0.23.3
   - picard>=3.4.0
+  # build dependencies of the optional consensus accelerator
+  # (bin/build_consensus_accel.py)
+  - cython
+  - c-compiler

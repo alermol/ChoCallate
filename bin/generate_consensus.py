@@ -1,73 +1,206 @@
 #!/usr/bin/env python3
 
+"""Generate the consensus BCF of one sample from its caller BCFs.
+
+Every position of the (bgzipped, tabixed) coverage BED is written to the output,
+so the consensus contains all sites, monomorphic ones included.  At each
+position the callers vote with their genotype; the most frequent call wins if at
+least ``--consensus_threshold`` callers support it.  Positions without a caller
+record - and hom-reference calls - vote for the reference allele with the ALT
+``.`` placeholder.  FORMAT/AD and FORMAT/DP are recovered from the sample BAM:
+overlapping mate pairs count once (the observation with the highest base
+quality), and DP counts every covering read except reference skips, matching
+``samtools depth -J`` used for the coverage BED.
+
+Performance notes
+-----------------
+The output has one record per BED position, so the per-position cost decides the
+runtime:
+
+* Genotypes, pileups and records are only touched where they are needed.
+  Positions without a caller record (the vast majority) take a fast path that
+  writes the placeholder record directly, without building genotype tuples or a
+  ``Counter``.
+* FORMAT/AD support counts come from pysam's bulk pileup accessors
+  (``get_query_names``/``get_query_sequences``) and overlapping mate pairs are
+  only collapsed when a column actually repeats a query name.  If the optional
+  Cython extension ``consensus_accel`` is built (``bin/build_consensus_accel.py``)
+  the pileup is driven and tallied in C and the records are written through
+  htslib, which together is another ~5x faster.
+* BED intervals are grouped into spans (gaps up to ``SPAN_MAX_GAP`` bases) that
+  share one pileup iterator and one caller-record scan.  A BAM region query
+  costs ~2 ms because htslib decompresses a whole index bin, which dominates the
+  runtime on fragmented coverage BEDs.
+"""
+
 import argparse
-from collections import Counter, namedtuple
+from collections import namedtuple
 from contextlib import ExitStack
-from typing import NamedTuple
 
 import pysam
+
+try:
+    # Optional Cython helpers built by bin/build_consensus_accel.py.
+    from consensus_accel import BcfLineWriter, PileupTally
+except ImportError:  # pragma: no cover - the pure-pysam fallback is equivalent
+    BcfLineWriter = None
+    PileupTally = None
 
 PileupSite = namedtuple('PileupSite', ['snp', 'ins', 'dele', 'dp'])
 
 
-class Genotypes(NamedTuple):
-    index: int = 0
-    ref: str = ""
-    alt: tuple[str, ...] = ("",)
-    gt: tuple[int, ...] = (0, 0)
+# BED intervals separated by at most this many bases share a pileup iterator.
+# Bridging a gap costs roughly 0.2us per covered column (advanced in C when the
+# accelerator is built), a new region query ~1.6ms, so gaps of several kb are
+# much cheaper to walk through than to re-query.
+SPAN_MAX_GAP = 10000
+
+# Sentinel for "no caller record left in this span".
+_NO_RECORD = 1 << 60
+
+# Pre-encoded alleles for the monomorphic fast path (REF + ALT='.').
+_MONOMORPHIC_ALLELES = {base: (base + ',.').encode('ascii') for base in 'ACGTN'}
 
 
-def genotype_at_position(records, index, pos):
-    """
-    Get the genotype at a given position in a list of VCF records.
-
-    Args:
-        records: List of pysam.VariantRecord objects.
-        index: Integer index of the record to get the genotype from.
-        pos: Integer position to get the genotype from.
-
-    Returns:
-        A Genotypes named tuple containing the index, reference allele, alternate alleles, and numeric representation of the genotype. On a miss the index is the first record at or after pos, so the caller can resume the scan without rescanning from the start.
-    """
-    i = index
-    while i < len(records) and records[i].pos < pos:
-        i += 1
-    if (i < len(records)) and (records[i].pos == pos):
-        return Genotypes(index=i,
-                         ref=records[i].ref.upper(),
-                         alt=tuple(sorted(records[i].alts)),
-                         gt=tuple(sorted(records[i].samples[0]['GT'])))
-    return Genotypes(index=i)
-
-
-def get_consensus_genotype(genotypes, consensus_threshold):
-    """
-    Get the consensus genotype from a list of genotypes.
+def batched_intervals(bed_file, max_gap):
+    """Group BED intervals into spans that share one pileup iterator.
 
     Args:
-        genotypes: List of Genotypes named tuples. Each tuple contains the index, reference allele,
-        alternate alleles, and numeric representation of the genotype.
-        consensus_threshold: Integer threshold for the consensus genotype.
+        bed_file: pysam.TabixFile of the (bgzipped) coverage BED.
+        max_gap: Maximum gap between intervals of the same span.
+
+    Yields:
+        Tuples of (contig, [(start, end), ...]) where start/end are the 0-based
+        half-open BED coordinates.
+    """
+    contig = None
+    span = []
+    span_end = None
+    for line in bed_file.fetch():
+        chrom, start, end = line.split('\t')
+        start = int(start)
+        end = int(end)
+        if span and (chrom != contig or start - span_end > max_gap):
+            yield contig, span
+            span = []
+        span.append((start, end))
+        contig = chrom
+        span_end = end
+    if span:
+        yield contig, span
+
+
+def genotype_key(record, ref_base):
+    """Consensus voting key of one caller record.
+
+    Hom-reference calls (and records with a missing genotype) are mapped onto
+    the position's reference placeholder, exactly like positions without a
+    record, so they vote for the reference allele.
+
+    Args:
+        record: pysam.VariantRecord of the caller.
+        ref_base: Reference base at the position, upper case.
 
     Returns:
-        The consensus genotype (reference allele, alternate alleles, numeric representation of the genotype).
-        If the consensus genotype is not found, returns None.
+        (reference allele, alternate alleles, genotype) tuple.
     """
-    genotypes = [(i.ref, i.alt, i.gt) for i in genotypes]
-    counter = Counter(genotypes)
-    value, count = counter.most_common(1)[0]
-    if count < consensus_threshold:
+    gt = tuple(sorted(record.samples[0]['GT']))
+    if gt == (0, 0):
+        return (ref_base, ('.',), gt)
+    return (record.ref.upper(), tuple(sorted(record.alts)), gt)
+
+
+def consensus_genotype(keys, consensus_threshold):
+    """Most frequent caller genotype, or None if it is below the threshold.
+
+    Ties are broken towards the caller that comes first, like
+    ``collections.Counter.most_common(1)`` did.  ``keys`` are the voting keys in
+    caller order, one entry per caller, placeholders included.
+
+    Args:
+        keys: List of (ref, alt, gt) tuples.
+        consensus_threshold: Minimum number of matching calls.
+
+    Returns:
+        The winning (ref, alt, gt) tuple, or None.
+    """
+    counts = {}
+    for index, key in enumerate(keys):
+        entry = counts.get(key)
+        if entry is None:
+            counts[key] = [1, index]
+        else:
+            entry[0] += 1
+    best = None
+    best_count = 0
+    for key, entry in counts.items():
+        if entry[0] > best_count:
+            best = key
+            best_count = entry[0]
+    if best_count < consensus_threshold:
         return None
-    return value
+    return best
+
+
+def site_from_entries(names, seqs, quals, dp):
+    """Per-allele counters from materialised pileup column entries.
+
+    Overlapping PE mates are deduplicated for allele counts (one observation per
+    query name, keeping the highest base quality).
+
+    Args:
+        names: Query names at the column.
+        seqs: Bases with samtools-style indel annotations ('A+2TT', 'A-2',
+            '*', '>', '<').
+        quals: Base qualities (255 means missing).
+        dp: Depth of the column.
+
+    Returns:
+        PileupSite(snp Counter, insertion Counter, deletion-length Counter, depth).
+    """
+    best = {}
+    for i, name in enumerate(names):
+        seq = seqs[i]
+        if seq == '>' or seq == '<' or seq == '*':
+            # reference skip or deleted base: no allele at this position
+            continue
+        qual = quals[i]
+        if qual == 255:
+            # htslib's missing-quality sentinel; the original code used 0
+            qual = 0
+        prev = best.get(name)
+        if prev is None or qual > prev[0]:
+            best[name] = (qual, seq)
+    snp = {}
+    ins = {}
+    dele = {}
+    for _, allele in best.values():
+        if '+' in allele:
+            sequence_start = allele.index('+') + 1
+            length_end = sequence_start
+            while length_end < len(allele) and allele[length_end].isdigit():
+                length_end += 1
+            inserted = allele[length_end:].upper()
+            ins[inserted] = ins.get(inserted, 0) + 1
+        elif '-' in allele:
+            length_start = allele.index('-') + 1
+            length_end = length_start
+            while length_end < len(allele) and allele[length_end].isdigit():
+                length_end += 1
+            length = int(allele[length_start:length_end])
+            dele[length] = dele.get(length, 0) + 1
+        else:
+            base = allele.upper()
+            snp[base] = snp.get(base, 0) + 1
+    return PileupSite(snp=snp, ins=ins, dele=dele, dp=dp)
 
 
 def build_pileup_site(column):
-    """
-    Summarise a single pileup column into per-allele counters.
+    """Summarise a single pileup column into per-allele counters.
 
-    Overlapping PE mates are deduplicated for allele counts (one observation per
-    query name, keeping the highest base quality). DP counts every covering read
-    so it matches samtools depth used for the coverage BED.
+    DP counts every covering read so it matches samtools depth used for the
+    coverage BED.  The per-read data comes from pysam's bulk accessors, which
+    are much cheaper than iterating PileupRead/AlignedSegment objects.
 
     Args:
         column: pysam.PileupColumn.
@@ -75,43 +208,11 @@ def build_pileup_site(column):
     Returns:
         PileupSite(snp Counter, insertion Counter, deletion-length Counter, depth).
     """
-    best = {}
-    dp = 0
-    for read in column.pileups:
-        if read.is_refskip:
-            continue
-        dp += 1
-        aln = read.alignment
-        if read.is_del or read.query_position is None:
-            continue
-        bq = aln.query_qualities[read.query_position] if aln.query_qualities else 0
-        if read.indel > 0:
-            allele = (
-                'ins',
-                aln.query_sequence[
-                    read.query_position + 1 : read.query_position + 1 + read.indel
-                ].upper(),
-            )
-        elif read.indel < 0:
-            allele = ('del', -read.indel)
-        else:
-            allele = ('snp', aln.query_sequence[read.query_position].upper())
-        qname = aln.query_name
-        prev = best.get(qname)
-        if prev is None or bq > prev[0]:
-            best[qname] = (bq, allele)
-    snp = Counter()
-    ins = Counter()
-    dele = Counter()
-    for _, allele in best.values():
-        kind, value = allele
-        if kind == 'snp':
-            snp[value] += 1
-        elif kind == 'ins':
-            ins[value] += 1
-        else:
-            dele[value] += 1
-    return PileupSite(snp=snp, ins=ins, dele=dele, dp=dp)
+    names = column.get_query_names()
+    seqs = column.get_query_sequences(add_indels=True)
+    # reference skips are not part of DP
+    dp = len(seqs) - seqs.count('>') - seqs.count('<')
+    return site_from_entries(names, seqs, column.get_query_qualities(), dp)
 
 
 def count_allele_depth(site, ref, allele):
@@ -163,6 +264,128 @@ def recover_ad_dp(site, alleles):
     return ad, dp
 
 
+def reference_support(column, ref_base):
+    """Reference-base support and depth of a pileup column.
+
+    Equivalent to ``build_pileup_site`` followed by
+    ``count_allele_depth(site, ref_base, ref_base)``, but avoids building the
+    insertion/deletion counters and the allele tuples that the monomorphic fast
+    path never needs.
+
+    Args:
+        column: pysam.PileupColumn.
+        ref_base: Reference base at the position (upper case).
+
+    Returns:
+        (dp, number of collapsed reads supporting the reference base).
+    """
+    names = column.get_query_names()
+    if not names:
+        return 0, 0
+    seqs = column.get_query_sequences(add_indels=True)
+    # reference skips are not part of DP (see build_pileup_site)
+    dp = len(seqs) - seqs.count('>') - seqs.count('<')
+    if len(set(names)) == len(names):
+        # no overlapping mate pair at this column: nothing to collapse
+        return dp, seqs.count(ref_base) + seqs.count(ref_base.lower())
+    return dp, _collapsed_reference_support(names, seqs, column.get_query_qualities(), ref_base)
+
+
+def _collapsed_reference_support(names, seqs, quals, ref_base):
+    best = {}
+    for i, name in enumerate(names):
+        seq = seqs[i]
+        if seq == '>' or seq == '<' or seq == '*':
+            continue
+        qual = quals[i]
+        if qual == 255:
+            qual = 0
+        prev = best.get(name)
+        if prev is None or qual > prev[0]:
+            best[name] = (qual, seq)
+    ref_lower = ref_base.lower()
+    support = 0
+    for _, seq in best.values():
+        if seq == ref_base or seq == ref_lower:
+            support += 1
+    return support
+
+
+class ColumnWalker:
+    """Walk a pysam pileup column by column (no Cython accelerator)."""
+
+    __slots__ = ('pileup', 'column')
+
+    def __init__(self, pileup):
+        self.pileup = pileup
+        self.column = next(pileup, None)
+
+    def sync(self, vcf_start):
+        """Advance to vcf_start; True if a pileup column is there."""
+        column = self.column
+        pileup = self.pileup
+        while column is not None and column.reference_pos + 1 < vcf_start:
+            column = next(pileup, None)
+        self.column = column
+        return column is not None and column.reference_pos + 1 == vcf_start
+
+    def reference_support(self, ref_base):
+        # type: (str) -> tuple
+        return reference_support(self.column, ref_base)
+
+    def site(self):
+        return build_pileup_site(self.column)
+
+
+class AccelWalker:
+    """Walk a pileup through the Cython tally.
+
+    No PileupColumn object is created per reference position; columns without
+    coverage are skipped inside C.
+    """
+
+    __slots__ = ('tally',)
+
+    def __init__(self, tally):
+        self.tally = tally
+
+    def sync(self, vcf_start):
+        return self.tally.sync(vcf_start)
+
+    def reference_support(self, ref_base):
+        counts = self.tally.simple(ref_base)
+        if counts is None:
+            # pathologically deep column: the C scratch table is too small
+            names, seqs, quals, dp = self.tally.entries()
+            return dp, _collapsed_reference_support(names, seqs, quals, ref_base)
+        return counts
+
+    def site(self):
+        return site_from_entries(*self.tally.entries())
+
+
+def write_monomorphic_record(output_file, contig, start0, ref_base, ad_ref, dp):
+    """Write the placeholder record of a position without caller records."""
+    new_record = output_file.new_record(contig=contig, start=start0, stop=start0 + 1,
+                                        alleles=(ref_base, '.'), qual=None)
+    sample = new_record.samples[0]
+    sample['GT'] = (0, 0)
+    sample['AD'] = (ad_ref, 0)
+    sample['DP'] = dp
+    output_file.write(new_record)
+
+
+def write_consensus_record(output_file, contig, start0, stop0, alleles, gt, ad, dp):
+    """Write a consensus record from winning caller genotypes."""
+    new_record = output_file.new_record(contig=contig, start=start0, stop=stop0,
+                                        alleles=alleles, qual=None)
+    sample = new_record.samples[0]
+    sample['GT'] = gt
+    sample['AD'] = ad
+    sample['DP'] = dp
+    output_file.write(new_record)
+
+
 def generate_mininimal_header(sample_name,
                               reference_file,
                               consensus_threshold,
@@ -207,7 +430,6 @@ def generate_mininimal_header(sample_name,
     return header
 
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, nargs='+', help='Input BCF/VCF files')
@@ -222,78 +444,146 @@ def main():
     parser.add_argument('--remove_invariant', action='store_true')
     args = parser.parse_args()
 
-    with pysam.TabixFile(args.bed, index=args.bed + '.csi') as bed_file, \
-         pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai') as reference_file, \
-         pysam.AlignmentFile(args.bam, 'rb') as bam_file, \
-         pysam.VariantFile(args.output, mode='wb',
-                               header=generate_mininimal_header(args.sample_name,
-                                                                reference_file,
-                                                                args.consensus_threshold,
-                                                                args.split_multiallelic,
-                                                                args.remove_invariant,
-                                                                args.version)) as output_file, \
-         ExitStack[bool | None]() as stack:
-                variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi')) for bcf in args.input]
-                for line in bed_file.fetch():
-                    contig, start, end = line.split('\t')
-                    start0 = int(start)
-                    end0 = int(end)
-                    vcf_start = start0 + 1
-                    vcf_end = end0
+    threshold = args.consensus_threshold
+    use_accel = BcfLineWriter is not None
+
+    with ExitStack() as stack:
+        bed_file = stack.enter_context(pysam.TabixFile(args.bed, index=args.bed + '.csi'))
+        reference_file = stack.enter_context(pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai'))
+        bam_file = stack.enter_context(pysam.AlignmentFile(args.bam, 'rb'))
+        header = generate_mininimal_header(args.sample_name,
+                                           reference_file,
+                                           threshold,
+                                           args.split_multiallelic,
+                                           args.remove_invariant,
+                                           args.version)
+        contig_ids = {name: header.contigs[name].id for name in header.contigs}
+        variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
+                         for bcf in args.input]
+        n_files = len(variant_files)
+        # with at least `threshold` callers every position has a consensus (the
+        # placeholder wins where no caller has a record)
+        write_all_positions = threshold <= n_files
+        output_file = None
+        writer = None
+        if use_accel:
+            writer = BcfLineWriter(header, args.output)
+        else:
+            output_file = stack.enter_context(pysam.VariantFile(args.output, mode='wb', header=header))
+
+        try:
+            for contig, intervals in batched_intervals(bed_file, SPAN_MAX_GAP):
+                span_start = intervals[0][0]
+                span_end = intervals[-1][1]
+                rid = contig_ids[contig]
+                # Caller records are read once per span (not per BED interval)
+                # and walked with a per-file cursor; records between intervals
+                # are skipped when the cursor catches up with the next position.
+                records_per_file = [list(variant_file.fetch(contig, span_start, span_end))
+                                    for variant_file in variant_files]
+                indices = [0] * n_files
+                min_next = _NO_RECORD
+                for records in records_per_file:
+                    if records and records[0].pos < min_next:
+                        min_next = records[0].pos
+                pileup = bam_file.pileup(contig, span_start, span_end,
+                                         truncate=True, stepper='all',
+                                         min_base_quality=0, max_depth=1000000)
+                if use_accel:
+                    walker = AccelWalker(PileupTally(pileup))
+                else:
+                    walker = ColumnWalker(pileup)
+                sync = walker.sync
+                reference_support_of = walker.reference_support
+                site_of = walker.site
+
+                for start0, end0 in intervals:
                     ref_seq = reference_file.fetch(contig, start0, end0).upper()
-                    records_per_file = [list(vf.fetch(contig, start0, end0)) for vf in variant_files]
-                    indices = [0] * len(records_per_file)
-                    ref_seq_rel_pos = 0
-                    # Stream the pileup in step with the genotype walk instead of
-                    # materialising every covered position up front. AD/DP is built
-                    # only at the positions that are actually written.
-                    pileup = bam_file.pileup(
-                        contig,
-                        start0,
-                        end0,
-                        truncate=True,
-                        stepper='all',
-                        min_base_quality=0,
-                        max_depth=1000000,
-                    )
-                    column = next(pileup, None)
-                    while vcf_start < vcf_end:
-                        # advance the pileup to the current position
-                        while column is not None and column.reference_pos + 1 < vcf_start:
-                            column = next(pileup, None)
+                    rel = 0
+                    vcf_start = start0 + 1
+                    while vcf_start < end0:
+                        # keep the pileup in step with the walk
+                        has_column = sync(vcf_start)
 
-                        # collect genotypes at current position
-                        genotypes = []
-                        for fi in range(len(variant_files)):
-                            res = genotype_at_position(records_per_file[fi], indices[fi], vcf_start)
-                            indices[fi] = res.index
-                            genotypes.append(res)
-                        genotypes = [i if i.gt != (0, 0) else i._replace(ref=ref_seq[ref_seq_rel_pos].upper(), alt=('.',)) for i in genotypes]
+                        if min_next < vcf_start:
+                            # a multi-base consensus shift or the start of the
+                            # next interval moved past some caller records
+                            min_next = _NO_RECORD
+                            for fi in range(n_files):
+                                records = records_per_file[fi]
+                                i = indices[fi]
+                                n_records = len(records)
+                                while i < n_records and records[i].pos < vcf_start:
+                                    i += 1
+                                indices[fi] = i
+                                if i < n_records and records[i].pos < min_next:
+                                    min_next = records[i].pos
 
-                        # get consensus genotype at current position
-                        consensus_genotype = get_consensus_genotype(genotypes, args.consensus_threshold)
+                        if min_next != vcf_start:
+                            # fast path: no caller record here, every caller
+                            # votes for the placeholder reference allele
+                            if write_all_positions:
+                                ref_base = ref_seq[rel]
+                                if has_column:
+                                    dp, ad_ref = reference_support_of(ref_base)
+                                else:
+                                    dp = 0
+                                    ad_ref = 0
+                                if use_accel:
+                                    alleles = _MONOMORPHIC_ALLELES.get(ref_base)
+                                    if alleles is None:
+                                        alleles = (ref_base + ',.').encode('ascii')
+                                    writer.write_monomorphic(rid, vcf_start - 1,
+                                                             alleles, ad_ref, dp)
+                                else:
+                                    write_monomorphic_record(output_file, contig,
+                                                             vcf_start - 1, ref_base,
+                                                             ad_ref, dp)
+                            vcf_start += 1
+                            rel += 1
+                            continue
 
-                        shift = len(consensus_genotype[0]) if consensus_genotype is not None else 1
+                        # some caller has a record here: collect the votes
+                        ref_base = ref_seq[rel]
+                        keys = [(ref_base, ('.',), (0, 0))] * n_files
+                        for fi in range(n_files):
+                            records = records_per_file[fi]
+                            i = indices[fi]
+                            if i < len(records) and records[i].pos == vcf_start:
+                                keys[fi] = genotype_key(records[i], ref_base)
+                                indices[fi] = i + 1
+                        min_next = _NO_RECORD
+                        for fi in range(n_files):
+                            records = records_per_file[fi]
+                            i = indices[fi]
+                            if i < len(records) and records[i].pos < min_next:
+                                min_next = records[i].pos
 
-                        # write consensus genotype to output file
-                        if consensus_genotype is not None:
-                            alleles = [consensus_genotype[0]] + list(consensus_genotype[1])
-                            site = build_pileup_site(column) if (column is not None and column.reference_pos + 1 == vcf_start) else None
-                            ad, dp = recover_ad_dp(site, alleles)
-                            new_record = output_file.new_record(
-                                contig=contig,
-                                start=vcf_start - 1,
-                                stop=vcf_start,
-                                alleles=alleles,
-                                qual=None,
-                            )
-                            new_record.ref = consensus_genotype[0]
-                            new_record.samples[0]['GT'] = consensus_genotype[2]
-                            new_record.samples[0]['AD'] = ad
-                            new_record.samples[0]['DP'] = dp
-                            output_file.write(new_record)
-                        vcf_start += shift # shift on reference genotype length
-                        ref_seq_rel_pos += shift # shift on reference genotype length
+                        consensus = consensus_genotype(keys, threshold)
+                        if consensus is None:
+                            vcf_start += 1
+                            rel += 1
+                            continue
+
+                        alleles = [consensus[0]] + list(consensus[1])
+                        if has_column:
+                            site = site_of()
+                        else:
+                            site = None
+                        ad, dp = recover_ad_dp(site, alleles)
+                        if use_accel:
+                            writer.write_record(rid, vcf_start - 1, alleles,
+                                                consensus[2], ad, dp)
+                        else:
+                            write_consensus_record(output_file, contig, vcf_start - 1,
+                                                   vcf_start, alleles, consensus[2],
+                                                   ad, dp)
+                        shift = len(consensus[0])  # shift on reference genotype length
+                        vcf_start += shift
+                        rel += shift
+        finally:
+            if writer is not None:
+                writer.close()
 
 
 if __name__ == '__main__':

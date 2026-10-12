@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- `generate_consensus.py` is much faster: ~20x on a fragmented 2.1 Mbp coverage BED single-core (349s -> 16s CPU).
+  - Positions without a caller record (the vast majority) take a fast path that writes the monomorphic placeholder record directly, instead of running the per-position genotype bookkeeping and `Counter`.
+  - FORMAT/AD support counts come from pysam's bulk pileup accessors, and overlapping mate pairs are only collapsed when a column actually repeats a query name.
+  - BED intervals are grouped into spans that share one pileup iterator and one caller-record scan; a BAM region query costs ~2 ms (htslib decompresses a whole index bin) and coverage BEDs can contain tens of thousands of intervals.
+  - Optional Cython extension (`bin/build_consensus_accel.py`, built automatically in the Docker image): it drives the pileup, tallies AD/DP and writes records through htslib. Without it, an equivalent pure-pysam implementation is used.
+- The consensus records themselves are unchanged (all sites, monomorphic ones included, still written; byte-identical output on the test data).
+
 ## [3.2.3] - 2026-10-01
 
 ### Fixed

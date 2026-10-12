@@ -9,3 +9,6 @@ test_data/*.bt2
 test_data/chocallate_test_*
 .vscode/
 ChoCallate.code-workspace
+bin/consensus_accel.c
+bin/consensus_accel*.so
+bin/.build_accel/

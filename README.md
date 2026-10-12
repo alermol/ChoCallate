@@ -24,6 +24,14 @@ conda env create -y -f environment.yaml --no-default-packages
 conda activate ChoCallate
 ```
 
+Optionally build the Cython accelerator of `bin/generate_consensus.py` (the
+Docker image does this automatically; without it the consensus step falls back
+to an equivalent pure-pysam implementation):
+
+```bash
+python bin/build_consensus_accel.py
+```
+
 Optional verification and cleanup:
 
 ```bash
