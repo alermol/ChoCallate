@@ -87,6 +87,16 @@ def merge_chain(tmp_path, sample_files, reference, remove_invariant,
     """Run the MERGE_OUTPUTS command chain and return the merged BCF path."""
     list_file = tmp_path / 'merge_list.txt'
     list_file.write_text('\n'.join(str(path) for path in sample_files.values()) + '\n')
+    # Mirror MERGE_OUTPUTS: bcftools merge drops generic meta lines, so carry
+    # the first sample's ##ChoCallate line over to the merged header.
+    first_sample = next(iter(sample_files.values()))
+    first_header = subprocess.run(
+        [BCFTOOLS, 'view', '-h', str(first_sample)], check=True,
+        capture_output=True, text=True).stdout
+    meta_file = tmp_path / 'cho_meta.hdr'
+    meta_file.write_text(''.join(
+        line + '\n' for line in first_header.splitlines()
+        if line.startswith('##ChoCallate=')))
     if remove_invariant:
         expression = 'ALT="." || ALT="<*>" || COUNT(GT="RR")=N_SAMPLES'
         invariant_filter = f'{BCFTOOLS} filter -e \'{expression}\' -Ou'
@@ -102,6 +112,7 @@ def merge_chain(tmp_path, sample_files, reference, remove_invariant,
         f" | {sys.executable} {BIN_DIR / 'drop_refonly_duplicates.py'}"
         f" | {invariant_filter} {join_multiallelic}"
         f" | {BCFTOOLS} +fill-tags -Ou -- -t {FILL_TAGS}"
+        f" | {BCFTOOLS} annotate -h {meta_file} -Ou"
         f" | {BCFTOOLS} sort -Ob -o {output}"
     )
     subprocess.run(['bash', '-c', chain], check=True, cwd=str(REPO_ROOT))
@@ -162,6 +173,16 @@ def test_remove_invariant_drops_monomorphic_sites(tmp_path, use_accel):
     assert [pos for pos, _, _, _ in records] == [VARIANT_POS]
     assert records[0][1] == (ref_base(VARIANT_POS), alt_base(VARIANT_POS))
     assert records[0][2:] == ((0, 1), (0, 0))
+
+
+def test_merged_output_has_metadata_line(tmp_path, use_accel):
+    """The merged consensus keeps the ##ChoCallate metadata line."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel)
+    merged = merge_chain(tmp_path, sample_files, reference, remove_invariant=False)
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    assert '##ChoCallate=' in header
+    assert 'Rule=two-stage' in header
 
 
 def test_drop_refonly_duplicates_keeps_monomorphic_positions(tmp_path):

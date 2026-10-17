@@ -21,6 +21,7 @@ process MERGE_OUTPUTS {
     script:
     def sample_id_list = sample_ids.split(',').collect { id -> id.trim() }
     def merge_paths = sample_id_list.collect { id -> "tmp/bcfs/${id}.bcf" }.join(' ')
+    def first_bcf = "tmp/bcfs/${sample_id_list[0]}.bcf"
     // Per-sample consensus files contain a gVCF-style reference record
     // (ALT="<*>") at every covered position.  `bcftools merge --gvcf` expands
     // those records at variant positions of other samples and maps their
@@ -35,6 +36,10 @@ process MERGE_OUTPUTS {
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
     n_bcf=\$(ls -1 tmp/bcfs/*.bcf | wc -l)
+
+    # bcftools merge drops generic meta lines, so keep the voting-rule line
+    # from the first sample and re-attach it to the merged header.
+    bcftools view -h ${first_bcf} | grep '^##ChoCallate=' > tmp/cho_meta.hdr
 
     if [ "\$n_bcf" -gt 1 ]; then
         parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/bcfs/*.bcf
@@ -51,6 +56,7 @@ process MERGE_OUTPUTS {
         | drop_refonly_duplicates.py \
         | ${invariant_filter} ${split_multiallelic} \
         | bcftools +fill-tags -Ou -- -t ${fill_tags} \
+        | bcftools annotate -h tmp/cho_meta.hdr -Ou \
         | bcftools sort ${output_format}
     fi
     """
