@@ -9,17 +9,23 @@ process MERGE_OUTPUTS {
 
     input:
     path('tmp/?.bcf', arity: '1..*')
+    path("tmp/ref_genome.fasta")
+    path("tmp/ref_genome.fasta.fai")
 
     output:
     path("consensus.bcf"), optional: true
     path("consensus.vcf.gz"), optional: true
 
     script:
-    // Monomorphic records must survive the merge when `remove_invariant` is not
-    // set: per-sample consensus files contain all sites (see the all-sites
-    // invariant) and filtering ALT="." here dropped exactly those sites.
-    // A pass-through `bcftools view -Ou` keeps the pipeline shape identical.
-    def invariant_filter = params.output.remove_invariant ? "bcftools filter --threads ${task.cpus} -e 'ALT~\"\\.\" || COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : "bcftools view --threads ${task.cpus} -Ou"
+    // Per-sample consensus files contain a gVCF-style reference record
+    // (ALT="<*>") at every covered position.  `bcftools merge --gvcf` expands
+    // those records at variant positions of other samples and maps their
+    // "other allele" AD onto the real ALT, so hom-reference samples report
+    // honest ALT depth instead of a fabricated 0.  Monomorphic records must
+    // survive when `remove_invariant` is not set; when it is set, the explicit
+    // ALT clauses remove them (the all-hom-ref clause alone is not enough when
+    // some samples have no coverage and are ./. after the merge).
+    def invariant_filter = params.output.remove_invariant ? "bcftools filter --threads ${task.cpus} -e 'ALT=\".\" || ALT=\"<*>\" || COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : "bcftools view --threads ${task.cpus} -Ou"
     def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
     def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
@@ -36,11 +42,10 @@ process MERGE_OUTPUTS {
         | bcftools view ${output_format}
     else
         ls -1v tmp/*.bcf > tmp/merge_list.txt
-        merge_bcf_tree.py --cpus ${task.cpus} --file-list tmp/merge_list.txt \
+        merge_bcf_tree.py --gvcf tmp/ref_genome.fasta --cpus ${task.cpus} --file-list tmp/merge_list.txt \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
         | drop_refonly_duplicates.py \
         | ${invariant_filter} ${split_multiallelic} \
-        | fill_missing_ad.py \
         | bcftools +fill-tags -Ou -- -t ${fill_tags} \
         | bcftools sort ${output_format}
     fi

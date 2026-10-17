@@ -17,6 +17,8 @@ dependencies:
   - bedtools>=2.31.1
   - parallel
   - pysam>=0.23.3
+  # test suite (tests/python, run with `pytest -q tests/python`)
+  - pytest>=8
   - picard>=3.4.0
   # build dependencies of the optional consensus accelerator
   # (bin/build_consensus_accel.py)

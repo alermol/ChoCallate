@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Drop ALT="." records that duplicate a real variant at the same position.
+"""Drop reference-only records that duplicate a real variant at the same position.
 
-Per-sample consensus files contain a hom-reference record (ALT=".") at every
-covered position.  When `bcftools merge` finds a real variant at the same
-position in another sample, it keeps the ALT="." placeholder as a literal
-allele (e.g. alleles ``C,T,.``), and the following ``bcftools norm -m -any``
+Per-sample consensus files contain a gVCF-style reference record (ALT="<*>",
+GT 0/0) at every covered position.  When `bcftools merge --gvcf` finds a real
+variant at the same position in another sample, it keeps the `<*>` allele in
+the merged ALT list (e.g. ``C,T,<*>``); the following ``bcftools norm -m -any``
 splits that into two records at the same position: the variant, and a redundant
-ALT="." record carrying the hom-reference calls.
+reference-only record carrying the hom-reference calls.
 
 This filter reads a position-sorted BCF stream (merged and split by ``norm
 -m -any``) on stdin and writes it on stdout, keeping the variant records of an
-affected position and dropping its ALT="." duplicate.  ALT="." records at
-positions without any real allele are monomorphic sites and are kept: the
-consensus output contains all sites, monomorphic ones included.
+affected position and dropping its reference-only duplicate.  Reference-only
+records at positions without any real allele are monomorphic sites and are
+kept: the consensus output contains all sites, monomorphic ones included.
 
 Used by ``MERGE_OUTPUTS`` between ``bcftools norm -m -any`` and the invariant
 filter.  Records are buffered one position at a time, so the memory use is
@@ -21,10 +21,16 @@ constant.
 
 import pysam
 
+# ALT alleles that carry no sequence: the plain "." placeholder and the gVCF
+# "any other allele" symbol.
+_REFERENCE_ONLY_ALTS = ('.', '<*>')
+
 
 def is_ref_only(record):
-    """True for a record without alternate alleles (ALT is ``.``)."""
-    return record.alts is None or tuple(record.alts) == ('.',)
+    """True for a record without a real alternate allele."""
+    if record.alts is None:
+        return True
+    return all(alt in _REFERENCE_ONLY_ALTS for alt in record.alts)
 
 
 def keep_records(records):

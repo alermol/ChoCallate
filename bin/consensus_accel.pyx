@@ -40,6 +40,7 @@ from pysam.libchtslib cimport (
     bcf_update_alleles_str,
     bcf_update_format_int32,
     bcf_update_genotypes,
+    bcf_update_info_int32,
     bcf_write,
     hts_close,
     hts_open,
@@ -206,12 +207,14 @@ cdef class PileupTally:
         return names, seqs, quals, dp
 
     def simple(self, str ref_base):
-        """Return ``(dp, n_ref)`` for the current column, or None if the
+        """Return ``(dp, n_ref, n_obs)`` for the current column, or None if the
         column is too deep for the scratch table (caller falls back to Python).
 
         ``dp`` counts every covering read except reference skips (matching
         ``samtools depth -J``).  ``n_ref`` counts reads whose collapsed allele
-        is the plain reference base.
+        is the plain reference base.  ``n_obs`` counts distinct query names with
+        an allele at the column (base, insertion or deletion); ``n_obs - n_ref``
+        is the ``<*>`` (other-allele) depth.
         """
         cdef int n = self.it.n_plp
         cdef const bam_pileup1_t *start = self.it.plp
@@ -221,7 +224,7 @@ cdef class PileupTally:
         cdef uint64_t h
         cdef size_t slot, mask
         cdef char *qname
-        cdef int l_qname, qpos, i, dp = 0, n_ref = 0, is_match
+        cdef int l_qname, qpos, i, dp = 0, n_ref = 0, n_obs = 0, is_match
         cdef char base
 
         if n > (MAX_TABLE_SLOTS >> 1):
@@ -244,12 +247,16 @@ cdef class PileupTally:
             dp += 1
             qpos = p.qpos
             if p.is_del or qpos < 0:
-                continue
-            base = seq_nt16_str[bam_seqi(bam_get_seq(p.b), qpos)]
-            is_match = 1 if (p.indel == 0 and base == ref_char) else 0
-            qual = (<uint8_t *>bam_get_qual(p.b))[qpos]
-            if qual == MISSING_QUAL:
+                # a deletion at this position is an observation that does not
+                # support the reference base
+                is_match = 0
                 qual = 0
+            else:
+                base = seq_nt16_str[bam_seqi(bam_get_seq(p.b), qpos)]
+                is_match = 1 if (p.indel == 0 and base == ref_char) else 0
+                qual = (<uint8_t *>bam_get_qual(p.b))[qpos]
+                if qual == MISSING_QUAL:
+                    qual = 0
             qname = bam_get_qname(p.b)
             l_qname = p.b.core.l_qname
             h = _hash_qname(qname, l_qname - 1)
@@ -272,7 +279,8 @@ cdef class PileupTally:
                 self.best_q[slot] = qual
                 self.is_ref[slot] = is_match
                 n_ref += is_match
-        return (dp, n_ref)
+                n_obs += 1
+        return (dp, n_ref, n_obs)
 
 
 cdef class BcfLineWriter:
@@ -315,14 +323,20 @@ cdef class BcfLineWriter:
 
     cdef int _write(self, int rid, int pos0, const char *alleles,
                     const int32_t *gt, int n_gt, const int32_t *ad,
-                    int n_ad, int dp) except -1:
+                    int n_ad, int dp, int end_pos=-1) except -1:
         cdef int32_t dp_value = dp
+        cdef int32_t end_value
         cdef bcf1_t *rec = self.rec
         bcf_clear1(rec)
         rec.rid = rid
         rec.pos = pos0
         if bcf_update_alleles_str(self.hdr, rec, alleles) < 0:
             raise MemoryError("could not set alleles")
+        if end_pos >= 0:
+            # symbolic alleles carry INFO/END (1-based, inclusive)
+            end_value = end_pos
+            if bcf_update_info_int32(self.hdr, rec, b"END", &end_value, 1) < 0:
+                raise MemoryError("could not set END")
         if n_gt > 0 and bcf_update_genotypes(self.hdr, rec, gt, n_gt) < 0:
             raise MemoryError("could not set GT")
         if n_ad > 0 and bcf_update_format_int32(self.hdr, rec, b"AD", ad,
@@ -335,16 +349,20 @@ cdef class BcfLineWriter:
         return 0
 
     def write_monomorphic(self, int rid, int pos0, bytes alleles,
-                          int ad_ref, int dp):
-        """Write a hom-reference record ``alleles`` (precomputed, e.g. b'A,.'),
-        GT 0/0, AD (ad_ref, 0) and DP."""
+                          int ad_ref, int ad_other, int dp):
+        """Write a gVCF-style reference record ``alleles`` (precomputed, e.g.
+        b'A,<*>'), GT 0/0, AD (ad_ref, ad_other) and DP.
+
+        ``ad_other`` is the depth of reads that do not support the reference
+        base (the ``<*>`` slot).
+        """
         cdef int32_t ad[2]
         self.gt_buf[0] = 2  # bcf_gt_unphased(0)
         self.gt_buf[1] = 2
         ad[0] = ad_ref
-        ad[1] = 0
+        ad[1] = ad_other
         return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
-                           ad, 2, dp)
+                           ad, 2, dp, pos0 + 1)
 
     def write_record(self, int rid, int pos0, object alleles, object gt,
                      object ad, int dp):

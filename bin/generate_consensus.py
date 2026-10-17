@@ -6,13 +6,18 @@ Every position of the (bgzipped, tabixed) coverage BED is written to the output,
 so the consensus contains all sites, monomorphic ones included.  At each
 position the callers vote with their genotype; the most frequent call wins if at
 least ``--consensus_threshold`` callers support it.  Positions without a caller
-record - and hom-reference calls of any ploidy - vote for the reference allele
-with the ALT ``.`` placeholder.  Records with a missing genotype (``./.``,
-``0/.``) are not evidence of anything and abstain from the vote.  FORMAT/AD and
-FORMAT/DP are recovered from the sample BAM: overlapping mate pairs count once
-(the observation with the highest base quality), and DP counts every covering
-read except reference skips, matching ``samtools depth -J`` used for the
-coverage BED.
+record - and hom-reference calls of any ploidy - vote for the reference allele.
+Positions without a consensus variant are written as gVCF-style records with
+the symbolic ALT ``<*>``: the reference allele plus "any other allele", whose
+FORMAT/AD slot carries the depth of reads that do not support the reference
+base.  ``bcftools merge --gvcf`` maps that slot onto the real ALT allele of
+another sample's variant, so merged hom-reference samples report their actual
+non-reference depth instead of a fabricated 0.  Records with a missing genotype
+(``./.``, ``0/.``) are not evidence of anything and abstain from the vote.
+FORMAT/AD and FORMAT/DP are recovered from the sample BAM: overlapping mate
+pairs count once (the observation with the highest base quality), and DP counts
+every covering read except reference skips, matching ``samtools depth -J`` used
+for the coverage BED.
 
 Performance notes
 -----------------
@@ -69,8 +74,8 @@ SPAN_MAX_GAP = 10000
 # Sentinel for "no caller record left in this span".
 _NO_RECORD = 1 << 60
 
-# Pre-encoded alleles for the monomorphic fast path (REF + ALT='.').
-_MONOMORPHIC_ALLELES = {base: (base + ',.').encode('ascii') for base in 'ACGTN'}
+# Pre-encoded alleles for the monomorphic fast path (REF + ALT='<*>').
+_MONOMORPHIC_ALLELES = {base: (base + ',<*>').encode('ascii') for base in 'ACGTN'}
 
 
 def batched_intervals(bed_file, max_gap):
@@ -249,9 +254,8 @@ def count_allele_depth(site, ref, allele):
     """
     if site is None:
         return 0
-    # ALT=. is not a real allele; keep a 0 placeholder so Number=R matches pysam's
-    # alleles=[REF, '.'] representation. Merge drops this slot and fill_missing_ad.py
-    # writes 0 for the real ALT(s) afterward.
+    # ALT="." is not a real allele.  Hom-reference consensus is written as a
+    # gVCF-style <*> record, so this is only a defensive fallback.
     if allele == '.':
         return 0
     if allele == ref:
@@ -285,7 +289,7 @@ def recover_ad_dp(site, alleles):
 
 
 def reference_support(column, ref_base):
-    """Reference-base support and depth of a pileup column.
+    """Reference-base support, observation count and depth of a pileup column.
 
     Equivalent to ``build_pileup_site`` followed by
     ``count_allele_depth(site, ref_base, ref_base)``, but avoids building the
@@ -297,25 +301,43 @@ def reference_support(column, ref_base):
         ref_base: Reference base at the position (upper case).
 
     Returns:
-        (dp, number of collapsed reads supporting the reference base).
+        (dp, number of collapsed reads supporting the reference base, number of
+        collapsed observations that have an allele at this position).  The last
+        value feeds the ``<*>`` AD slot; reference skips are not observations.
     """
     names = column.get_query_names()
     if not names:
-        return 0, 0
+        return 0, 0, 0
     seqs = column.get_query_sequences(add_indels=True)
     # reference skips are not part of DP (see build_pileup_site)
     dp = len(seqs) - seqs.count('>') - seqs.count('<')
     if len(set(names)) == len(names):
-        # no overlapping mate pair at this column: nothing to collapse
-        return dp, seqs.count(ref_base) + seqs.count(ref_base.lower())
-    return dp, _collapsed_reference_support(names, seqs, column.get_query_qualities(), ref_base)
+        # no overlapping mate pair at this column: nothing to collapse; every
+        # read that is not a reference skip is one observation
+        return dp, seqs.count(ref_base) + seqs.count(ref_base.lower()), dp
+    support, observations = _collapsed_support(
+        names, seqs, column.get_query_qualities(), ref_base)
+    return dp, support, observations
 
 
-def _collapsed_reference_support(names, seqs, quals, ref_base):
+def _collapsed_support(names, seqs, quals, ref_base):
+    """Collapse overlapping mates and count reference/other observations.
+
+    Args:
+        names: Query names at the column.
+        seqs: Bases with samtools-style indel annotations.
+        quals: Base qualities (255 means missing).
+        ref_base: Reference base at the position (upper case).
+
+    Returns:
+        (number of reads supporting the reference base, number of collapsed
+        observations).  Reads with a base, an insertion or a deletion at the
+        position are one observation each; reference skips are ignored.
+    """
     best = {}
     for i, name in enumerate(names):
         seq = seqs[i]
-        if seq == '>' or seq == '<' or seq == '*':
+        if seq == '>' or seq == '<':
             continue
         qual = quals[i]
         if qual == 255:
@@ -328,7 +350,7 @@ def _collapsed_reference_support(names, seqs, quals, ref_base):
     for _, seq in best.values():
         if seq == ref_base or seq == ref_lower:
             support += 1
-    return support
+    return support, len(best)
 
 
 class ColumnWalker:
@@ -377,20 +399,27 @@ class AccelWalker:
         if counts is None:
             # pathologically deep column: the C scratch table is too small
             names, seqs, quals, dp = self.tally.entries()
-            return dp, _collapsed_reference_support(names, seqs, quals, ref_base)
+            support, observations = _collapsed_support(names, seqs, quals, ref_base)
+            return dp, support, observations
         return counts
 
     def site(self):
         return site_from_entries(*self.tally.entries())
 
 
-def write_monomorphic_record(output_file, contig, start0, ref_base, ad_ref, dp):
-    """Write the placeholder record of a position without caller records."""
+def write_monomorphic_record(output_file, contig, start0, ref_base, ad_ref, ad_other, dp):
+    """Write the gVCF-style reference record of a position without a call.
+
+    The record carries the symbolic ALT ``<*>``; the second AD slot holds the
+    depth of reads that do not support the reference base, so that
+    ``bcftools merge --gvcf`` reports honest ALT depth for merged samples that
+    are hom-reference.
+    """
     new_record = output_file.new_record(contig=contig, start=start0, stop=start0 + 1,
-                                        alleles=(ref_base, '.'), qual=None)
+                                        alleles=(ref_base, '<*>'), qual=None)
     sample = new_record.samples[0]
     sample['GT'] = (0, 0)
-    sample['AD'] = (ad_ref, 0)
+    sample['AD'] = (ad_ref, ad_other)
     sample['DP'] = dp
     output_file.write(new_record)
 
@@ -429,6 +458,8 @@ def generate_mininimal_header(sample_name,
     header = pysam.VariantHeader()
     header.add_sample(sample_name)
     header.add_line(f'##tool=ChoCallate {version}')
+    header.add_line('##ALT=<ID=*,Description="Represents allele(s) other than observed.">')
+    header.add_line('##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">')
     header.add_line(f'##consensusThreshold={consensus_threshold}')
     header.add_line(f'##multialleleSplit={split_multiallelic}')
     header.add_line(f'##noMonomorphic={remove_invariant}')
@@ -547,20 +578,22 @@ def main():
                             if write_all_positions:
                                 ref_base = ref_seq[rel]
                                 if has_column:
-                                    dp, ad_ref = reference_support_of(ref_base)
+                                    dp, ad_ref, observations = reference_support_of(ref_base)
+                                    ad_other = observations - ad_ref
                                 else:
                                     dp = 0
                                     ad_ref = 0
+                                    ad_other = 0
                                 if use_accel:
                                     alleles = _MONOMORPHIC_ALLELES.get(ref_base)
                                     if alleles is None:
-                                        alleles = (ref_base + ',.').encode('ascii')
+                                        alleles = (ref_base + ',<*>').encode('ascii')
                                     writer.write_monomorphic(rid, vcf_start - 1,
-                                                             alleles, ad_ref, dp)
+                                                             alleles, ad_ref, ad_other, dp)
                                 else:
                                     write_monomorphic_record(output_file, contig,
                                                              vcf_start - 1, ref_base,
-                                                             ad_ref, dp)
+                                                             ad_ref, ad_other, dp)
                             vcf_start += 1
                             rel += 1
                             continue
@@ -583,6 +616,31 @@ def main():
 
                         consensus = consensus_genotype(keys, threshold)
                         if consensus is None:
+                            vcf_start += 1
+                            rel += 1
+                            continue
+
+                        if consensus[1] == ('.',) and all(
+                                allele == 0 for allele in consensus[2]):
+                            # hom-reference consensus: write the same gVCF-style
+                            # record as the fast path, with honest <*> depth
+                            if has_column:
+                                dp, ad_ref, observations = reference_support_of(ref_base)
+                                ad_other = observations - ad_ref
+                            else:
+                                dp = 0
+                                ad_ref = 0
+                                ad_other = 0
+                            if use_accel:
+                                alleles = _MONOMORPHIC_ALLELES.get(ref_base)
+                                if alleles is None:
+                                    alleles = (ref_base + ',<*>').encode('ascii')
+                                writer.write_monomorphic(rid, vcf_start - 1,
+                                                         alleles, ad_ref, ad_other, dp)
+                            else:
+                                write_monomorphic_record(output_file, contig,
+                                                         vcf_start - 1, ref_base,
+                                                         ad_ref, ad_other, dp)
                             vcf_start += 1
                             rel += 1
                             continue

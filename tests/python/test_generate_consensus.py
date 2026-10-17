@@ -42,6 +42,15 @@ def read_records(path):
                  tuple(record.samples[0]['GT'])) for record in variant_file]
 
 
+def read_records_full(path):
+    """(pos, alleles, GT, AD, DP) tuples of a BCF written by the tests."""
+    import pysam
+    with pysam.VariantFile(str(path), index_filename=None) as variant_file:
+        return [(record.pos, (record.ref,) + tuple(record.alts),
+                 tuple(record.samples[0]['GT']), tuple(record.samples[0]['AD']),
+                 record.samples[0]['DP']) for record in variant_file]
+
+
 def test_interval_ends_are_written(consensus_runner):
     """C-01: every base of every BED interval, last base included."""
     # chr1 9 10 is a single base (1-based 10); chr1 19 25 covers 20..25.
@@ -73,7 +82,7 @@ def test_all_sites_written_once(consensus_runner):
     records = read_records(output)
     assert [pos for pos, _, _ in records] == list(range(1, 11)) + list(range(13, 21))
     for pos, alleles, gt in records:
-        assert alleles == (ref_base(pos), '.')
+        assert alleles == (ref_base(pos), '<*>')
         assert gt == (0, 0)
 
 
@@ -138,8 +147,8 @@ def test_haploid_hom_ref_is_reference(consensus_runner):
         threshold=1,
     )
     assert read_records(output) == [
-        (30, (ref_base(30), '.'), (0, 0)),
-        (31, (ref_base(31), '.'), (0, 0)),
+        (30, (ref_base(30), '<*>'), (0, 0)),
+        (31, (ref_base(31), '<*>'), (0, 0)),
     ]
 
 
@@ -152,7 +161,7 @@ def test_haploid_alt_is_written(consensus_runner):
     )
     assert read_records(output) == [
         (30, (ref_base(30), alt_base(30)), (1,)),
-        (31, (ref_base(31), '.'), (0, 0)),
+        (31, (ref_base(31), '<*>'), (0, 0)),
     ]
 
 
@@ -163,7 +172,31 @@ def test_consensus_below_threshold_leaves_placeholder(consensus_runner):
         caller_records=[[(POS_20_0B, REF_SEQ[POS_20_0B], [], (0, 0))], []],
         threshold=2,
     )
-    assert read_records(output) == [(20, (ref_base(20), '.'), (0, 0))]
+    assert read_records(output) == [(20, (ref_base(20), '<*>'), (0, 0))]
+
+
+def test_monomorphic_record_carries_other_allele_depth(tmp_path, use_accel):
+    """C-07 option 1: the <*> AD slot holds non-reference read depth."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    ref = ref_base(30)
+    alt = alt_base(30)
+    reads = [(f'ref{start}', start, REF_SEQ[start:start + 10])
+             for start in range(19, 30)]
+    for i in range(2):
+        seq = list(REF_SEQ[POS_30_0B:POS_30_0B + 10])
+        seq[0] = alt
+        reads.append((f'alt{i}', POS_30_0B, ''.join(seq)))
+    reads.sort(key=lambda item: item[1])
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller_bcfs = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', []),
+                   write_caller_bcf(tmp_path / 'c1.bcf', 'sample1', [])]
+
+    output = run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
+                           use_accel=use_accel, reference=reference)
+    # 10 reads support the reference base, 2 support the ALT base; the <*> AD
+    # slot must report the non-reference depth instead of a fabricated 0.
+    assert read_records_full(output) == [(30, (ref, '<*>'), (0, 0), (10, 2), 12)]
 
 
 def test_concordant_callers_are_merged(consensus_runner):

@@ -113,7 +113,7 @@ workflow {
                         .join(sample_rank)
                         .toSortedList { item -> item[2] }
                         .map { items -> items.collect { item -> item[1] } }
-        MERGE_OUTPUTS(consensus)
+        MERGE_OUTPUTS(consensus, ref_genome, fai_index)
     }
 }
 

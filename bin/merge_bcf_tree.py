@@ -11,8 +11,9 @@ import tempfile
 
 
 class BcfChunkMerge:
-    def __init__(self, cpus, pipe_dir=None):
+    def __init__(self, cpus, gvcf, pipe_dir=None):
         self.cpus = cpus
+        self.gvcf = gvcf
         self.pipe_dir = pipe_dir or os.environ.get("TMPDIR", "/tmp")
         self.pipes = []
         self.processes = []
@@ -62,15 +63,18 @@ class BcfChunkMerge:
             return f"bcftools view -Ou {shlex.quote(files[0])} > {out}"
         inputs = " ".join(shlex.quote(path) for path in files)
         return (
-            "bcftools merge -Ou -m all --force-samples --force-single --threads 1 "
+            "bcftools merge -Ou -m all --force-samples --force-single "
+            f"--gvcf {shlex.quote(self.gvcf)} --threads 1 "
             f"{inputs} > {out}"
         )
 
     def _final_cmd(self, pipes):
         inputs = " ".join(shlex.quote(pipe) for pipe in pipes)
+        # --force-single: with --cpus 1 there is a single chunk pipe, and
+        # `bcftools merge` refuses a single input without the flag.
         return (
             f"bcftools merge --no-index -Ou -m all --force-samples --force-single "
-            f"--threads {self.cpus} {inputs}"
+            f"--gvcf {shlex.quote(self.gvcf)} --threads {self.cpus} {inputs}"
         )
 
     def _wait_all(self):
@@ -108,6 +112,11 @@ def parse_args():
         help="Input BCF paths, one per line",
     )
     parser.add_argument(
+        "--gvcf",
+        required=True,
+        help="Reference FASTA (with .fai) for `bcftools merge --gvcf`",
+    )
+    parser.add_argument(
         "--cpus",
         type=int,
         required=True,
@@ -131,7 +140,7 @@ def main():
         print("--cpus must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    merger = BcfChunkMerge(cpus=args.cpus)
+    merger = BcfChunkMerge(cpus=args.cpus, gvcf=args.gvcf)
 
     def _cleanup_handler(signum=None, frame=None):
         merger.cleanup()
