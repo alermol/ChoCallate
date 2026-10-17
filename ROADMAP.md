@@ -7,7 +7,7 @@ This document outlines the future direction of our project. It's a living docume
 - [x] Docker image
 - [ ] Singularity image
 
-## Ployploid calling
+## Polyploid calling
 
 - [ ] Integration of [Octopus](https://github.com/luntergroup/octopus) into the pipeline
 

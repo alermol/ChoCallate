@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Merge per-sample BCF files through named pipes.
+
+The merge runs in two levels: each group of inputs is merged into a FIFO by
+one ``bcftools merge --gvcf`` process, and a final merge combines the FIFOs.
+This bounds the memory footprint and writes no intermediate file to disk.
+"""
 
 import argparse
 import atexit

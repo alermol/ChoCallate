@@ -444,9 +444,8 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
         header = str(variant_file.header)
         records = list(variant_file)
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
-                'Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,'
-                'SplitMultiallelic=False,ReferenceBlocks=False,'
-                'CallersFailed="freebayes">')
+                'Rule=two-stage,Tie=nocall,AbsentVote=ref,'
+                'ReferenceBlocks=False,CallersFailed="freebayes">')
     assert expected in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
@@ -736,7 +735,6 @@ def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
         header = str(variant_file.header)
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
                 'Rule=two-stage,Tie=qual,AbsentVote=abstain,MinCoverage=3,'
-                'RemoveInvariant=False,SplitMultiallelic=False,'
                 'ReferenceBlocks=False,CallersFailed="freebayes">')
     assert expected in header
 

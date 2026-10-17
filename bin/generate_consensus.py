@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """Generate the consensus BCF of one sample from its caller BCFs.
 
 Every position of the (bgzipped, tabixed) coverage BED is written to the output,
@@ -45,8 +44,8 @@ runtime:
 
 * Genotypes, pileups and records are only touched where they are needed.
   Positions without a caller record (the vast majority) take a fast path that
-  writes the placeholder record directly, without building genotype tuples or a
-  ``Counter``.
+  writes the reference record directly, without building genotype tuples or
+  the per-allele dictionaries.
 * FORMAT/AD support counts come from pysam's bulk pileup accessors
   (``get_query_names``/``get_query_sequences``) and overlapping mate pairs are
   only collapsed when a column actually repeats a query name.  If the optional
@@ -356,7 +355,7 @@ def site_from_entries(names, seqs, quals, dp):
         dp: Depth of the column.
 
     Returns:
-        PileupSite(snp Counter, insertion Counter, deletion-length Counter, depth).
+        PileupSite(snp dict, insertion dict, deletion-length dict, depth).
     """
     best = {}
     for i, name in enumerate(names):
@@ -406,7 +405,7 @@ def build_pileup_site(column):
         column: pysam.PileupColumn.
 
     Returns:
-        PileupSite(snp Counter, insertion Counter, deletion-length Counter, depth).
+        PileupSite(snp dict, insertion dict, deletion-length dict, depth).
     """
     names = column.get_query_names()
     seqs = column.get_query_sequences(add_indels=True)
@@ -655,19 +654,17 @@ def _header_value(value):
             .replace('\n', ' '))
 
 
-def generate_mininimal_header(sample_name,
-                              reference_file,
-                              consensus_threshold,
-                              split_multiallelic,
-                              remove_invariant,
-                              version,
-                              callers,
-                              callers_failed,
-                              tie_policy,
-                              absent_vote,
-                              min_coverage,
-                              command_line=None,
-                              compress_reference_blocks=False):
+def generate_minimal_header(sample_name,
+                            reference_file,
+                            consensus_threshold,
+                            version,
+                            callers,
+                            callers_failed,
+                            tie_policy,
+                            absent_vote,
+                            min_coverage,
+                            command_line=None,
+                            compress_reference_blocks=False):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -675,8 +672,6 @@ def generate_mininimal_header(sample_name,
         sample_name: String sample name.
         reference_file: pysam.FastaFile object.
         consensus_threshold: Integer threshold for the site-level vote.
-        split_multiallelic: Whether multiallelic sites were split.
-        remove_invariant: Whether monomorphic sites were removed.
         version: String version of the ChoCallate pipeline.
         callers: Callers that voted for this sample, in voting order.
         callers_failed: Configured callers without a usable record set.
@@ -699,8 +694,6 @@ def generate_mininimal_header(sample_name,
             f'AbsentVote={absent_vote}']
     if absent_vote == 'abstain':
         meta.append(f'MinCoverage={min_coverage}')
-    meta.append(f'RemoveInvariant={remove_invariant}')
-    meta.append(f'SplitMultiallelic={split_multiallelic}')
     meta.append(f'ReferenceBlocks={compress_reference_blocks}')
     if callers_failed:
         meta.append(f'CallersFailed="{",".join(callers_failed)}"')
@@ -787,8 +780,6 @@ def main():
                              'reference when --absent_vote is abstain')
     parser.add_argument('--command_line_file', default=None,
                         help='File containing the pipeline command line')
-    parser.add_argument('--split_multiallelic', action='store_true')
-    parser.add_argument('--remove_invariant', action='store_true')
     parser.add_argument('--compress_reference_blocks', '--reference_blocks',
                         action='store_true',
                         dest='compress_reference_blocks',
@@ -823,19 +814,17 @@ def main():
         bed_file = stack.enter_context(pysam.TabixFile(args.bed, index=args.bed + '.csi'))
         reference_file = stack.enter_context(pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai'))
         bam_file = stack.enter_context(pysam.AlignmentFile(args.bam, 'rb'))
-        header = generate_mininimal_header(args.sample_name,
-                                           reference_file,
-                                           threshold,
-                                           args.split_multiallelic,
-                                           args.remove_invariant,
-                                           args.version,
-                                           received,
-                                           failed,
-                                           tie_policy,
-                                           absent_vote,
-                                           min_coverage,
-                                           command_line,
-                                           compress_blocks)
+        header = generate_minimal_header(args.sample_name,
+                                         reference_file,
+                                         threshold,
+                                         args.version,
+                                         received,
+                                         failed,
+                                         tie_policy,
+                                         absent_vote,
+                                         min_coverage,
+                                         command_line,
+                                         compress_blocks)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]

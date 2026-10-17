@@ -45,8 +45,6 @@ process GENERATE_CONSENSUS {
     def input_args = received.collect { caller -> "--input ${caller}=tmp/callers/${caller}.bcf" }.join(' ')
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
     def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
-    def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
-    def remove_invariant = params.output.remove_invariant ? "--remove_invariant" : ""
     def compress_blocks = params.output.compress_reference_blocks
         ? "--compress_reference_blocks"
         : ""
@@ -83,7 +81,7 @@ CHO_CMD_EOF
         --min_coverage "${min_coverage}" \
         --version "${workflow.manifest.version}" \
         --command_line_file tmp/command_line.txt \
-        ${split_multiallelic} ${remove_invariant} ${compress_blocks}' \
+        ${compress_blocks}' \
         ::: tmp/bed_chunks/*.bed
 
     # The interval chunks are consumed in BED order; ls -v preserves that order

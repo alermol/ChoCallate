@@ -1,6 +1,6 @@
 # ChoCallate 🍫
 
-![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate) ![Static Badge](https://img.shields.io/badge/Changelog-orange) ![GitHub License](https://img.shields.io/github/license/alermol/chocallate) ![Static Badge](https://img.shields.io/badge/Wiki-red?link=https%3A%2F%2Fgithub.com%2Falermol%2FChoCallate%2Fwiki)
+[![GitHub Release](https://img.shields.io/github/v/release/alermol/ChoCallate)](https://github.com/alermol/ChoCallate/releases) [![Changelog](https://img.shields.io/badge/Changelog-orange)](CHANGELOG.md) [![GitHub License](https://img.shields.io/github/license/alermol/chocallate)](LICENSE) [![Wiki](https://img.shields.io/badge/Wiki-red)](https://github.com/alermol/ChoCallate/wiki)
 
 **ChoCallate** (**Cho**rus of **Call**ers) - a **Nextflow** pipeline for **consensus-based variant calling**. 
 
@@ -180,7 +180,7 @@ Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (defau
 
 Mapping and BAM input share `bin/postprocess_bam.sh`: reads are coordinate-sorted, MAPQ-filtered after mate fixing and duplicate marking (`bam_filter.min_map_qual`, default 10), optionally deduplicated with `samtools markdup`, and indexed once. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
 
-Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,SplitMultiallelic=False,ReferenceBlocks=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`. The same header also records `##ChoCallateCommand="<full nextflow command>"`; the multi-sample merge re-attaches all `##ChoCallate` lines.
+Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,ReferenceBlocks=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`. The same header also records `##ChoCallateCommand="<full nextflow command>"`; the multi-sample merge re-attaches all `##ChoCallate` lines.
 
 Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller is retried up to `resources.max_retries` times and a failure then terminates the run. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers.
 

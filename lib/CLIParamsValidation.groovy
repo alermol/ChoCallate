@@ -1,3 +1,6 @@
+/*
+ * Configuration and samplesheet validation used by the pipeline entry point.
+ */
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -u
 
 # The exit status of the task script is passed by the afterScript directive.
