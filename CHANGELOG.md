@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `generate_consensus.py` no longer drops the last base of every coverage BED
+  interval (the loop stopped one position short, so 1-bp intervals produced no
+  output at all and variants called at an interval end were lost).  **The
+  consensus output changes**: interval ends are now evaluated, so the output is
+  no longer byte-identical to earlier versions.
+- `generate_consensus.py` no longer crashes with `TypeError` on a caller record
+  with a missing genotype (`./.`, `0/.`).  Such records abstain from the vote
+  instead of being counted; a haploid hom-reference call (`0`) is now a
+  reference vote instead of being keyed as a variant.
+- The optional Cython accelerator no longer spins forever when a BED position
+  lies past the last pileup column of its span (`bam_mplp_auto` returns 0 when
+  the pileup is exhausted, not a negative value).  The pure-pysam path was not
+  affected.
+- `PREPARE_BAM` declares the BAM it actually writes (`mapping.bam`), so
+  `input.format: "bam"` no longer fails with "Missing output file(s)".  Read
+  groups are now normalised with `samtools addreplacerg` (`ID`/`SM` set to the
+  samplesheet sample id), which GATK requires and which keeps
+  `bcftools reheader -s` consistent.
+- `MERGE_OUTPUTS` with `output.remove_invariant: false` now keeps monomorphic
+  sites in the merged file, as documented (before, the merged branch dropped
+  every `ALT="."` record).  `bcftools merge` keeps the per-sample `ALT="."`
+  placeholder as a literal allele when another sample has a variant at the same
+  position; the new `bin/drop_refonly_duplicates.py` removes that redundant
+  duplicate record so each position still appears once.
+- `merge_bcf_tree.py` no longer fails with "Expected two or more files to merge"
+  when it runs with a single chunk (`--cpus 1`).
+- `test_run/run_test.sh` and `test_run/run_test_2.sh`: `NXF_OFFLINE` spelling so
+  the offline setting actually takes effect.
+
+### Added
+
+- `tests/python/` (pytest): end-to-end tests for `bin/generate_consensus.py`
+  (both the pure-pysam and the Cython path, with a `CHOCALLATE_NO_ACCEL=1`
+  switch to force the fallback) and for the `MERGE_OUTPUTS` command chain.
+
 ### Changed
 
 - `generate_consensus.py` is much faster: ~20x on a fragmented 2.1 Mbp coverage BED single-core (349s -> 16s CPU).

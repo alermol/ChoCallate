@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-export NFX_OFFLINE='true'
+export NXF_OFFLINE='true'
 
 echo -e "sample1\t$(readlink -f test_reads_R1.fq.gz)\t$(readlink -f test_reads_R2.fq.gz)" > samples.tsv
 

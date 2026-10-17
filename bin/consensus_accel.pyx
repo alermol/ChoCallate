@@ -139,10 +139,14 @@ cdef class PileupTally:
         while True:
             if self.started and self.it.pos + 1 >= pos1:
                 break
+            # bam_mplp_auto returns 1 while columns are available, 0 once the
+            # region is exhausted and < 0 on error.
             p = self.it.cnext()
-            if p < 0:
+            if p == 0:
                 self.done = True
                 return False
+            if p < 0:
+                raise OSError("error while reading the pileup")
             self.started = True
         return self.it.pos + 1 == pos1
 

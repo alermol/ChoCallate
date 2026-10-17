@@ -6,11 +6,13 @@ Every position of the (bgzipped, tabixed) coverage BED is written to the output,
 so the consensus contains all sites, monomorphic ones included.  At each
 position the callers vote with their genotype; the most frequent call wins if at
 least ``--consensus_threshold`` callers support it.  Positions without a caller
-record - and hom-reference calls - vote for the reference allele with the ALT
-``.`` placeholder.  FORMAT/AD and FORMAT/DP are recovered from the sample BAM:
-overlapping mate pairs count once (the observation with the highest base
-quality), and DP counts every covering read except reference skips, matching
-``samtools depth -J`` used for the coverage BED.
+record - and hom-reference calls of any ploidy - vote for the reference allele
+with the ALT ``.`` placeholder.  Records with a missing genotype (``./.``,
+``0/.``) are not evidence of anything and abstain from the vote.  FORMAT/AD and
+FORMAT/DP are recovered from the sample BAM: overlapping mate pairs count once
+(the observation with the highest base quality), and DP counts every covering
+read except reference skips, matching ``samtools depth -J`` used for the
+coverage BED.
 
 Performance notes
 -----------------
@@ -31,20 +33,29 @@ runtime:
   share one pileup iterator and one caller-record scan.  A BAM region query
   costs ~2 ms because htslib decompresses a whole index bin, which dominates the
   runtime on fragmented coverage BEDs.
+
+Set ``CHOCALLATE_NO_ACCEL=1`` in the environment to force the pure-pysam path
+even when the Cython extension is importable (used by the test suite to check
+that both implementations agree).
 """
 
 import argparse
+import os
 from collections import namedtuple
 from contextlib import ExitStack
 
 import pysam
 
-try:
-    # Optional Cython helpers built by bin/build_consensus_accel.py.
-    from consensus_accel import BcfLineWriter, PileupTally
-except ImportError:  # pragma: no cover - the pure-pysam fallback is equivalent
+if os.environ.get('CHOCALLATE_NO_ACCEL'):
     BcfLineWriter = None
     PileupTally = None
+else:
+    try:
+        # Optional Cython helpers built by bin/build_consensus_accel.py.
+        from consensus_accel import BcfLineWriter, PileupTally
+    except ImportError:  # pragma: no cover - the pure-pysam fallback is equivalent
+        BcfLineWriter = None
+        PileupTally = None
 
 PileupSite = namedtuple('PileupSite', ['snp', 'ins', 'dele', 'dp'])
 
@@ -93,20 +104,26 @@ def batched_intervals(bed_file, max_gap):
 def genotype_key(record, ref_base):
     """Consensus voting key of one caller record.
 
-    Hom-reference calls (and records with a missing genotype) are mapped onto
-    the position's reference placeholder, exactly like positions without a
-    record, so they vote for the reference allele.
+    Hom-reference calls (any ploidy) are mapped onto the position's reference
+    placeholder, exactly like positions without a record, so they vote for the
+    reference allele.  Records with a missing genotype (``./.``, ``0/.``) are
+    not evidence of anything: they abstain from the vote.
 
     Args:
         record: pysam.VariantRecord of the caller.
         ref_base: Reference base at the position, upper case.
 
     Returns:
-        (reference allele, alternate alleles, genotype) tuple.
+        (reference allele, alternate alleles, genotype) tuple, or ``None`` when
+        the record has no genotyped call and abstains.
     """
-    gt = tuple(sorted(record.samples[0]['GT']))
-    if gt == (0, 0):
-        return (ref_base, ('.',), gt)
+    gt = record.samples[0].get('GT')
+    if gt is None or any(allele is None for allele in gt):
+        return None
+    gt = tuple(sorted(gt))
+    if all(allele == 0 for allele in gt):
+        # any ploidy: (0,), (0, 0), ... all vote on the reference placeholder
+        return (ref_base, ('.',), (0, 0))
     return (record.ref.upper(), tuple(sorted(record.alts)), gt)
 
 
@@ -115,10 +132,11 @@ def consensus_genotype(keys, consensus_threshold):
 
     Ties are broken towards the caller that comes first, like
     ``collections.Counter.most_common(1)`` did.  ``keys`` are the voting keys in
-    caller order, one entry per caller, placeholders included.
+    caller order, one entry per caller, placeholders included; ``None`` entries
+    are callers that abstained and cast no vote.
 
     Args:
-        keys: List of (ref, alt, gt) tuples.
+        keys: List of (ref, alt, gt) tuples and ``None`` for abstentions.
         consensus_threshold: Minimum number of matching calls.
 
     Returns:
@@ -126,6 +144,8 @@ def consensus_genotype(keys, consensus_threshold):
     """
     counts = {}
     for index, key in enumerate(keys):
+        if key is None:
+            continue
         entry = counts.get(key)
         if entry is None:
             counts[key] = [1, index]
@@ -500,8 +520,10 @@ def main():
                 for start0, end0 in intervals:
                     ref_seq = reference_file.fetch(contig, start0, end0).upper()
                     rel = 0
+                    # BED 0-based half-open [start0, end0) covers 1-based positions
+                    # start0+1 .. end0, so the walk stops after end0.
                     vcf_start = start0 + 1
-                    while vcf_start < end0:
+                    while vcf_start <= end0:
                         # keep the pileup in step with the walk
                         has_column = sync(vcf_start)
 

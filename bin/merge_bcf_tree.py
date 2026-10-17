@@ -69,8 +69,8 @@ class BcfChunkMerge:
     def _final_cmd(self, pipes):
         inputs = " ".join(shlex.quote(pipe) for pipe in pipes)
         return (
-            f"bcftools merge --no-index -Ou -m all --force-samples --threads {self.cpus} "
-            f"{inputs}"
+            f"bcftools merge --no-index -Ou -m all --force-samples --force-single "
+            f"--threads {self.cpus} {inputs}"
         )
 
     def _wait_all(self):

@@ -116,6 +116,8 @@ Consensus outputs depend on `output.type` and `output.format`:
 
 Consensus VCF/BCF records include `FORMAT/GT`, `AD`, and `DP` (AD/DP from BAM), plus site-level `INFO` tags (`AN`, `AC`, `AF`, `NS`, total `DP`, etc.). Details: [Output Structure](https://github.com/alermol/ChoCallate/wiki/Output-Structure).
 
+Consensus rule: every position of the coverage BED is written, monomorphic sites included. At each position the callers vote with their genotype (`REF`/`ALT`/`GT`), and the most frequent call wins when at least `consensus.threshold` callers support it. Positions without a caller record and hom-reference calls (any ploidy) vote for the reference allele with the `ALT="."` placeholder; caller records with a missing genotype (`./.`, `0/.`) abstain. `output.remove_invariant: true` drops the monomorphic records from the final output (per-sample files when `output.type: "sample"`, the merged file otherwise); with the default `false` all covered positions are kept.
+
 When `output.type` is `"single"` and `N samples ≥ 2`, single consensus BCF is merged using chunked merge through named pipes. No intermediate BCF files are written to disk. Details: [Merge Strategies and Testing](https://github.com/alermol/ChoCallate/wiki/Merge-Strategies-and-Testing).
 
 ## Additional documentation
