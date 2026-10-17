@@ -10,7 +10,6 @@ per evaluated BED base.
 import subprocess
 
 import pytest
-
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
     ACCEL_AVAILABLE,
     BCFTOOLS,
@@ -521,10 +520,9 @@ def test_accel_and_pure_paths_agree_beyond_scratch_table(tmp_path):
     if not ACCEL_AVAILABLE:
         pytest.skip('consensus_accel is not built for this interpreter')
 
-    import pysam
-
     import consensus_accel
     import generate_consensus
+    import pysam
 
     dataset = write_edge_dataset(tmp_path)
     reference = EDGE_REF_SEQ.upper()

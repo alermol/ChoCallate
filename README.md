@@ -63,6 +63,13 @@ validation; it needs Nextflow and the pipeline plugins (they are skipped when
 running `generate_consensus.py` directly to force the pure-pysam
 implementation.
 
+The nf-test suite runs the pipeline end to end on the bundled `test_run` data
+and checks the all-sites consensus output:
+
+```bash
+nf-test test
+```
+
 
 
 ## Docker

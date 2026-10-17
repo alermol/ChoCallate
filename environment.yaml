@@ -19,6 +19,9 @@ dependencies:
   - pysam>=0.24.0
   # test suite (tests/python, run with `pytest -q tests/python`)
   - pytest>=9.1.1
+  - nf-test>=0.9.5
+  - ruff>=0.17.1
+  - actionlint>=1.7.12
   - picard>=3.5.0
   # build dependencies of the optional consensus accelerator
   # (bin/build_consensus_accel.py)

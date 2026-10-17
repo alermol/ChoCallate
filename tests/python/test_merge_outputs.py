@@ -18,7 +18,6 @@ import subprocess
 import sys
 
 import pysam
-
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
     BCFTOOLS,
     BIN_DIR,
@@ -32,7 +31,6 @@ from conftest import (  # noqa: I100,I202  (tests run from this directory)
     write_caller_bcf,
     write_reference,
 )
-
 
 # 1-based position and 0-based start of the variant carried by sampleA
 VARIANT_POS = 30

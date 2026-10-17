@@ -1,0 +1,95 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -el {0}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up ChoCallate environment
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-file: environment.yaml
+          environment-name: ChoCallate
+          cache-environment: true
+          cache-downloads: true
+          init-shell: bash
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Nextflow lint
+        run: nextflow lint .
+
+      - name: Actionlint
+        run: actionlint
+
+  pytest:
+    name: pytest (accelerator=${{ matrix.accelerator }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        accelerator: [false, true]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up ChoCallate environment
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-file: environment.yaml
+          environment-name: ChoCallate
+          cache-environment: true
+          cache-downloads: true
+          init-shell: bash
+
+      - name: Build consensus accelerator
+        if: matrix.accelerator
+        run: python bin/build_consensus_accel.py
+
+      - name: Verify accelerator import
+        if: matrix.accelerator
+        run: >-
+          python -c "import sys; sys.path.insert(0, 'bin');
+          import consensus_accel"
+
+      - name: Run pytest
+        run: pytest -q tests/python
+
+  nf-test:
+    name: nf-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up ChoCallate environment
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-file: environment.yaml
+          environment-name: ChoCallate
+          cache-environment: true
+          cache-downloads: true
+          init-shell: bash
+
+      - name: Run nf-test
+        run: nf-test test --ci

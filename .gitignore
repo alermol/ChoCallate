@@ -30,3 +30,6 @@ test_run/test_config*
 test_run/run_test_2.sh
 test_run/include.bed
 .pytest_cache
+.nf-test/
+.nf-test.log
+.ruff_cache/

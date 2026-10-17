@@ -11,7 +11,6 @@ import subprocess
 
 import pysam
 import pytest
-
 from conftest import BIN_DIR  # noqa: I100,I202  (tests run from this directory)
 
 SAMTOOLS = shutil.which('samtools')
