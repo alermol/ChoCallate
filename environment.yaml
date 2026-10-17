@@ -26,4 +26,5 @@ dependencies:
   # build dependencies of the optional consensus accelerator
   # (bin/build_consensus_accel.py)
   - cython>=3.3.0
+  - setuptools>=84.0.0
   - c-compiler>=2.0.0

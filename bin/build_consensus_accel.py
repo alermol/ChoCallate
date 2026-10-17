@@ -24,7 +24,10 @@ def main():
     except ImportError:
         sys.exit("Cython is required to build the consensus accelerator")
 
-    from setuptools import Distribution, Extension
+    try:
+        from setuptools import Distribution, Extension
+    except ImportError:
+        sys.exit("setuptools is required to build the consensus accelerator")
 
     ext = Extension(
         "consensus_accel",

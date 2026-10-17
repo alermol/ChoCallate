@@ -41,13 +41,13 @@ jobs:
         run: actionlint
 
   pytest:
-    name: pytest (accelerator=${{ matrix.accelerator }})
+    name: pytest (${{ matrix.accelerator }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        accelerator: [false, true]
+        accelerator: [pure, accel]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -62,11 +62,11 @@ jobs:
           init-shell: bash
 
       - name: Build consensus accelerator
-        if: matrix.accelerator
+        if: matrix.accelerator == 'accel'
         run: python bin/build_consensus_accel.py
 
       - name: Verify accelerator import
-        if: matrix.accelerator
+        if: matrix.accelerator == 'accel'
         run: >-
           python -c "import sys; sys.path.insert(0, 'bin');
           import consensus_accel"
