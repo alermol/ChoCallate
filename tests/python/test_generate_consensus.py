@@ -285,6 +285,35 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
         (30, (ref_base(30), alt_base(30)), (0, 1))]
 
 
+def test_command_and_caller_version_header_lines(tmp_path, use_accel):
+    """The command line and caller versions are recorded in the header."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+        write_caller_bcf(tmp_path / 'gatk.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+    ]
+    output = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
+        callers=['bcftools', 'gatk'], use_accel=use_accel,
+        reference=reference,
+        command_line='nextflow run main.nf -params-file run.yaml',
+        caller_versions='bcftools=1.24,gatk=4.6.2.0')
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    assert ('##ChoCallateCommand="nextflow run main.nf '
+            '-params-file run.yaml"' in header)
+    assert ('##ChoCallateCallerVersions="bcftools=1.24,gatk=4.6.2.0"'
+            in header)
+
+
 def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
     """Degraded mode refuses a threshold no surviving caller can reach."""
     reference = write_reference(tmp_path / 'ref.fa')

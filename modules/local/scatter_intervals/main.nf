@@ -12,7 +12,8 @@ process SCATTER_INTERVALS {
     path("tmp/ref_genome.dict")
 
     output:
-    tuple val(sample_id), path("chunks/*.bed", arity: '1..*'), emit: chunks
+    tuple val(sample_id), path("chunks/*.bed", arity: '1..*'),
+        emit: chunks
 
     script:
     def scatter_count = Math.max(params.calling.cpu ?: 1, params.consensus.cpu ?: 1)

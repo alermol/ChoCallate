@@ -73,7 +73,10 @@ def build_two_samples(tmp_path, use_accel):
     for sample, calls in (('sampleA', variant_calls), ('sampleB', reference_calls)):
         sample_files[sample] = run_consensus(
             tmp_path, bam, bed_gz, calls, threshold=2, sample_name=sample,
-            use_accel=use_accel, output_name=f'{sample}.bcf', reference=reference)
+            use_accel=use_accel, output_name=f'{sample}.bcf',
+            reference=reference,
+            command_line='nextflow run main.nf -params-file run.yaml',
+            caller_versions='bcftools=1.24,freebayes=1.3.10')
         subprocess.run([BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
                        check=True)
     return sample_files, reference
@@ -170,6 +173,8 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
         header = str(variant_file.header)
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
+    assert '##ChoCallateCommand="nextflow run main.nf' in header
+    assert '##ChoCallateCallerVersions="bcftools=1.24' in header
 
 
 def test_merged_vcf_output_is_readable(tmp_path, use_accel):

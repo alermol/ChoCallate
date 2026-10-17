@@ -151,7 +151,8 @@ else
         "$bcftools" index -f --csi "$bcf"
     done
 
-    "$bcftools" view -h "$first" | grep '^##ChoCallate=' > "$tmpdir/cho_meta.hdr" || true
+    "$bcftools" view -h "$first" \
+        | grep '^##ChoCallate' > "$tmpdir/cho_meta.hdr" || true
 
     "$python" "$script_dir/merge_bcf_tree.py" \
         --gvcf "$reference" \

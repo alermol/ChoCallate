@@ -44,12 +44,21 @@ process GENERATE_CONSENSUS {
     """
     mkdir -p tmp/vcf_chunks/
 
-    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/callers/*.bcf
+    # Provenance is computed once per sample, not once per interval chunk.
+    write_versions.sh --format flat tmp/caller_versions.txt \
+        ${received.join(' ')}
+    cat > tmp/command_line.txt <<'CHO_CMD_EOF'
+${workflow.commandLine ?: 'unknown'}
+CHO_CMD_EOF
+
+    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' \
+        ::: tmp/callers/*.bcf
 
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --absent_vote "${absent_vote}" --tie_policy "${tie_policy}" --min_coverage "${min_coverage}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}' ::: tmp/bed_chunks/*.bed
+    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --absent_vote "${absent_vote}" --tie_policy "${tie_policy}" --min_coverage "${min_coverage}" --version "${workflow.manifest.version}" --caller_versions_file tmp/caller_versions.txt --command_line_file tmp/command_line.txt ${split_multiallelic} ${remove_invariant}' \
+        ::: tmp/bed_chunks/*.bed
 
     # The interval chunks are consumed in BED order; ls -v preserves that order
     # through concat, so no full sort is needed afterwards.

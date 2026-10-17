@@ -13,7 +13,8 @@ process MAPPING_BWA {
     path("tmp/ref_genome.fasta.fai")
 
     output:
-    tuple val(sample_id), path("mapping.bam"), path("mapping.bam.csi"), emit: bam
+    tuple val(sample_id), path("mapping.bam"),
+        path("mapping.bam.csi"), emit: bam
 
     script:
     def rmdup = params.rmdup.enabled ? '--rmdup' : ''

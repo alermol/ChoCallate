@@ -561,6 +561,15 @@ def write_consensus_record(output_file, contig, start0, stop0, alleles, gt, ad, 
     output_file.write(new_record)
 
 
+def _header_value(value):
+    """Escape a value for a quoted VCF meta line."""
+    return (str(value).replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('\t', ' ')
+            .replace('\r', ' ')
+            .replace('\n', ' '))
+
+
 def generate_mininimal_header(sample_name,
                               reference_file,
                               consensus_threshold,
@@ -571,7 +580,9 @@ def generate_mininimal_header(sample_name,
                               callers_failed,
                               tie_policy,
                               absent_vote,
-                              min_coverage):
+                              min_coverage,
+                              command_line=None,
+                              caller_versions=None):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -587,6 +598,8 @@ def generate_mininimal_header(sample_name,
         tie_policy: Tie policy applied by the voting model.
         absent_vote: Policy for callers without a record at a position.
         min_coverage: Coverage threshold used by ``absent_vote=abstain``.
+        command_line: Full pipeline command line, when known.
+        caller_versions: Comma-separated caller ``tool=version`` pairs.
 
     Returns:
         A pysam.VariantHeader object.
@@ -606,6 +619,14 @@ def generate_mininimal_header(sample_name,
     if callers_failed:
         meta.append(f'CallersFailed="{",".join(callers_failed)}"')
     header.add_line('##ChoCallate=<' + ','.join(meta) + '>')
+    if command_line:
+        header.add_line(
+            '##ChoCallateCommand="{}"'.format(
+                _header_value(command_line)))
+    if caller_versions:
+        header.add_line(
+            '##ChoCallateCallerVersions="{}"'.format(
+                _header_value(caller_versions)))
     header.add_line('##ALT=<ID=*,Description="Represents allele(s) other than observed.">')
     header.add_line('##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">')
     for ref in reference_file.references:
@@ -682,6 +703,12 @@ def main():
     parser.add_argument('--min_coverage', type=int, default=0,
                         help='Coverage required for an absent caller to vote '
                              'reference when --absent_vote is abstain')
+    parser.add_argument('--command_line_file', default=None,
+                        help='File containing the pipeline command line')
+    parser.add_argument('--caller_versions', default=None,
+                        help='Caller provenance as tool=version pairs')
+    parser.add_argument('--caller_versions_file', default=None,
+                        help='File with tool=version lines')
     parser.add_argument('--split_multiallelic', action='store_true')
     parser.add_argument('--remove_invariant', action='store_true')
     args = parser.parse_args()
@@ -690,6 +717,15 @@ def main():
     absent_vote = args.absent_vote
     tie_policy = args.tie_policy
     min_coverage = args.min_coverage
+    caller_versions = args.caller_versions
+    if args.caller_versions_file:
+        with open(args.caller_versions_file, encoding='utf-8') as handle:
+            caller_versions = ','.join(
+                line.strip() for line in handle if line.strip())
+    command_line = None
+    if args.command_line_file:
+        with open(args.command_line_file, encoding='utf-8') as handle:
+            command_line = handle.read().strip()
     use_accel = BcfLineWriter is not None
     received, failed, input_paths = resolve_inputs(args.input, args.callers)
     if not received:
@@ -718,7 +754,9 @@ def main():
                                            failed,
                                            tie_policy,
                                            absent_vote,
-                                           min_coverage)
+                                           min_coverage,
+                                           command_line,
+                                           caller_versions)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]

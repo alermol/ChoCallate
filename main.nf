@@ -14,6 +14,7 @@ include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
+include { VERSIONS } from './modules/local/versions'
 include { validateParameters; paramsHelp } from 'plugin/nf-schema'
 
 workflow {
@@ -77,6 +78,18 @@ workflow {
         )
     }
 
+    // All tasks share one environment, so one probe records the versions of
+    // every tool used by this run.
+    def version_tools = [
+        'samtools', 'gatk', 'bcftools', 'bedops', 'mosdepth',
+        'parallel', 'bgzip', 'tabix', 'python', 'pysam'
+    ]
+    if (params.input.format != 'bam') {
+        version_tools << params.mapping.mapper
+    }
+    version_tools.addAll(selected_callers)
+    VERSIONS(version_tools)
+
     // Create the sample channel.  Absent read slots stage the empty NO_FILE
     // instead of /dev/null so every input is a real, portable file.
     def no_file = file("${projectDir}/assets/NO_FILE", checkIfExists: true)
@@ -108,22 +121,22 @@ workflow {
                               fai_index)
     } else if (params.mapping.mapper == 'bwa' &&
                params.input.format != 'bam') {
-        bam_file = MAPPING_BWA(sample_run_ch, 
-                          file(params.input.reference_genome), 
-                          ref_genome, 
-                          gen_dict, 
-                          fai_index)  
+        bam_file = MAPPING_BWA(sample_run_ch,
+                          file(params.input.reference_genome),
+                          ref_genome,
+                          gen_dict,
+                          fai_index)
     } else if (params.mapping.mapper == 'minimap2' &&
                params.input.format != 'bam') {
-        bam_file = MAPPING_MINIMAP2(sample_run_ch, 
-                               file(params.input.reference_genome), 
-                               ref_genome, 
-                               gen_dict, 
+        bam_file = MAPPING_MINIMAP2(sample_run_ch,
+                               file(params.input.reference_genome),
+                               ref_genome,
+                               gen_dict,
                                fai_index)
     } else if (params.input.format == 'bam') {
         bam_file = PREPARE_BAM(sample_run_ch,
-                          ref_genome, 
-                          gen_dict, 
+                          ref_genome,
+                          gen_dict,
                           fai_index)
     } else {
         error("Unknown input format or mapper")
@@ -140,7 +153,9 @@ workflow {
 
     // Scatter the covered intervals once per sample. Every caller and the
     // consensus step consume the same chunk list instead of rebuilding it.
-    intervals = SCATTER_INTERVALS(bed_coverage, ref_genome, fai_index, gen_dict)
+    intervals = SCATTER_INTERVALS(
+        bed_coverage, ref_genome, fai_index, gen_dict
+    )
 
     // Join each sample's BAM, BAM index and interval chunks by sample_id. This
     // keeps all per-sample inputs coupled and avoids positional mixing.

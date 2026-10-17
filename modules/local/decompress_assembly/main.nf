@@ -11,6 +11,7 @@ process DECOMPRESS_ASSEMBLY {
 
     script:
     """
-    bgzip --threads ${task.cpus} --decompress -o ref_genome.fasta tmp/ref_genome.fasta.gz
+    bgzip --threads ${task.cpus} --decompress \
+        -o ref_genome.fasta tmp/ref_genome.fasta.gz
     """
 }

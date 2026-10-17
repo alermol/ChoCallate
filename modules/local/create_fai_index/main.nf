@@ -11,7 +11,8 @@ process CREATE_FAI_INDEX {
 
     script:
     """
-    samtools faidx --threads ${task.cpus} --output ref_genome.fasta.fai tmp/ref_genome.fasta
+    samtools faidx --threads ${task.cpus} \
+        --output ref_genome.fasta.fai tmp/ref_genome.fasta
     """
 }
 

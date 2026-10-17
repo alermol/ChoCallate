@@ -4,24 +4,23 @@ channels:
   - bioconda
 dependencies:
   - bwa=0.7.19
-  - minimap2>=2.30
-  - bowtie2>=2.5.5
-  - freebayes>=1.3.10
-  - bcftools>=1.23.1
-  - gatk4>=4.6.2.0
-  - samtools>=1.23
-  - mosdepth>=0.3.11
-  - python
-  - tabix>=1.11
-  - bedops>=2.4.42
-  - nextflow>=26.04.6
-  - bedtools>=2.31.1
-  - parallel
-  - pysam>=0.23.3
+  - minimap2=2.31
+  - bowtie2=2.5.5
+  - freebayes=1.3.10
+  - bcftools=1.24
+  - gatk4=4.6.2.0
+  - samtools=1.24
+  - mosdepth=0.3.14
+  - htslib=1.24
+  - python=3.13.16
+  - bedops=2.4.42
+  - nextflow=26.04.7
+  - parallel=20260922
+  - pysam=0.24.0
   # test suite (tests/python, run with `pytest -q tests/python`)
-  - pytest>=8
-  - picard>=3.4.0
+  - pytest=9.1.1
+  - picard=3.5.0
   # build dependencies of the optional consensus accelerator
   # (bin/build_consensus_accel.py)
-  - cython
-  - c-compiler
+  - cython=3.3.0
+  - c-compiler=2.0.0
