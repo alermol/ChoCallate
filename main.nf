@@ -23,6 +23,10 @@ workflow {
     CLIParamsValidation.mapper_validation(params.mapping.mapper, params.input.reads_type)
     CLIParamsValidation.reference_index_dir_validation(params.input.reference_index_dir)
 
+    // Caller selection: trimmed, deduplicated, in voting order. The same list
+    // drives process selection, threshold validation and the consensus header.
+    def selected_callers = CLIParamsValidation.parse_callers(params.calling.callers)
+
     // Create sample channel
     sample_run_ch = channel
                 .fromPath(params.input.samples_tsv)
@@ -88,17 +92,26 @@ workflow {
     bam_coverage = bam_file.join(bed_coverage)
 
     // Perform variant calling
-    bcftools = params.calling.callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
-    freebayes = params.calling.callers.contains('freebayes') ? CALLING_FREEBAYES(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
-    gatk = params.calling.callers.contains('gatk') ? CALLING_GATK(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    bcftools = selected_callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    freebayes = selected_callers.contains('freebayes') ? CALLING_FREEBAYES(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    gatk = selected_callers.contains('gatk') ? CALLING_GATK(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
         .map { list -> list.findAll { item -> item != null } }
-        .map {tuple -> [tuple[0], tuple[1..-1]]}
+        .map { tuple ->
+            def paths = tuple[1..-1]
+            def received = paths.collect { path -> path.name.replaceAll(/\.bcf$/, '') }
+            def failed = selected_callers.findAll { caller -> !(caller in received) }
+            if (failed) {
+                log.warn "Sample ${tuple[0]}: caller(s) failed and were skipped: ${failed.join(',')}"
+            }
+            [tuple[0], received.join(','), paths]
+        }
 
-    // Generate consensus
-    GENERATE_CONSENSUS(all_calls.join(bam_coverage), ref_genome, fai_index, gen_dict)
+    // Generate consensus.  The configured caller list is passed separately so
+    // the module can record ##callers/##callersFailed and warn about degrades.
+    GENERATE_CONSENSUS(all_calls.join(bam_coverage), selected_callers.join(','), ref_genome, fai_index, gen_dict)
 
     // Merge consensuses from different samples into single VCF of BCF
     if (params.output.type == 'single') {
@@ -112,7 +125,10 @@ workflow {
         consensus = consensus_ch
                         .join(sample_rank)
                         .toSortedList { item -> item[2] }
-                        .map { items -> items.collect { item -> item[1] } }
+                        .map { items ->
+                            def ids = items.collect { item -> item[0] }
+                            [ids.join(','), items.collect { item -> item[1] }]
+                        }
         MERGE_OUTPUTS(consensus, ref_genome, fai_index)
     }
 }

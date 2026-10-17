@@ -1,7 +1,7 @@
 process CALLING_BCFTOOLS {
     maxForks 1
     cpus params.calling.cpu
-    errorStrategy 'ignore'
+    errorStrategy { params.calling.allow_caller_failure ? 'ignore' : (task.attempt <= 2 ? 'retry' : 'terminate') }
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
 

@@ -46,6 +46,7 @@ that both implementations agree).
 
 import argparse
 import os
+import sys
 from collections import namedtuple
 from contextlib import ExitStack
 
@@ -440,7 +441,9 @@ def generate_mininimal_header(sample_name,
                               consensus_threshold,
                               split_multiallelic,
                               remove_invariant,
-                              version):
+                              version,
+                              callers,
+                              callers_failed):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -451,6 +454,8 @@ def generate_mininimal_header(sample_name,
         split_multiallelic: Whether multiallelic sites were split.
         remove_invariant: Whether monomorphic sites were removed.
         version: String version of the ChoCallate pipeline.
+        callers: Callers that voted for this sample, in voting order.
+        callers_failed: Configured callers without a usable record set.
 
     Returns:
         A pysam.VariantHeader object.
@@ -463,6 +468,9 @@ def generate_mininimal_header(sample_name,
     header.add_line(f'##consensusThreshold={consensus_threshold}')
     header.add_line(f'##multialleleSplit={split_multiallelic}')
     header.add_line(f'##noMonomorphic={remove_invariant}')
+    header.add_line(f'##callers={",".join(callers)}')
+    if callers_failed:
+        header.add_line(f'##callersFailed={",".join(callers_failed)}')
     for ref in reference_file.references:
         header.add_line(f'##contig=<ID={ref},length={reference_file.get_reference_length(ref)}>')
     header.add_line('##INFO=<ID=NS,Number=1,Type=Integer,Description="Number of samples with data">')
@@ -481,9 +489,47 @@ def generate_mininimal_header(sample_name,
     return header
 
 
+def resolve_inputs(input_specs, configured_callers):
+    """Map the configured callers onto the caller BCF files that exist.
+
+    Args:
+        input_specs: ``--input`` values, either ``caller=path`` or a plain
+            path (the caller name is then taken from the file stem).
+        configured_callers: Comma-separated configured caller list, or None to
+            derive it from ``input_specs``.
+
+    Returns:
+        (received callers in configured order, failed callers, paths).  A
+        configured caller whose file is missing counts as failed; this is how
+        a caller that was skipped in opt-in degraded mode is detected.
+    """
+    specs = []
+    for spec in input_specs:
+        caller, separator, path = spec.partition('=')
+        if not separator:
+            caller = os.path.basename(spec)
+            if caller.endswith('.bcf'):
+                caller = caller[:-4]
+            path = spec
+        specs.append((caller, path))
+    if configured_callers:
+        configured = [name.strip() for name in configured_callers.split(',')
+                      if name.strip()]
+    else:
+        configured = [caller for caller, _ in specs]
+    present = {caller: path for caller, path in specs if os.path.exists(path)}
+    received = [caller for caller in configured if caller in present]
+    failed = [caller for caller in configured if caller not in present]
+    return received, failed, [present[caller] for caller in received]
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', required=True, nargs='+', help='Input BCF/VCF files')
+    parser.add_argument('--input', required=True, action='append',
+                        metavar='[CALLER=]PATH',
+                        help='Caller BCF; repeat once per caller')
+    parser.add_argument('--callers', default=None,
+                        help='Configured callers in voting order (comma-separated)')
     parser.add_argument('--bed', required=True, help='Input BED file (gzipped and tabixed)')
     parser.add_argument('--bam', required=True, help='Input BAM file (indexed)')
     parser.add_argument('--output', required=True, help='Output BCF file')
@@ -497,6 +543,23 @@ def main():
 
     threshold = args.consensus_threshold
     use_accel = BcfLineWriter is not None
+    received, failed, input_paths = resolve_inputs(args.input, args.callers)
+    if not received:
+        sys.exit('ERROR: no caller BCF available for the configured callers')
+    if failed:
+        print('[WARN] sample {}: caller(s) without output: {}'.format(
+            args.sample_name, ','.join(failed)), file=sys.stderr)
+        if threshold > len(received):
+            sys.exit(
+                'ERROR: consensus threshold {} exceeds the {} surviving '
+                'caller(s) ({}) after failure(s) of {}'.format(
+                    threshold, len(received), ','.join(received),
+                    ','.join(failed)))
+    # write_all_positions is about the configured callers: positions without
+    # any caller record are still written as reference in degraded mode, while
+    # the votes themselves only come from the surviving callers.
+    configured_count = len(received) + len(failed)
+    write_all_positions = threshold <= configured_count
 
     with ExitStack() as stack:
         bed_file = stack.enter_context(pysam.TabixFile(args.bed, index=args.bed + '.csi'))
@@ -507,14 +570,13 @@ def main():
                                            threshold,
                                            args.split_multiallelic,
                                            args.remove_invariant,
-                                           args.version)
+                                           args.version,
+                                           received,
+                                           failed)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
-                         for bcf in args.input]
+                         for bcf in input_paths]
         n_files = len(variant_files)
-        # with at least `threshold` callers every position has a consensus (the
-        # placeholder wins where no caller has a record)
-        write_all_positions = threshold <= n_files
         output_file = None
         writer = None
         if use_accel:

@@ -38,6 +38,7 @@ calling:
   callers: "bcftools,gatk,freebayes"
   min_snp_qual: 20
   cpu: 4
+  allow_caller_failure: false
   bcftools:
     call:
       extra_args: ""

@@ -9,7 +9,11 @@ process GENERATE_CONSENSUS {
     publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.vcf.gz', enabled: params.output.type == 'sample' && params.output.format == 'vcf'
 
     input:
-    tuple val(sample_id), path('tmp/?.bcf', arity: '1..*'), path("tmp/input.bam"), path("tmp/coverage.bed")
+    // The `dir/*` staging pattern preserves the caller file names (bcftools.bcf,
+    // freebayes.bcf, gatk.bcf), so the consensus step knows which caller each
+    // file came from even when a caller is missing.
+    tuple val(sample_id), val(received_callers), path('tmp/callers/*', arity: '1..*'), path("tmp/input.bam"), path("tmp/coverage.bed")
+    val configured_callers
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/ref_genome.dict")
@@ -20,6 +24,13 @@ process GENERATE_CONSENSUS {
 
 
     script:
+    def configured = configured_callers.split(',').collect { caller -> caller.trim() }.findAll { caller -> caller }
+    def received = received_callers.split(',').collect { caller -> caller.trim() }.findAll { caller -> caller }
+    def failed = configured.findAll { caller -> !(caller in received) }
+    if (failed && params.consensus.threshold > received.size()) {
+        error "Sample ${sample_id}: consensus.threshold (${params.consensus.threshold}) exceeds the ${received.size()} surviving caller(s) [${received.join(',')}] after failure(s) of ${failed.join(',')}"
+    }
+    def input_args = received.collect { caller -> "--input ${caller}=tmp/callers/${caller}.bcf" }.join(' ')
     def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
     def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
     def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
@@ -34,12 +45,12 @@ process GENERATE_CONSENSUS {
 
     samtools index --threads ${task.cpus} --csi tmp/input.bam
 
-    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
+    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/callers/*.bcf
 
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py --input tmp/*.bcf --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
+    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf ${filter_invariant} \

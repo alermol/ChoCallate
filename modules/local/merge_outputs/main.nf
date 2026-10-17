@@ -8,7 +8,9 @@ process MERGE_OUTPUTS {
     publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.type == 'single' && params.output.format == 'vcf'
 
     input:
-    path('tmp/?.bcf', arity: '1..*')
+    // The sample ids are carried explicitly so the merge order follows
+    // samples_tsv even though `dir/*` staging preserves the file names.
+    tuple val(sample_ids), path('tmp/bcfs/*', arity: '1..*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
 
@@ -17,6 +19,8 @@ process MERGE_OUTPUTS {
     path("consensus.vcf.gz"), optional: true
 
     script:
+    def sample_id_list = sample_ids.split(',').collect { id -> id.trim() }
+    def merge_paths = sample_id_list.collect { id -> "tmp/bcfs/${id}.bcf" }.join(' ')
     // Per-sample consensus files contain a gVCF-style reference record
     // (ALT="<*>") at every covered position.  `bcftools merge --gvcf` expands
     // those records at variant positions of other samples and maps their
@@ -30,18 +34,18 @@ process MERGE_OUTPUTS {
     def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
-    n_bcf=\$(ls -1 tmp/*.bcf | wc -l)
+    n_bcf=\$(ls -1 tmp/bcfs/*.bcf | wc -l)
 
     if [ "\$n_bcf" -gt 1 ]; then
-        parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
+        parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/bcfs/*.bcf
     fi
 
     if [ "\$n_bcf" -eq 1 ]; then
-        ${invariant_filter} tmp/1.bcf \
+        ${invariant_filter} tmp/bcfs/*.bcf \
         | bcftools +fill-tags -Ou -- -t ${fill_tags} \
         | bcftools view ${output_format}
     else
-        ls -1v tmp/*.bcf > tmp/merge_list.txt
+        printf '%s\n' ${merge_paths} > tmp/merge_list.txt
         merge_bcf_tree.py --gvcf tmp/ref_genome.fasta --cpus ${task.cpus} --file-list tmp/merge_list.txt \
         | bcftools norm -m -any --threads ${task.cpus} -Ou \
         | drop_refonly_duplicates.py \

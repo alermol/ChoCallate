@@ -248,3 +248,116 @@ def test_accel_and_pure_paths_agree(tmp_path):
 
     assert text(pure) == text(accel)
     assert text(pure)  # not trivially empty
+
+
+def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
+    """D.2/C-04: ##callers and ##callersFailed describe the vote."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+        write_caller_bcf(tmp_path / 'gatk.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+    ]
+    output = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
+        callers=['bcftools', 'gatk'],
+        configured_callers=['bcftools', 'freebayes', 'gatk'],
+        use_accel=use_accel, reference=reference)
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+        records = list(variant_file)
+    assert '##callers=bcftools,gatk' in header
+    assert '##callersFailed=freebayes' in header
+    assert [(record.pos, (record.ref,) + tuple(record.alts),
+             tuple(record.samples[0]['GT']))
+            for record in records] == [
+        (30, (ref_base(30), alt_base(30)), (0, 1))]
+
+
+def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
+    """D.2: degraded mode refuses a threshold no surviving caller can reach."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller = write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
+                              [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))])
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        run_consensus(tmp_path, bam, bed_gz, [caller], threshold=2,
+                      callers=['bcftools'],
+                      configured_callers=['bcftools', 'freebayes'],
+                      use_accel=use_accel, reference=reference)
+    assert 'surviving caller' in excinfo.value.stderr
+
+
+def test_caller_order_controls_tie_break(tmp_path, use_accel):
+    """D.2: --callers defines the voting order used for ties."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    alt1 = alt_base(30)
+    alt2 = {'A': 'C', 'C': 'A', 'G': 'A', 'T': 'A'}[ref_base(30)]
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt1], (0, 1))]),
+        write_caller_bcf(tmp_path / 'freebayes.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt2], (0, 1))]),
+    ]
+
+    def consensus_alleles(order, output_name):
+        output = run_consensus(
+            tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
+            callers=['bcftools', 'freebayes'], configured_callers=order,
+            use_accel=use_accel, reference=reference,
+            output_name=output_name)
+        return read_records(output)[0][1]
+
+    assert consensus_alleles(['bcftools', 'freebayes'], 'first.bcf') == \
+        (ref_base(30), alt1)
+    assert consensus_alleles(['freebayes', 'bcftools'], 'second.bcf') == \
+        (ref_base(30), alt2)
+
+
+@pytest.mark.parametrize('callers', [
+    ('bcftools',),
+    ('freebayes',),
+    ('gatk',),
+    ('bcftools', 'freebayes'),
+    ('bcftools', 'gatk'),
+    ('freebayes', 'gatk'),
+    ('bcftools', 'freebayes', 'gatk'),
+])
+def test_any_caller_subset(tmp_path, use_accel, callers):
+    """D.2: any non-empty caller subset produces a consensus and a header."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / f'{caller}.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))])
+        for caller in callers]
+    output = run_consensus(tmp_path, bam, bed_gz, caller_bcfs,
+                           threshold=len(callers), callers=list(callers),
+                           use_accel=use_accel, reference=reference)
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+        records = list(variant_file)
+    assert f'##callers={",".join(callers)}' in header
+    assert [(record.pos, (record.ref,) + tuple(record.alts),
+             tuple(record.samples[0]['GT']))
+            for record in records] == [
+        (30, (ref_base(30), alt_base(30)), (0, 1))]

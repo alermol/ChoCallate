@@ -157,17 +157,35 @@ def write_caller_bcf(path, sample_name, records, contig=CHR, length=len(REF_SEQ)
 
 
 def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sample1',
-                  use_accel=False, output_name='out.bcf', reference=None):
-    """Run bin/generate_consensus.py as a subprocess and return its output path."""
+                  use_accel=False, output_name='out.bcf', reference=None,
+                  callers=None, configured_callers=None, check=True):
+    """Run bin/generate_consensus.py as a subprocess and return its output path.
+
+    Args:
+        caller_bcfs: Caller BCF paths, in the order they should be passed.
+        callers: Caller names matching ``caller_bcfs`` (defaults to
+            ``caller0``, ``caller1``, ...).
+        configured_callers: Caller list for ``--callers`` (defaults to
+            ``callers``); extra names count as failed callers.
+        check: Raise on a non-zero exit status when true.
+    """
     output = tmp_path / output_name
     if reference is None:
         reference = tmp_path / 'ref.fa'
+    if callers is None:
+        callers = [f'caller{index}' for index in range(len(caller_bcfs))]
+    input_args = []
+    for caller, path in zip(callers, caller_bcfs):
+        input_args += ['--input', f'{caller}={path}']
+    if configured_callers is None:
+        configured_callers = callers
     env = os.environ.copy()
     if not use_accel:
         env['CHOCALLATE_NO_ACCEL'] = '1'
     cmd = [
         sys.executable, str(CONSENSUS_SCRIPT),
-        '--input', *[str(path) for path in caller_bcfs],
+        *input_args,
+        '--callers', ','.join(configured_callers),
         '--bed', str(bed_gz),
         '--bam', str(bam),
         '--output', str(output),
@@ -176,7 +194,8 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         '--consensus_threshold', str(threshold),
         '--version', 'test',
     ]
-    subprocess.run(cmd, check=True, env=env, cwd=str(tmp_path))
+    subprocess.run(cmd, check=check, env=env, cwd=str(tmp_path),
+                   capture_output=True, text=True)
     return output
 
 

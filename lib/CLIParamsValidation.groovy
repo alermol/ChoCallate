@@ -1,4 +1,12 @@
 class CLIParamsValidation {
+    static List<String> parse_callers(String callers) {
+        if (callers == null) {
+            return []
+        }
+        // trimmed, non-empty and deduplicated, preserving the configured order
+        return callers.split(',').collect { it.trim() }.findAll { it }.unique()
+    }
+
     static void reference_genome_validation(String reference_genome) {
         if (reference_genome == null) {
             println "ERROR: Reference genome is required"
@@ -21,12 +29,12 @@ class CLIParamsValidation {
     }
 
     static void effective_callers_validation(String callers) {
-        if (callers == null) {
+        def callersList = parse_callers(callers)
+        if (!callersList) {
             println "ERROR: Effective callers are not specified"
             System.exit(1)
         }
         def available_callers = ['bcftools', 'gatk', 'freebayes']
-        def callersList = callers.split(',').collect { it.trim() }
         def unknown_callers = callersList.findAll { !(it in available_callers) }
         if (unknown_callers) {
             println "ERROR: Unknown caller(s): ${unknown_callers}. Available callers are: ${available_callers}"
@@ -55,13 +63,13 @@ class CLIParamsValidation {
             println "ERROR: Consensus threshold is required"
             System.exit(1)
         }
-        if (callers == null) {
+        def callersList = parse_callers(callers)
+        if (!callersList) {
             println "ERROR: Effective callers are not specified"
             System.exit(1)
         }
-        def callersList = callers.split(',').collect { it.trim() }
         if (cons_threshold > callersList.size()) {
-            println "ERROR: Consensus threshold must be less or equal to the number of effective callers"
+            println "ERROR: Consensus threshold must be less or equal to the number of unique effective callers (${callersList.size()})"
             System.exit(1)
         }
         if (cons_threshold < 1) {
