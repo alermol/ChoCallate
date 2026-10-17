@@ -62,6 +62,38 @@ output:
   # hom-reference sample is missing rather than a fabricated zero.
   compress_reference_blocks: false
 
+  # Publishing mode for result files: "copy" writes independent copies,
+  # "link" creates symbolic links into the Nextflow work directory. Linked
+  # results depend on the work directory and must not be combined with
+  # work-directory cleanup.
+  publish_mode: "copy"
+
+resources:
+  # Resource limits for the three process labels. Memory is multiplied by the
+  # task attempt number, so retries after an out-of-memory exit (137/140) run
+  # with more memory; JVM heap sizes are derived from the resulting task
+  # memory.
+  # Maximum number of retries for exit status 137 or 140.
+  max_retries: 3
+
+  low:
+    # Index creation, decompression and coverage tasks.
+    cpus: 1
+    memory_mb: 4096
+    time: "4h"
+
+  medium:
+    # Mapping, variant calling, scattering and merging tasks.
+    cpus: 6
+    memory_mb: 16384
+    time: "24h"
+
+  high:
+    # GATK HaplotypeCaller tasks, which start one JVM per assigned CPU.
+    cpus: 8
+    memory_mb: 32768
+    time: "48h"
+
 mapping:
   # Read mapper: "bowtie2", "bwa" or "minimap2".
   mapper: "bowtie2"

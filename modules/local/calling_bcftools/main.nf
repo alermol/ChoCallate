@@ -1,8 +1,8 @@
 process CALLING_BCFTOOLS {
+    label 'process_medium'
     cpus params.calling.cpu
-    errorStrategy { params.calling.allow_caller_failure ? 'ignore' : (task.attempt <= 2 ? 'retry' : 'terminate') }
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 

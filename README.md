@@ -114,6 +114,18 @@ Parameters are checked against `nextflow_schema.json` before the first task:
 invalid enum values, negative numbers, missing input files and unknown keys
 abort with the offending key and the accepted values.
 
+## Resources
+
+Processes use the `process_low`, `process_medium` and `process_high` labels.
+Their `cpus`, `memory_mb` and `time` limits are configured in the `resources`
+section of the params file. The `mapping.cpu`, `calling.cpu` and
+`consensus.cpu` options remain authoritative for their stages and override the
+label CPU defaults. JVM heaps are derived from the memory requested for the
+task, including GATK processes started by GNU parallel. A task that exits with
+status 137 or 140 (typically an out-of-memory kill) is retried up to
+`resources.max_retries` times with memory multiplied by the attempt number.
+Ordinary caller failures use the same limit.
+
 
 
 ## Inputs
@@ -151,6 +163,12 @@ Consensus outputs depend on `output.type` and `output.format`:
 - **Single merged** (default): `<output.directory>/consensus.bcf` or `<output.directory>/consensus.vcf.gz`
 - **Per-sample**: `<output.directory>/per_sample/<sample_id>.bcf` or `<sample_id>.vcf.gz`
 
+`output.publish_mode` controls how those files are published: `copy` (default)
+writes independent copies, while `link` creates symbolic links into the
+Nextflow work directory. Linked files require the work directory to be retained
+(for example, disable `boost.cleanup`). Results are never moved out of the work
+directory, so `-resume` keeps working.
+
 
 Consensus VCF/BCF records include `FORMAT/GT`, `AD`, and `DP` (AD/DP from BAM), plus site-level `INFO` tags (`AN`, `AC`, `AF`, `NS`, total `DP`, etc.). Details: [Output Structure](https://github.com/alermol/ChoCallate/wiki/Output-Structure).
 
@@ -164,7 +182,7 @@ Mapping and BAM input share `bin/postprocess_bam.sh`: reads are coordinate-sorte
 
 Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,SplitMultiallelic=False,ReferenceBlocks=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`. The same header also records `##ChoCallateCommand="<full nextflow command>"`; the multi-sample merge re-attaches all `##ChoCallate` lines.
 
-Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller is retried twice and a failure then terminates the run. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers.
+Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller is retried up to `resources.max_retries` times and a failure then terminates the run. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers.
 
 Quality filtering is per caller and per variant type: `calling.<caller>.min_snp_qual` and `calling.<caller>.min_indel_qual` (20/20 in `assets/templates/config.yaml`). Both keys are required; the shared `calling.min_snp_qual` key and the `calling.<caller>.min_qual` alias were removed in 4.0.0.
 

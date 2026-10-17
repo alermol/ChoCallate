@@ -1,7 +1,8 @@
 process PREPARE_BAM {
+    label 'process_medium'
     cpus params.mapping.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
@@ -20,6 +21,8 @@ process PREPARE_BAM {
     def left_align = params.left_align_indels.enabled ? '--left-align' : ''
     def platform = params.mapping.platform ?: 'ILLUMINA'
     def library = params.mapping.library ?: sample_id
+    def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
+        ResourceUtils.javaHeapOption(task.memory)
     """
     set -o pipefail
 
@@ -40,6 +43,7 @@ process PREPARE_BAM {
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
         --threads ${task.cpus} \
+        --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}
     """

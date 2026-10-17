@@ -10,6 +10,7 @@ Usage: postprocess_bam.sh --input BAM|-
   --dict DICT            Sequence dictionary (required with --left-align)
   --mapq INT             Minimum mapping quality (default: 0)
   --threads INT          Worker threads (default: 1)
+  --java-options OPTS    JVM options for GATK LeftAlignIndels
   --rmdup                Remove duplicates with samtools markdup
   --left-align           Left-align indels with GATK LeftAlignIndels
 EOF
@@ -21,6 +22,7 @@ reference=""
 dict=""
 mapq=0
 threads=1
+java_options=""
 rmdup=false
 left_align=false
 
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --threads)
             threads="$2"
+            shift 2
+            ;;
+        --java-options)
+            java_options="$2"
             shift 2
             ;;
         --rmdup)
@@ -109,7 +115,11 @@ samtools view --threads "$threads" -F 4 -q "$mapq" -b \
 
 if [[ "$left_align" == true ]]; then
     rm -f "$output"
-    gatk LeftAlignIndels \
+    gatk_opts=()
+    if [[ -n "$java_options" ]]; then
+        gatk_opts=(--java-options "$java_options")
+    fi
+    gatk LeftAlignIndels "${gatk_opts[@]}" \
         -I "$tmpdir/filtered.bam" \
         -O "$output" \
         -R "$reference" \

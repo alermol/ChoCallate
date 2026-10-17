@@ -1,12 +1,25 @@
 process GENERATE_CONSENSUS {
+    label 'process_medium'
     cpus params.consensus.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
-    publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.bcf', enabled: params.output.type == 'sample' && params.output.format == 'bcf'
-    publishDir "${params.output.directory}/per_sample", mode: 'move', pattern: '*.vcf.gz', enabled: params.output.type == 'sample' && params.output.format == 'vcf'
+    publishDir(
+        "${params.output.directory}/per_sample",
+        mode: params.output.publish_mode,
+        pattern: '*.bcf',
+        enabled: params.output.type == 'sample' &&
+                 params.output.format == 'bcf'
+    )
+    publishDir(
+        "${params.output.directory}/per_sample",
+        mode: params.output.publish_mode,
+        pattern: '*.vcf.gz',
+        enabled: params.output.type == 'sample' &&
+                 params.output.format == 'vcf'
+    )
 
     input:
     // The `dir/*` staging pattern preserves the caller file names (bcftools.bcf,

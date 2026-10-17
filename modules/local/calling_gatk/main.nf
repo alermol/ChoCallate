@@ -1,8 +1,8 @@
 process CALLING_GATK {
+    label 'process_high'
     cpus params.calling.cpu
-    errorStrategy { params.calling.allow_caller_failure ? 'ignore' : (task.attempt <= 2 ? 'retry' : 'terminate') }
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
@@ -21,6 +21,7 @@ process CALLING_GATK {
     def interval_padding = caller.interval_padding != null ? caller.interval_padding : 150
     def min_snp = caller.min_snp_qual
     def min_indel = caller.min_indel_qual
+    def heap_option = ResourceUtils.javaHeapOption(task.memory, task.cpus)
     assert min_snp != null : 'calling.gatk.min_snp_qual is required'
     assert min_indel != null : 'calling.gatk.min_indel_qual is required'
     def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
@@ -32,7 +33,7 @@ process CALLING_GATK {
     EOF
 
     parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir \$TMPDIR | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir "\$TMPDIR" | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     # GATK runs with interval padding, so calls near a chunk boundary can be
     # emitted out of order by the padded neighbours. Sort only this caller;

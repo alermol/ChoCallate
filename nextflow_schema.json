@@ -88,8 +88,95 @@
                 "compress_reference_blocks": {
                     "type": "boolean",
                     "description": "Compress runs of hom-reference positions into gVCF blocks with INFO/END. FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
+                },
+                "publish_mode": {
+                    "type": "string",
+                    "description": "Publish result files as independent copies or as symbolic links into the work directory.",
+                    "enum": ["copy", "link"]
                 }
             }
+        },
+        "resources": {
+            "type": "object",
+            "title": "Resources",
+            "description": "CPU, memory and time limits for the process labels.",
+            "properties": {
+                "max_retries": {
+                    "type": "integer",
+                    "description": "Maximum number of retries after an exit status of 137 or 140.",
+                    "minimum": 0
+                },
+                "low": {
+                    "type": "object",
+                    "title": "Low",
+                    "description": "Index creation, decompression and coverage tasks.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 4h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
+                "medium": {
+                    "type": "object",
+                    "title": "Medium",
+                    "description": "Mapping, variant calling, scattering and merging tasks.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 24h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
+                "high": {
+                    "type": "object",
+                    "title": "High",
+                    "description": "GATK HaplotypeCaller tasks, which start one JVM per assigned CPU.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 48h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                }
+            },
+            "required": ["max_retries", "low", "medium", "high"]
         },
         "mapping": {
             "type": "object",

@@ -1,7 +1,8 @@
 process MAPPING_BOWTIE2 {
+    label 'process_medium'
     cpus params.mapping.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
@@ -22,6 +23,8 @@ process MAPPING_BOWTIE2 {
     def platform = params.mapping.platform ?: 'ILLUMINA'
     def library = params.mapping.library ?: sample_id
     def index_prefix = params.input.reference_index_prefix
+    def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
+        ResourceUtils.javaHeapOption(task.memory)
     def reads = params.input.reads_type == 'se' ? "-U tmp/read1" :
                 params.input.reads_type == 'pe' ? "-1 tmp/read1 -2 tmp/read2" :
                 params.input.reads_type == 'mx' ? "-1 tmp/read1 -2 tmp/read2 -U tmp/read3" : ''
@@ -51,6 +54,7 @@ process MAPPING_BOWTIE2 {
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
         --threads ${task.cpus} \
+        --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}
     """

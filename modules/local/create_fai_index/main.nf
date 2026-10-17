@@ -1,7 +1,7 @@
 process CREATE_FAI_INDEX {
-    cpus Runtime.runtime.availableProcessors()
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    label 'process_low'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     input:
     path(ref_genome), name: "tmp/ref_genome.fasta"

@@ -1,7 +1,8 @@
 process SCATTER_INTERVALS {
+    label 'process_medium'
     cpus params.calling.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
@@ -17,19 +18,21 @@ process SCATTER_INTERVALS {
 
     script:
     def scatter_count = Math.max(params.calling.cpu ?: 1, params.consensus.cpu ?: 1)
+    def heap_option = ResourceUtils.javaHeapOption(task.memory, task.cpus)
     """
     mkdir -p tmp/bed_chunks chunks
 
     gatk SplitIntervals \
-        --java-options "-Djava.io.tmpdir=\$TMPDIR" \
-        --tmp-dir \$TMPDIR \
+        --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
+        --tmp-dir "\$TMPDIR" \
         -R tmp/ref_genome.fasta \
         -L tmp/coverage.bed \
         --scatter-count ${scatter_count} \
         -O tmp/bed_chunks/
 
     parallel -j ${task.cpus} \
-        'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp
+        'gatk IntervalListToBed --java-options "${heap_option}" \
+         -I {} -O {//}/{/.}.bed.tmp
          cut -f 1-3 {//}/{/.}.bed.tmp > chunks/{/.}.bed
          rm -f {} {//}/{/.}.bed.tmp' \
         ::: tmp/bed_chunks/*

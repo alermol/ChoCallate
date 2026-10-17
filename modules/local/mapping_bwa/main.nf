@@ -1,7 +1,8 @@
 process MAPPING_BWA {
+    label 'process_medium'
     cpus params.mapping.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
@@ -23,6 +24,8 @@ process MAPPING_BWA {
     def library = params.mapping.library ?: sample_id
     def rg_id = "@RG\\tID:${sample_id}\\tSM:${sample_id}\\tPL:${platform}\\tLB:${library}"
     def index_prefix = params.input.reference_index_prefix
+    def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
+        ResourceUtils.javaHeapOption(task.memory)
     def reads = params.input.reads_type == 'se' ? "tmp/read1" :
                 params.input.reads_type == 'pe' ? "tmp/read1 tmp/read2" : ''
     """
@@ -48,6 +51,7 @@ process MAPPING_BWA {
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
         --threads ${task.cpus} \
+        --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}
     """

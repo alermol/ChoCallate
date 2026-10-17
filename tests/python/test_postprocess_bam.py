@@ -5,6 +5,7 @@ removes duplicates, filters MAPQ after duplicate marking, optionally left-aligns
 indels, and writes the BAM index exactly once.
 """
 
+import os
 import shutil
 import subprocess
 
@@ -63,7 +64,7 @@ def write_paired_bam(path):
     return path
 
 
-def run_helper(tmp_path, *args):
+def run_helper(tmp_path, *args, env=None):
     output = tmp_path / 'mapping.bam'
     subprocess.run(
         [str(BIN_DIR / 'postprocess_bam.sh'),
@@ -72,8 +73,32 @@ def run_helper(tmp_path, *args):
          '--mapq', '10',
          '--threads', '1',
          *args],
-        check=True, cwd=str(tmp_path))
+        check=True, cwd=str(tmp_path), env=env)
     return output
+
+
+def write_stub_gatk(tmp_path):
+    """Replace GATK with a stub that logs its arguments and copies the BAM."""
+    stub_dir = tmp_path / 'stub_bin'
+    stub_dir.mkdir()
+    log = tmp_path / 'gatk_args.txt'
+    stub = stub_dir / 'gatk'
+    stub.write_text(
+        '#!/bin/bash\n'
+        'printf "%s\\n" "$@" > "$GATK_ARGS_LOG"\n'
+        'input=""\n'
+        'output=""\n'
+        'while [ "$#" -gt 0 ]; do\n'
+        '  case "$1" in\n'
+        '    -I) input="$2"; shift 2 ;;\n'
+        '    -O) output="$2"; shift 2 ;;\n'
+        '    *) shift ;;\n'
+        '  esac\n'
+        'done\n'
+        'cp "$input" "$output"\n'
+    )
+    stub.chmod(0o755)
+    return stub_dir, log
 
 
 def read_names(path):
@@ -98,3 +123,31 @@ def test_postprocess_without_rmdup_keeps_duplicates(tmp_path):
         'dup1', 'dup1', 'dup2', 'dup2', 'uniq', 'uniq']
     assert (tmp_path / 'mapping.bam.csi').is_file()
     subprocess.run([SAMTOOLS, 'quickcheck', str(output)], check=True)
+
+
+def test_left_align_receives_task_java_options(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    stub_dir, log = write_stub_gatk(tmp_path)
+    reference = tmp_path / 'ref.fa'
+    reference.write_text('>chr1\nACGT\n')
+    dictionary = tmp_path / 'ref.dict'
+    dictionary.write_text('')
+
+    env = os.environ.copy()
+    env['PATH'] = str(stub_dir) + os.pathsep + env['PATH']
+    env['GATK_ARGS_LOG'] = str(log)
+    java_options = '-Djava.io.tmpdir=/tmp/scratch -Xmx1024m'
+
+    run_helper(
+        tmp_path,
+        '--left-align',
+        '--reference', str(reference),
+        '--dict', str(dictionary),
+        '--java-options', java_options,
+        env=env,
+    )
+
+    arguments = log.read_text().splitlines()
+    assert arguments[0] == 'LeftAlignIndels'
+    option_index = arguments.index('--java-options')
+    assert arguments[option_index + 1] == java_options

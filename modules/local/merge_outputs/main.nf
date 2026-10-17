@@ -1,10 +1,23 @@
 process MERGE_OUTPUTS {
+    label 'process_medium'
     cpus params.consensus.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
-    publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
-    publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.type == 'single' && params.output.format == 'vcf'
+    publishDir(
+        "${params.output.directory}",
+        mode: params.output.publish_mode,
+        pattern: 'consensus.bcf',
+        enabled: params.output.type == 'single' &&
+                 params.output.format == 'bcf'
+    )
+    publishDir(
+        "${params.output.directory}",
+        mode: params.output.publish_mode,
+        pattern: 'consensus.vcf.gz',
+        enabled: params.output.type == 'single' &&
+                 params.output.format == 'vcf'
+    )
 
     input:
     // The sample ids are carried explicitly so the merge order follows
