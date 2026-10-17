@@ -19,6 +19,7 @@ process CALLING_GATK {
     script:
     def caller = params.calling.gatk ?: [:]
     def extra_args = caller.extra_args ?: ''
+    def interval_padding = caller.interval_padding != null ? caller.interval_padding : 150
     def min_snp = caller.min_snp_qual
     def min_indel = caller.min_indel_qual
     assert min_snp != null : 'calling.gatk.min_snp_qual is required'
@@ -38,9 +39,15 @@ process CALLING_GATK {
     EOF
 
     parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --sequence-dictionary tmp/ref_genome.dict --tmp-dir \$TMPDIR | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
+    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir \$TMPDIR | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf
     bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o gatk.bcf
+    # Split multi-allelics and atomise complex alleles once, before voting, so
+    # every caller uses the same representation.  The sort + exact dedup remove
+    # records duplicated at chunk boundaries.
+    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf \
+    | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
+    | bcftools sort -Ou \
+    | bcftools norm --threads ${task.cpus} -d exact -Ob -o gatk.bcf
     """
 }

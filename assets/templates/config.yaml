@@ -52,6 +52,7 @@ calling:
   gatk:
     min_snp_qual: 20
     min_indel_qual: 20
+    interval_padding: 150
     extra_args: ""
 
 consensus:

@@ -307,15 +307,16 @@ def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
     assert 'surviving caller' in excinfo.value.stderr
 
 
-def test_caller_order_only_matters_with_first_policy(tmp_path, use_accel):
-    """D.3: the default is order-independent; ``first`` opts into caller order."""
+def test_multiple_alts_are_emitted_regardless_of_caller_order(tmp_path, use_accel):
+    """D.5: distinct supported ALTs become separate order-independent records."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
     bed_gz = write_bed(tmp_path / 'coverage.bed',
                        [('chr1', POS_30_0B, POS_30_0B + 1)])
     alt1 = alt_base(30)
-    alt2 = {'A': 'C', 'C': 'A', 'G': 'A', 'T': 'A'}[ref_base(30)]
+    alt2 = next(base for base in 'ACGT'
+                if base not in (ref_base(30), alt1))
     caller_bcfs = [
         write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
                          [(POS_30_0B, ref_base(30), [alt1], (0, 1))]),
@@ -323,24 +324,20 @@ def test_caller_order_only_matters_with_first_policy(tmp_path, use_accel):
                          [(POS_30_0B, ref_base(30), [alt2], (0, 1))]),
     ]
 
-    def consensus_alleles(order, policy, output_name):
+    def consensus_records(order, output_name):
         output = run_consensus(
             tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
             callers=['bcftools', 'freebayes'], configured_callers=order,
-            tie_policy=policy, use_accel=use_accel, reference=reference,
+            use_accel=use_accel, reference=reference,
             output_name=output_name)
-        records = read_records(output)
-        return records[0][1] if records else None
+        return sorted(read_records(output))
 
-    # Two distinct ALT alleles with equal support: the default no-call policy
-    # is independent of the configured caller order.
-    assert consensus_alleles(['bcftools', 'freebayes'], 'nocall', 'nocall1.bcf') is None
-    assert consensus_alleles(['freebayes', 'bcftools'], 'nocall', 'nocall2.bcf') is None
-    # The explicit ``first`` policy is the only one that uses caller order.
-    assert consensus_alleles(['bcftools', 'freebayes'], 'first', 'first1.bcf') == \
-        (ref_base(30), alt1)
-    assert consensus_alleles(['freebayes', 'bcftools'], 'first', 'first2.bcf') == \
-        (ref_base(30), alt2)
+    expected = sorted([
+        (30, (ref_base(30), alt1), (0, 1)),
+        (30, (ref_base(30), alt2), (0, 1)),
+    ])
+    assert consensus_records(['bcftools', 'freebayes'], 'first.bcf') == expected
+    assert consensus_records(['freebayes', 'bcftools'], 'second.bcf') == expected
 
 
 @pytest.mark.parametrize('callers', [
@@ -552,3 +549,137 @@ def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
                 'RemoveInvariant=False,SplitMultiallelic=False,'
                 'CallersFailed="freebayes">')
     assert expected in header
+
+
+def test_split_multiallelic_records_are_aggregated(tmp_path, use_accel):
+    """D.5: all records of a caller at one position form one vote."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    alt1 = alt_base(30)
+    alt2 = next(base for base in 'ACGT'
+                if base not in (ref_base(30), alt1))
+    # Caller 0 carries two split records.  The second one (alt1) must not be
+    # skipped: together with caller 1 it reaches threshold 2.
+    caller0 = write_caller_bcf(tmp_path / 'caller0.bcf', 'sample1', [
+        (POS_30_0B, ref_base(30), [alt2], (0, 1)),
+        (POS_30_0B, ref_base(30), [alt1], (0, 1)),
+    ])
+    caller1 = write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', [
+        (POS_30_0B, ref_base(30), [alt1], (0, 1)),
+    ])
+    output = run_consensus(tmp_path, bam, bed_gz, [caller0, caller1],
+                           threshold=2, use_accel=use_accel,
+                           reference=reference)
+    assert read_records(output) == [
+        (30, (ref_base(30), alt1), (0, 1))]
+
+
+@pytest.mark.parametrize('split_records', [True, False])
+def test_triallelic_caller_produces_split_consensus(tmp_path, use_accel,
+                                                    split_records):
+    """D.5: a 1/2 call produces one consensus record per ALT."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    alt1 = alt_base(30)
+    alt2 = next(base for base in 'ACGT'
+                if base not in (ref_base(30), alt1))
+    if split_records:
+        records = [(POS_30_0B, ref_base(30), [alt1], (0, 1)),
+                   (POS_30_0B, ref_base(30), [alt2], (0, 1))]
+    else:
+        records = [(POS_30_0B, ref_base(30), [alt1, alt2], (1, 2))]
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', records)
+    output = run_consensus(tmp_path, bam, bed_gz, [caller], threshold=1,
+                           use_accel=use_accel, reference=reference)
+    assert sorted(read_records(output)) == sorted([
+        (30, (ref_base(30), alt1), (0, 1)),
+        (30, (ref_base(30), alt2), (0, 1)),
+    ])
+
+
+def test_atomized_mnp_matches_snp(tmp_path, use_accel):
+    """D.5: an atomised freebayes-style MNP votes with the matching SNP."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 3)])
+    mnp_ref = REF_SEQ[POS_30_0B:POS_30_0B + 3].upper()
+    mnp_alt = ''.join({'A': 'T', 'C': 'A', 'G': 'T', 'T': 'G'}[base]
+                      for base in mnp_ref)
+    mnp = write_caller_bcf(tmp_path / 'mnp.bcf', 'sample1', [
+        (POS_30_0B, mnp_ref, [mnp_alt], (0, 1)),
+    ])
+    normalized = tmp_path / 'mnp.normalized.bcf'
+    subprocess.run([BCFTOOLS, 'norm', '-f', str(reference), '-m', '-any',
+                    '--atomize', '-Ob', '-o', str(normalized), str(mnp)],
+                   check=True)
+    subprocess.run([BCFTOOLS, 'index', '--csi', str(normalized)], check=True)
+    snp = write_caller_bcf(tmp_path / 'snp.bcf', 'sample1', [
+        (POS_30_0B, ref_base(30), [alt_base(30)], (0, 1)),
+    ])
+    output = run_consensus(tmp_path, bam, bed_gz, [normalized, snp],
+                           threshold=1, use_accel=use_accel,
+                           reference=reference)
+    assert (30, (ref_base(30), alt_base(30)), (0, 1)) in read_records(output)
+
+
+def test_norm_dedup_removes_chunk_boundary_duplicates(tmp_path):
+    """D.5/C-10: exact duplicates from chunk boundaries are removed."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    duplicated = write_caller_bcf(tmp_path / 'duplicated.bcf', 'sample1', [
+        (POS_30_0B, ref_base(30), [alt_base(30)], (0, 1)),
+        (POS_30_0B, ref_base(30), [alt_base(30)], (0, 1)),
+    ])
+    output = tmp_path / 'deduplicated.bcf'
+    chain = (
+        f'{BCFTOOLS} norm -f {reference} -m -any --atomize -Ou {duplicated}'
+        f' | {BCFTOOLS} sort -Ou'
+        f' | {BCFTOOLS} norm -d exact -Ob -o {output}'
+    )
+    subprocess.run(['bash', '-c', chain], check=True)
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        records = list(variant_file)
+    assert len(records) == 1
+    assert (records[0].pos, records[0].ref,
+            tuple(records[0].alts)) == (30, ref_base(30), (alt_base(30),))
+
+
+def test_split_consensus_records_join_for_output(tmp_path, use_accel):
+    """D.5: per-ALT consensus records re-join when split output is off."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    alt1 = alt_base(30)
+    alt2 = next(base for base in 'ACGT'
+                if base not in (ref_base(30), alt1))
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (POS_30_0B, ref_base(30), [alt1], (0, 1)),
+        (POS_30_0B, ref_base(30), [alt2], (0, 1)),
+    ])
+    split = run_consensus(tmp_path, bam, bed_gz, [caller], threshold=1,
+                          use_accel=use_accel, reference=reference,
+                          output_name='split.bcf')
+    joined = tmp_path / 'joined.bcf'
+    subprocess.run([BCFTOOLS, 'norm', '-m', '+any', '-Ob', '-o', str(joined),
+                    str(split)], check=True)
+    with pysam.VariantFile(str(joined), index_filename=None) as variant_file:
+        records = list(variant_file)
+    assert len(records) == 1
+    record = records[0]
+    assert record.pos == 30
+    assert record.ref == ref_base(30)
+    assert tuple(record.alts) == tuple(sorted((alt1, alt2)))
+    assert tuple(sorted(record.samples[0]['GT'])) == (1, 2)

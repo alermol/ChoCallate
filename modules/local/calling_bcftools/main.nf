@@ -39,9 +39,15 @@ process CALLING_BCFTOOLS {
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf;
+    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf;
     bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o bcftools.bcf
+    # Split multi-allelics and atomise complex alleles once, before voting, so
+    # every caller uses the same representation.  The sort + exact dedup remove
+    # records duplicated at chunk boundaries.
+    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf \
+    | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
+    | bcftools sort -Ou \
+    | bcftools norm --threads ${task.cpus} -d exact -Ob -o bcftools.bcf
     """
 }

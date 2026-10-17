@@ -41,7 +41,7 @@ process MERGE_OUTPUTS {
     fi
 
     if [ "\$n_bcf" -eq 1 ]; then
-        ${invariant_filter} tmp/bcfs/*.bcf \
+        ${invariant_filter} tmp/bcfs/*.bcf ${split_multiallelic} \
         | bcftools +fill-tags -Ou -- -t ${fill_tags} \
         | bcftools view ${output_format}
     else

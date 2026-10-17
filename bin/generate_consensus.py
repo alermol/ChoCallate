@@ -120,43 +120,67 @@ def batched_intervals(bed_file, max_gap):
         yield contig, span
 
 
-def genotype_key(record, ref_base):
-    """Consensus voting key of one caller record.
+def genotype_key(records, ref_base):
+    """Consensus voting key of one caller at a position.
 
-    Hom-reference calls (any ploidy) are mapped onto the position's reference
-    placeholder, exactly like positions without a record, so they vote for the
-    reference allele.  Records with a missing genotype (``./.``, ``0/.``) are
-    not evidence of anything: they abstain from the vote.
+    ``records`` are all records of the caller at the position: normally one,
+    but several after multi-allelic splitting or allele atomisation.  Their ALT
+    alleles are merged into one sorted allele set and the genotype indices are
+    remapped to that order.  Hom-reference calls (any ploidy) become the
+    reference placeholder; records with a missing genotype abstain.
 
     Args:
-        record: pysam.VariantRecord of the caller.
+        records: Non-empty list of pysam.VariantRecord objects at one position.
         ref_base: Reference base at the position, upper case.
 
     Returns:
         (reference allele, alternate alleles, genotype) tuple, or ``None`` when
-        the record has no genotyped call and abstains.
+        the records do not form a usable vote.
     """
-    gt = record.samples[0].get('GT')
-    if gt is None or any(allele is None for allele in gt):
+    alt_copies = {}
+    ploidy = 0
+    variant_ref = None
+    for record in records:
+        gt = record.samples[0].get('GT')
+        if gt is None or any(allele is None for allele in gt):
+            continue
+        alts = tuple(allele.upper() for allele in (record.alts or ()))
+        if not alts or alts == _REFERENCE_ALTS:
+            ploidy = max(ploidy, len(gt))
+            continue
+        ref = record.ref.upper()
+        if variant_ref is None:
+            variant_ref = ref
+        elif ref != variant_ref:
+            # two records at the same position with different REF alleles
+            # cannot be represented by one voting key
+            return None
+        ploidy = max(ploidy, len(gt))
+        for allele_index, alt in enumerate(alts, 1):
+            copies = sum(1 for allele in gt if allele == allele_index)
+            if copies:
+                alt_copies[alt] = max(alt_copies.get(alt, 0), copies)
+    if variant_ref is None or not alt_copies:
+        if ploidy:
+            return (ref_base, _REFERENCE_ALTS, (0, 0))
         return None
-    gt = tuple(sorted(gt))
-    if all(allele == 0 for allele in gt):
-        # any ploidy: (0,), (0, 0), ... all vote on the reference placeholder
-        return (ref_base, _REFERENCE_ALTS, (0, 0))
-    alts = tuple(sorted(allele.upper() for allele in (record.alts or ())))
-    if not alts:
-        # a non-reference GT without ALT alleles is not usable evidence
+    alts = tuple(sorted(alt_copies))
+    total_copies = sum(alt_copies[alt] for alt in alts)
+    if total_copies > ploidy:
+        # inconsistent split genotypes (for example 1/1 plus 0/1 in a diploid
+        # caller): abstain instead of inventing a genotype
         return None
-    return (record.ref.upper(), alts, gt)
+    gt = [0] * (ploidy - total_copies)
+    for allele_index, alt in enumerate(alts, 1):
+        gt.extend([allele_index] * alt_copies[alt])
+    return (variant_ref, alts, tuple(gt))
 
 
 def _zygosity(key, alt):
     """Classify a vote supporting ``alt`` as ``het`` or ``hom`` ALT.
 
     Haploid ALT calls count as homozygous (one ALT copy out of one).  A
-    multi-allelic genotype is reduced to the winning ALT allele; the calling
-    modules emit biallelic records, so the other ALT copies do not occur in
-    practice.
+    multi-allelic or split genotype is reduced to the winning ALT allele.
     """
     _, alts, gt = key
     indices = {index + 1 for index, allele in enumerate(alts) if allele == alt}
@@ -175,25 +199,27 @@ def _genotype_for(zygosity, ploidy):
     return (0,) * (ploidy - 1) + (1,)
 
 
-def consensus_genotype(keys, consensus_threshold, qualities=None,
-                       tie_policy='nocall'):
-    """Two-stage consensus genotype, or None when there is no decision.
+def consensus_calls(keys, consensus_threshold, qualities=None,
+                    tie_policy='nocall'):
+    """Consensus records for one position.
 
     Stage 1 (site): every ALT allele supported by at least
-    ``consensus_threshold`` callers is a candidate.  Stage 2 (genotype): among
-    the supporters of the winning ALT, the majority zygosity (heterozygous vs
-    homozygous ALT) wins.  A tie is resolved by ``tie_policy``:
+    ``consensus_threshold`` callers becomes a consensus candidate.  Stage 2
+    (genotype): for each candidate, the majority zygosity (heterozygous vs
+    homozygous ALT) among its supporters wins.  A genotype tie is resolved by
+    ``tie_policy``:
 
     ``nocall``
-        No record is written (default; independent of caller order).
+        Skip that ALT (default; independent of caller order).
     ``first``
         Use the earliest supporter in the configured caller order.
     ``qual``
-        Use the largest summed QUAL; a remaining tie is a no-call.
+        Use the largest summed QUAL; a remaining tie skips that ALT.
 
-    The same policy resolves a tie between two ALT candidates.  When no ALT
-    reaches the threshold, the position is hom-reference if at least
-    ``consensus_threshold`` reference votes remain, otherwise it is a no-call.
+    Every qualifying ALT produces its own split consensus record; the output
+    stage re-joins them unless split output was requested.  When no ALT reaches
+    the threshold, the position is hom-reference if at least
+    ``consensus_threshold`` reference votes remain, otherwise the list is empty.
 
     Args:
         keys: List of (ref, alt tuple, gt tuple) keys and ``None`` for
@@ -204,7 +230,8 @@ def consensus_genotype(keys, consensus_threshold, qualities=None,
         tie_policy: ``nocall``, ``first`` or ``qual``.
 
     Returns:
-        The winning (ref, alt tuple, gt tuple), or None.
+        A list of (ref, alt tuple, gt tuple) records; normally zero, one or one
+        split record per qualifying ALT.
     """
     if qualities is None:
         qualities = [0.0] * len(keys)
@@ -225,55 +252,45 @@ def consensus_genotype(keys, consensus_threshold, qualities=None,
                 alt_support.setdefault(alts[allele_index - 1], []).append(
                     (index, key))
 
-    candidates = [(alt, supporters) for alt, supporters in alt_support.items()
-                  if len(supporters) >= consensus_threshold]
+    candidates = sorted(
+        (alt, supporters) for alt, supporters in alt_support.items()
+        if len(supporters) >= consensus_threshold)
     if not candidates:
         if reference_count >= consensus_threshold:
-            return reference_key
-        return None
+            return [reference_key]
+        return []
 
-    max_support = max(len(supporters) for _, supporters in candidates)
-    top = [(alt, supporters) for alt, supporters in candidates
-           if len(supporters) == max_support]
-    if len(top) > 1:
-        if tie_policy == 'first':
-            top = [min(top, key=lambda item: min(i for i, _ in item[1]))]
-        elif tie_policy == 'qual':
-            scored = [(sum(qualities[i] for i, _ in supporters), alt, supporters)
-                      for alt, supporters in top]
-            best = max(score for score, _, _ in scored)
-            top = [(alt, supporters) for score, alt, supporters in scored
-                   if score == best]
-        if len(top) > 1:
-            return None
-    alt, supporters = top[0]
-
-    classes = {}
-    for index, key in supporters:
-        zygosity = _zygosity(key, alt)
-        if zygosity is not None:
-            classes.setdefault(zygosity, []).append((index, key))
-    if not classes:
-        return None
-    max_class = max(len(members) for members in classes.values())
-    winners = [(zygosity, members) for zygosity, members in classes.items()
-               if len(members) == max_class]
-    if len(winners) > 1:
-        if tie_policy == 'first':
-            winners = [min(winners,
-                           key=lambda item: min(i for i, _ in item[1]))]
-        elif tie_policy == 'qual':
-            scored = [(sum(qualities[i] for i, _ in members), zygosity, members)
-                      for zygosity, members in winners]
-            best = max(score for score, _, _ in scored)
-            winners = [(zygosity, members) for score, zygosity, members in scored
-                       if score == best]
+    calls = []
+    for alt, supporters in candidates:
+        classes = {}
+        for index, key in supporters:
+            zygosity = _zygosity(key, alt)
+            if zygosity is not None:
+                classes.setdefault(zygosity, []).append((index, key))
+        if not classes:
+            continue
+        max_class = max(len(members) for members in classes.values())
+        winners = [(zygosity, members) for zygosity, members in classes.items()
+                   if len(members) == max_class]
         if len(winners) > 1:
-            return None
-    zygosity, members = winners[0]
-    ploidy = max(len(key[2]) for _, key in members)
-    ref = members[0][1][0]
-    return (ref, (alt,), _genotype_for(zygosity, ploidy))
+            if tie_policy == 'first':
+                winners = [min(winners,
+                               key=lambda item: min(i for i, _ in item[1]))]
+            elif tie_policy == 'qual':
+                scored = [(sum(qualities[i] for i, _ in members), zygosity, members)
+                          for zygosity, members in winners]
+                best = max(score for score, _, _ in scored)
+                winners = [(zygosity, members)
+                           for score, zygosity, members in scored
+                           if score == best]
+            if len(winners) > 1:
+                # unresolved genotype tie: this ALT gets no consensus record
+                continue
+        zygosity, members = winners[0]
+        ploidy = max(len(key[2]) for _, key in members)
+        ref = members[0][1][0]
+        calls.append((ref, (alt,), _genotype_for(zygosity, ploidy)))
+    return calls
 
 
 def site_from_entries(names, seqs, quals, dp):
@@ -797,7 +814,9 @@ def main():
                             rel += 1
                             continue
 
-                        # some caller has a record here: collect the votes
+                        # some caller has a record here: collect all of its
+                        # records at this position (one per split ALT after
+                        # normalisation) and build one vote per caller
                         ref_base = ref_seq[rel]
                         keys = [None] * n_files
                         qualities = [0.0] * n_files
@@ -805,14 +824,22 @@ def main():
                         for fi in range(n_files):
                             records = records_per_file[fi]
                             i = indices[fi]
-                            if i < len(records) and records[i].pos == vcf_start:
-                                record = records[i]
-                                key = genotype_key(record, ref_base)
+                            caller_records = []
+                            while (i < len(records)
+                                   and records[i].pos == vcf_start):
+                                caller_records.append(records[i])
+                                i += 1
+                            if caller_records:
+                                key = genotype_key(caller_records, ref_base)
                                 keys[fi] = key
-                                if key is not None and record.qual is not None:
-                                    qualities[fi] = float(record.qual)
+                                if key is not None:
+                                    qualities[fi] = max(
+                                        (float(record.qual)
+                                         for record in caller_records
+                                         if record.qual is not None),
+                                        default=0.0)
                                 present[fi] = True
-                                indices[fi] = i + 1
+                                indices[fi] = i
                         min_next = _NO_RECORD
                         for fi in range(n_files):
                             records = records_per_file[fi]
@@ -838,15 +865,15 @@ def main():
                             if not present[fi]:
                                 keys[fi] = absent_key
 
-                        consensus = consensus_genotype(keys, threshold, qualities,
-                                                       tie_policy)
-                        if consensus is None:
+                        calls = consensus_calls(keys, threshold, qualities,
+                                                tie_policy)
+                        if not calls:
                             vcf_start += 1
                             rel += 1
                             continue
 
-                        if consensus[1] == _REFERENCE_ALTS and all(
-                                allele == 0 for allele in consensus[2]):
+                        if len(calls) == 1 and calls[0][1] == _REFERENCE_ALTS \
+                                and all(allele == 0 for allele in calls[0][2]):
                             # hom-reference consensus: write the same gVCF-style
                             # record as the fast path, with honest <*> depth
                             if reference_detail is None:
@@ -870,20 +897,20 @@ def main():
                             rel += 1
                             continue
 
-                        alleles = [consensus[0]] + list(consensus[1])
-                        if has_column:
-                            site = site_of()
-                        else:
-                            site = None
-                        ad, dp = recover_ad_dp(site, alleles)
-                        if use_accel:
-                            writer.write_record(rid, vcf_start - 1, alleles,
-                                                consensus[2], ad, dp)
-                        else:
-                            write_consensus_record(output_file, contig, vcf_start - 1,
-                                                   vcf_start, alleles, consensus[2],
-                                                   ad, dp)
-                        shift = len(consensus[0])  # shift on reference genotype length
+                        # one split record per qualifying ALT
+                        site = site_of() if has_column else None
+                        shift = max(len(call[0]) for call in calls)
+                        for ref, alts, gt in calls:
+                            alleles = [ref] + list(alts)
+                            ad, dp = recover_ad_dp(site, alleles)
+                            if use_accel:
+                                writer.write_record(rid, vcf_start - 1, alleles,
+                                                    gt, ad, dp)
+                            else:
+                                write_consensus_record(output_file, contig,
+                                                       vcf_start - 1,
+                                                       vcf_start, alleles, gt,
+                                                       ad, dp)
                         vcf_start += shift
                         rel += shift
         finally:
