@@ -31,6 +31,7 @@ from conftest import (  # noqa: I100,I202  (tests run from this directory)
 
 # 0-based indexes of two reference bases ('ACGT' repeats, so index % 4 picks it)
 POS_20_0B = 19   # 1-based position 20, reference 'A'
+POS_24_0B = 23   # 1-based position 24, covered by all five test reads
 POS_30_0B = 29   # 1-based position 30, reference 'C'
 
 
@@ -200,19 +201,25 @@ def test_monomorphic_record_carries_other_allele_depth(tmp_path, use_accel):
 
 
 def test_concordant_callers_are_merged(consensus_runner):
-    """Two matching variant calls win over one placeholder vote."""
+    """Two matching ALT calls win over one placeholder vote.
+
+    The genotype classes (0/1 and 1/1) tie, so the explicit ``qual`` policy
+    picks the class with the larger summed QUAL instead of relying on caller
+    order.
+    """
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, 31), ('chr1', 40, 42)],
         caller_records=[
-            [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))],
-            [(POS_30_0B, ref_base(30), [alt_base(30)], (1, 1))],
+            [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1), 50)],
+            [(POS_30_0B, ref_base(30), [alt_base(30)], (1, 1), 20)],
         ],
         threshold=1,
+        tie_policy='qual',
     )
     records = read_records(output)
-    # 0/1 and 1/1 are different keys (C-03, voting-model work); the tie goes to
-    # the first caller and the threshold is met.  The point here is that the
-    # placeholder votes do not win and the interval ends are written.
+    # The two callers agree on the ALT allele, so the site passes the site
+    # stage; the 0/1 class has the higher summed QUAL.  Placeholder votes must
+    # not win, and the interval ends are written.
     assert records[0] == (30, (ref_base(30), alt_base(30)), (0, 1))
     assert [pos for pos, _, _ in records] == [30, 31, 41, 42]
 
@@ -251,7 +258,7 @@ def test_accel_and_pure_paths_agree(tmp_path):
 
 
 def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
-    """D.2/C-04: ##callers and ##callersFailed describe the vote."""
+    """D.2/C-04: the structured header describes the vote and its inputs."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -273,8 +280,10 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
         records = list(variant_file)
-    assert '##callers=bcftools,gatk' in header
-    assert '##callersFailed=freebayes' in header
+    expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
+                'Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,'
+                'SplitMultiallelic=False,CallersFailed="freebayes">')
+    assert expected in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
             for record in records] == [
@@ -298,8 +307,8 @@ def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
     assert 'surviving caller' in excinfo.value.stderr
 
 
-def test_caller_order_controls_tie_break(tmp_path, use_accel):
-    """D.2: --callers defines the voting order used for ties."""
+def test_caller_order_only_matters_with_first_policy(tmp_path, use_accel):
+    """D.3: the default is order-independent; ``first`` opts into caller order."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -314,17 +323,23 @@ def test_caller_order_controls_tie_break(tmp_path, use_accel):
                          [(POS_30_0B, ref_base(30), [alt2], (0, 1))]),
     ]
 
-    def consensus_alleles(order, output_name):
+    def consensus_alleles(order, policy, output_name):
         output = run_consensus(
             tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
             callers=['bcftools', 'freebayes'], configured_callers=order,
-            use_accel=use_accel, reference=reference,
+            tie_policy=policy, use_accel=use_accel, reference=reference,
             output_name=output_name)
-        return read_records(output)[0][1]
+        records = read_records(output)
+        return records[0][1] if records else None
 
-    assert consensus_alleles(['bcftools', 'freebayes'], 'first.bcf') == \
+    # Two distinct ALT alleles with equal support: the default no-call policy
+    # is independent of the configured caller order.
+    assert consensus_alleles(['bcftools', 'freebayes'], 'nocall', 'nocall1.bcf') is None
+    assert consensus_alleles(['freebayes', 'bcftools'], 'nocall', 'nocall2.bcf') is None
+    # The explicit ``first`` policy is the only one that uses caller order.
+    assert consensus_alleles(['bcftools', 'freebayes'], 'first', 'first1.bcf') == \
         (ref_base(30), alt1)
-    assert consensus_alleles(['freebayes', 'bcftools'], 'second.bcf') == \
+    assert consensus_alleles(['freebayes', 'bcftools'], 'first', 'first2.bcf') == \
         (ref_base(30), alt2)
 
 
@@ -356,8 +371,184 @@ def test_any_caller_subset(tmp_path, use_accel, callers):
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
         records = list(variant_file)
-    assert f'##callers={",".join(callers)}' in header
+    assert f'Callers="{",".join(callers)}"' in header
+    assert 'Rule=two-stage' in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
             for record in records] == [
         (30, (ref_base(30), alt_base(30)), (0, 1))]
+
+
+# C-03 decision table with three configured callers.  ``h`` is a 0/1 call,
+# ``m`` a 1/1 call and ``-`` a caller without a record.  The expected values
+# use the D.3 defaults: absent_vote=ref and tie_policy=nocall.
+C03_TABLE = {
+    ('--h', 1): 'variant',
+    ('--h', 2): 'reference',
+    ('--h', 3): None,
+    ('h--', 1): 'variant',
+    ('h--', 2): 'reference',
+    ('h--', 3): None,
+    ('hm-', 1): None,
+    ('hm-', 2): None,
+    ('hm-', 3): None,
+    ('-hm', 1): None,
+    ('-hm', 2): None,
+    ('-hm', 3): None,
+}
+
+
+def _c03_caller_records(placement, alt):
+    """Caller records for a row of the C-03 table."""
+    records = []
+    for marker in placement:
+        if marker == 'h':
+            records.append([(POS_30_0B, ref_base(30), [alt], (0, 1))])
+        elif marker == 'm':
+            records.append([(POS_30_0B, ref_base(30), [alt], (1, 1))])
+        else:
+            records.append([])
+    return records
+
+
+@pytest.mark.parametrize('placement,threshold', C03_TABLE)
+def test_c03_voting_table(consensus_runner, placement, threshold):
+    """D.3/C-03: the two-stage vote reproduces the documented table."""
+    alt = alt_base(30)
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
+        caller_records=_c03_caller_records(placement, alt),
+        threshold=threshold,
+    )
+    expected = C03_TABLE[(placement, threshold)]
+    if expected == 'variant':
+        assert read_records(output) == [
+            (30, (ref_base(30), alt), (0, 1))]
+    elif expected == 'reference':
+        assert read_records(output) == [
+            (30, (ref_base(30), '<*>'), (0, 0))]
+    else:
+        assert read_records(output) == []
+
+
+@pytest.mark.parametrize('placement', ['hm-', '-hm'])
+def test_c03_genotype_tie_with_first_policy(consensus_runner, placement):
+    """D.3: ``first`` resolves a zygosity tie by configured caller order."""
+    alt = alt_base(30)
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
+        caller_records=_c03_caller_records(placement, alt),
+        threshold=1,
+        tie_policy='first',
+    )
+    assert read_records(output) == [(30, (ref_base(30), alt), (0, 1))]
+
+
+def test_tie_policy_qual_uses_summed_quality(consensus_runner):
+    """D.3: ``qual`` picks the genotype class with the larger summed QUAL."""
+    alt = alt_base(30)
+    bed = [('chr1', POS_30_0B, POS_30_0B + 1)]
+
+    het_wins = consensus_runner(
+        bed_intervals=bed,
+        caller_records=[
+            [(POS_30_0B, ref_base(30), [alt], (0, 1), 90)],
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), 20)],
+        ],
+        threshold=1, tie_policy='qual')
+    assert read_records(het_wins) == [(30, (ref_base(30), alt), (0, 1))]
+
+    hom_wins = consensus_runner(
+        bed_intervals=bed,
+        caller_records=[
+            [(POS_30_0B, ref_base(30), [alt], (0, 1), 20)],
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), 90)],
+        ],
+        threshold=1, tie_policy='qual', output_name='hom_wins.bcf')
+    assert read_records(hom_wins) == [(30, (ref_base(30), alt), (1, 1))]
+
+    tied = consensus_runner(
+        bed_intervals=bed,
+        caller_records=[
+            [(POS_30_0B, ref_base(30), [alt], (0, 1), 50)],
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), 50)],
+        ],
+        threshold=1, tie_policy='qual', output_name='tied.bcf')
+    assert read_records(tied) == []
+
+
+def test_absent_vote_abstain_requires_coverage(consensus_runner):
+    """D.3: an absent caller only votes ref when the position is covered."""
+    alt = alt_base(24)
+    covered_bed = [('chr1', POS_24_0B, POS_24_0B + 1)]
+    covered_variant = [(POS_24_0B, ref_base(24), [alt], (0, 1))]
+
+    reference_vote = consensus_runner(
+        bed_intervals=covered_bed,
+        caller_records=[covered_variant, [], []],
+        threshold=2, absent_vote='ref')
+    assert read_records(reference_vote) == [
+        (24, (ref_base(24), '<*>'), (0, 0))]
+
+    abstain_with_coverage = consensus_runner(
+        bed_intervals=covered_bed,
+        caller_records=[covered_variant, [], []],
+        threshold=2, absent_vote='abstain', min_coverage=1,
+        output_name='abstain_covered.bcf')
+    assert read_records(abstain_with_coverage) == [
+        (24, (ref_base(24), '<*>'), (0, 0))]
+
+    abstain_too_strict = consensus_runner(
+        bed_intervals=covered_bed,
+        caller_records=[covered_variant, [], []],
+        threshold=2, absent_vote='abstain', min_coverage=100,
+        output_name='abstain_strict.bcf')
+    assert read_records(abstain_too_strict) == []
+
+    # A BED position without a pileup column has no coverage evidence, so an
+    # absent caller abstains even with min_coverage=0.
+    uncovered_bed = [('chr1', POS_30_0B, POS_30_0B + 1)]
+    uncovered_variant = [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]
+    abstain_uncovered = consensus_runner(
+        bed_intervals=uncovered_bed,
+        caller_records=[uncovered_variant, [], []],
+        threshold=2, absent_vote='abstain', min_coverage=0,
+        output_name='abstain_uncovered.bcf')
+    assert read_records(abstain_uncovered) == []
+
+    ref_uncovered = consensus_runner(
+        bed_intervals=uncovered_bed,
+        caller_records=[uncovered_variant, [], []],
+        threshold=2, absent_vote='ref', output_name='ref_uncovered.bcf')
+    assert read_records(ref_uncovered) == [
+        (30, (ref_base(30), '<*>'), (0, 0))]
+
+
+def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
+    """D.3: the single header line records the applied voting rule."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 1)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'bcftools.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+        write_caller_bcf(tmp_path / 'gatk.bcf', 'sample1',
+                         [(POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+    ]
+    output = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
+        callers=['bcftools', 'gatk'],
+        configured_callers=['bcftools', 'freebayes', 'gatk'],
+        absent_vote='abstain', tie_policy='qual', min_coverage=3,
+        use_accel=use_accel, reference=reference)
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
+                'Rule=two-stage,Tie=qual,AbsentVote=abstain,MinCoverage=3,'
+                'RemoveInvariant=False,SplitMultiallelic=False,'
+                'CallersFailed="freebayes">')
+    assert expected in header

@@ -131,9 +131,11 @@ def write_caller_bcf(path, sample_name, records, contig=CHR, length=len(REF_SEQ)
         path: Output BCF path.
         sample_name: Name of the single sample.
         records: Iterable of (start0, ref, alts, gt) tuples; ``gt`` is a tuple
-            such as (0, 1), (0, 0) or (None, None).  An empty ``alts`` is
-            written as the VCF placeholder ALT ``.``, the same representation
-            generate_consensus.py itself emits for hom-reference records.
+            such as (0, 1), (0, 0) or (None, None).  An optional fifth item sets
+            the record QUAL (used by the ``qual`` tie policy).  An empty
+            ``alts`` is written as the VCF placeholder ALT ``.``, the same
+            representation generate_consensus.py itself emits for
+            hom-reference records.
         contig: Contig name.
         length: Contig length.
 
@@ -145,20 +147,25 @@ def write_caller_bcf(path, sample_name, records, contig=CHR, length=len(REF_SEQ)
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
     header.add_sample(sample_name)
     with pysam.VariantFile(str(path), 'wb', header=header) as out:
-        for start0, ref, alts, gt in records:
+        for entry in records:
+            start0, ref, alts, gt = entry[:4]
+            qual = entry[4] if len(entry) > 4 else None
             alleles = (ref,) + (tuple(alts) if alts else ('.',))
             record = out.new_record(contig=contig, start=start0,
                                     stop=start0 + len(ref),
                                     alleles=alleles)
+            if qual is not None:
+                record.qual = qual
             record.samples[0]['GT'] = gt
             out.write(record)
-    subprocess.run([BCFTOOLS, 'index', '--csi', str(path)], check=True)
+    subprocess.run([BCFTOOLS, 'index', '--csi', '-f', str(path)], check=True)
     return path
 
 
 def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sample1',
                   use_accel=False, output_name='out.bcf', reference=None,
-                  callers=None, configured_callers=None, check=True):
+                  callers=None, configured_callers=None, check=True,
+                  absent_vote='ref', tie_policy='nocall', min_coverage=0):
     """Run bin/generate_consensus.py as a subprocess and return its output path.
 
     Args:
@@ -168,6 +175,9 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         configured_callers: Caller list for ``--callers`` (defaults to
             ``callers``); extra names count as failed callers.
         check: Raise on a non-zero exit status when true.
+        absent_vote: ``ref`` or ``abstain`` voting for absent callers.
+        tie_policy: ``nocall``, ``first`` or ``qual`` tie-breaking.
+        min_coverage: Coverage required by ``absent_vote=abstain``.
     """
     output = tmp_path / output_name
     if reference is None:
@@ -192,6 +202,9 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         '--sample_name', sample_name,
         '--reference', str(reference),
         '--consensus_threshold', str(threshold),
+        '--absent_vote', absent_vote,
+        '--tie_policy', tie_policy,
+        '--min_coverage', str(min_coverage),
         '--version', 'test',
     ]
     subprocess.run(cmd, check=check, env=env, cwd=str(tmp_path),
@@ -230,7 +243,8 @@ def basic_dataset(tmp_path, use_accel):
 @pytest.fixture
 def consensus_runner(tmp_path, use_accel, basic_dataset):
     """Callable that writes caller BCFs and runs the consensus script."""
-    def runner(bed_intervals, caller_records, threshold, sample_name='sample1'):
+    def runner(bed_intervals, caller_records, threshold, sample_name='sample1',
+               **kwargs):
         bed_gz = write_bed(tmp_path / 'coverage.bed', bed_intervals)
         caller_bcfs = []
         for index, records in enumerate(caller_records):
@@ -240,7 +254,8 @@ def consensus_runner(tmp_path, use_accel, basic_dataset):
                                caller_bcfs, threshold,
                                sample_name=sample_name,
                                use_accel=use_accel,
-                               reference=basic_dataset['reference'])
+                               reference=basic_dataset['reference'],
+                               **kwargs)
         return output
 
     return runner

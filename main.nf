@@ -110,7 +110,7 @@ workflow {
         }
 
     // Generate consensus.  The configured caller list is passed separately so
-    // the module can record ##callers/##callersFailed and warn about degrades.
+    // the module can record the structured consensus header and warn about degrades.
     GENERATE_CONSENSUS(all_calls.join(bam_coverage), selected_callers.join(','), ref_genome, fai_index, gen_dict)
 
     // Merge consensuses from different samples into single VCF of BCF

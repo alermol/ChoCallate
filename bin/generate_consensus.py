@@ -4,16 +4,26 @@
 
 Every position of the (bgzipped, tabixed) coverage BED is written to the output,
 so the consensus contains all sites, monomorphic ones included.  At each
-position the callers vote with their genotype; the most frequent call wins if at
-least ``--consensus_threshold`` callers support it.  Positions without a caller
-record - and hom-reference calls of any ploidy - vote for the reference allele.
-Positions without a consensus variant are written as gVCF-style records with
-the symbolic ALT ``<*>``: the reference allele plus "any other allele", whose
-FORMAT/AD slot carries the depth of reads that do not support the reference
-base.  ``bcftools merge --gvcf`` maps that slot onto the real ALT allele of
-another sample's variant, so merged hom-reference samples report their actual
-non-reference depth instead of a fabricated 0.  Records with a missing genotype
-(``./.``, ``0/.``) are not evidence of anything and abstain from the vote.
+position the callers vote with their genotype in two stages: an ALT allele must
+first be supported by at least ``--consensus_threshold`` callers, then the
+majority zygosity among the supporters of the winning ALT decides between
+heterozygous and homozygous ALT.  Ties are resolved by ``--tie_policy``:
+``nocall`` (default, independent of caller order), ``first`` (the earliest
+supporter in configured caller order) or ``qual`` (largest summed QUAL).  A
+position without ALT support is hom-reference when at least
+``--consensus_threshold`` callers vote reference, otherwise it is a no-call.
+
+A caller without a record votes reference by default (``--absent_vote ref``).
+With ``--absent_vote abstain`` it only votes reference when the sample pileup
+has at least ``--min_coverage`` reads at the position; a caller record with a
+missing genotype (``./.``, ``0/.``) always abstains.  Hom-reference calls of any
+ploidy vote reference.  Positions without a consensus variant are written as
+gVCF-style records with the symbolic ALT ``<*>``: the reference allele plus
+"any other allele", whose FORMAT/AD slot carries the depth of reads that do not
+support the reference base.  ``bcftools merge --gvcf`` maps that slot onto the
+real ALT allele of another sample's variant, so merged hom-reference samples
+report their actual non-reference depth instead of a fabricated 0.
+
 FORMAT/AD and FORMAT/DP are recovered from the sample BAM: overlapping mate
 pairs count once (the observation with the highest base quality), and DP counts
 every covering read except reference skips, matching ``samtools depth -J`` used
@@ -75,6 +85,9 @@ SPAN_MAX_GAP = 10000
 # Sentinel for "no caller record left in this span".
 _NO_RECORD = 1 << 60
 
+# Voting key of a reference call (no ALT allele).
+_REFERENCE_ALTS = ('.',)
+
 # Pre-encoded alleles for the monomorphic fast path (REF + ALT='<*>').
 _MONOMORPHIC_ALLELES = {base: (base + ',<*>').encode('ascii') for base in 'ACGTN'}
 
@@ -129,43 +142,138 @@ def genotype_key(record, ref_base):
     gt = tuple(sorted(gt))
     if all(allele == 0 for allele in gt):
         # any ploidy: (0,), (0, 0), ... all vote on the reference placeholder
-        return (ref_base, ('.',), (0, 0))
-    return (record.ref.upper(), tuple(sorted(record.alts)), gt)
+        return (ref_base, _REFERENCE_ALTS, (0, 0))
+    alts = tuple(sorted(allele.upper() for allele in (record.alts or ())))
+    if not alts:
+        # a non-reference GT without ALT alleles is not usable evidence
+        return None
+    return (record.ref.upper(), alts, gt)
 
 
-def consensus_genotype(keys, consensus_threshold):
-    """Most frequent caller genotype, or None if it is below the threshold.
+def _zygosity(key, alt):
+    """Classify a vote supporting ``alt`` as ``het`` or ``hom`` ALT.
 
-    Ties are broken towards the caller that comes first, like
-    ``collections.Counter.most_common(1)`` did.  ``keys`` are the voting keys in
-    caller order, one entry per caller, placeholders included; ``None`` entries
-    are callers that abstained and cast no vote.
+    Haploid ALT calls count as homozygous (one ALT copy out of one).  A
+    multi-allelic genotype is reduced to the winning ALT allele; the calling
+    modules emit biallelic records, so the other ALT copies do not occur in
+    practice.
+    """
+    _, alts, gt = key
+    indices = {index + 1 for index, allele in enumerate(alts) if allele == alt}
+    copies = sum(1 for allele in gt if allele in indices)
+    if copies == 0:
+        return None
+    if copies == len(gt):
+        return 'hom'
+    return 'het'
+
+
+def _genotype_for(zygosity, ploidy):
+    """Output GT for a zygosity and ploidy (ALT index 1)."""
+    if zygosity == 'hom':
+        return (1,) * ploidy
+    return (0,) * (ploidy - 1) + (1,)
+
+
+def consensus_genotype(keys, consensus_threshold, qualities=None,
+                       tie_policy='nocall'):
+    """Two-stage consensus genotype, or None when there is no decision.
+
+    Stage 1 (site): every ALT allele supported by at least
+    ``consensus_threshold`` callers is a candidate.  Stage 2 (genotype): among
+    the supporters of the winning ALT, the majority zygosity (heterozygous vs
+    homozygous ALT) wins.  A tie is resolved by ``tie_policy``:
+
+    ``nocall``
+        No record is written (default; independent of caller order).
+    ``first``
+        Use the earliest supporter in the configured caller order.
+    ``qual``
+        Use the largest summed QUAL; a remaining tie is a no-call.
+
+    The same policy resolves a tie between two ALT candidates.  When no ALT
+    reaches the threshold, the position is hom-reference if at least
+    ``consensus_threshold`` reference votes remain, otherwise it is a no-call.
 
     Args:
-        keys: List of (ref, alt, gt) tuples and ``None`` for abstentions.
-        consensus_threshold: Minimum number of matching calls.
+        keys: List of (ref, alt tuple, gt tuple) keys and ``None`` for
+            abstentions, one entry per caller.
+        consensus_threshold: Minimum number of callers supporting an ALT (or
+            the reference) at the site stage.
+        qualities: Per-caller QUAL values used by the ``qual`` tie policy.
+        tie_policy: ``nocall``, ``first`` or ``qual``.
 
     Returns:
-        The winning (ref, alt, gt) tuple, or None.
+        The winning (ref, alt tuple, gt tuple), or None.
     """
-    counts = {}
+    if qualities is None:
+        qualities = [0.0] * len(keys)
+    reference_key = None
+    reference_count = 0
+    alt_support = {}
     for index, key in enumerate(keys):
         if key is None:
             continue
-        entry = counts.get(key)
-        if entry is None:
-            counts[key] = [1, index]
-        else:
-            entry[0] += 1
-    best = None
-    best_count = 0
-    for key, entry in counts.items():
-        if entry[0] > best_count:
-            best = key
-            best_count = entry[0]
-    if best_count < consensus_threshold:
+        ref, alts, gt = key
+        if not alts or alts == _REFERENCE_ALTS:
+            reference_count += 1
+            if reference_key is None:
+                reference_key = (ref, _REFERENCE_ALTS, (0, 0))
+            continue
+        for allele_index in sorted({allele for allele in gt if allele > 0}):
+            if allele_index <= len(alts):
+                alt_support.setdefault(alts[allele_index - 1], []).append(
+                    (index, key))
+
+    candidates = [(alt, supporters) for alt, supporters in alt_support.items()
+                  if len(supporters) >= consensus_threshold]
+    if not candidates:
+        if reference_count >= consensus_threshold:
+            return reference_key
         return None
-    return best
+
+    max_support = max(len(supporters) for _, supporters in candidates)
+    top = [(alt, supporters) for alt, supporters in candidates
+           if len(supporters) == max_support]
+    if len(top) > 1:
+        if tie_policy == 'first':
+            top = [min(top, key=lambda item: min(i for i, _ in item[1]))]
+        elif tie_policy == 'qual':
+            scored = [(sum(qualities[i] for i, _ in supporters), alt, supporters)
+                      for alt, supporters in top]
+            best = max(score for score, _, _ in scored)
+            top = [(alt, supporters) for score, alt, supporters in scored
+                   if score == best]
+        if len(top) > 1:
+            return None
+    alt, supporters = top[0]
+
+    classes = {}
+    for index, key in supporters:
+        zygosity = _zygosity(key, alt)
+        if zygosity is not None:
+            classes.setdefault(zygosity, []).append((index, key))
+    if not classes:
+        return None
+    max_class = max(len(members) for members in classes.values())
+    winners = [(zygosity, members) for zygosity, members in classes.items()
+               if len(members) == max_class]
+    if len(winners) > 1:
+        if tie_policy == 'first':
+            winners = [min(winners,
+                           key=lambda item: min(i for i, _ in item[1]))]
+        elif tie_policy == 'qual':
+            scored = [(sum(qualities[i] for i, _ in members), zygosity, members)
+                      for zygosity, members in winners]
+            best = max(score for score, _, _ in scored)
+            winners = [(zygosity, members) for score, zygosity, members in scored
+                       if score == best]
+        if len(winners) > 1:
+            return None
+    zygosity, members = winners[0]
+    ploidy = max(len(key[2]) for _, key in members)
+    ref = members[0][1][0]
+    return (ref, (alt,), _genotype_for(zygosity, ploidy))
 
 
 def site_from_entries(names, seqs, quals, dp):
@@ -443,34 +551,46 @@ def generate_mininimal_header(sample_name,
                               remove_invariant,
                               version,
                               callers,
-                              callers_failed):
+                              callers_failed,
+                              tie_policy,
+                              absent_vote,
+                              min_coverage):
     """
     Generate a minimal VCF header for the consensus file.
 
     Args:
         sample_name: String sample name.
         reference_file: pysam.FastaFile object.
-        consensus_threshold: Integer threshold for the consensus genotype.
+        consensus_threshold: Integer threshold for the site-level vote.
         split_multiallelic: Whether multiallelic sites were split.
         remove_invariant: Whether monomorphic sites were removed.
         version: String version of the ChoCallate pipeline.
         callers: Callers that voted for this sample, in voting order.
         callers_failed: Configured callers without a usable record set.
+        tie_policy: Tie policy applied by the voting model.
+        absent_vote: Policy for callers without a record at a position.
+        min_coverage: Coverage threshold used by ``absent_vote=abstain``.
 
     Returns:
         A pysam.VariantHeader object.
     """
     header = pysam.VariantHeader()
     header.add_sample(sample_name)
-    header.add_line(f'##tool=ChoCallate {version}')
+    meta = [f'Version={version}',
+            f'Threshold={consensus_threshold}',
+            f'Callers="{",".join(callers)}"',
+            'Rule=two-stage',
+            f'Tie={tie_policy}',
+            f'AbsentVote={absent_vote}']
+    if absent_vote == 'abstain':
+        meta.append(f'MinCoverage={min_coverage}')
+    meta.append(f'RemoveInvariant={remove_invariant}')
+    meta.append(f'SplitMultiallelic={split_multiallelic}')
+    if callers_failed:
+        meta.append(f'CallersFailed="{",".join(callers_failed)}"')
+    header.add_line('##ChoCallate=<' + ','.join(meta) + '>')
     header.add_line('##ALT=<ID=*,Description="Represents allele(s) other than observed.">')
     header.add_line('##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">')
-    header.add_line(f'##consensusThreshold={consensus_threshold}')
-    header.add_line(f'##multialleleSplit={split_multiallelic}')
-    header.add_line(f'##noMonomorphic={remove_invariant}')
-    header.add_line(f'##callers={",".join(callers)}')
-    if callers_failed:
-        header.add_line(f'##callersFailed={",".join(callers_failed)}')
     for ref in reference_file.references:
         header.add_line(f'##contig=<ID={ref},length={reference_file.get_reference_length(ref)}>')
     header.add_line('##INFO=<ID=NS,Number=1,Type=Integer,Description="Number of samples with data">')
@@ -535,13 +655,24 @@ def main():
     parser.add_argument('--output', required=True, help='Output BCF file')
     parser.add_argument('--sample_name', required=True, help='Sample name')
     parser.add_argument('--reference', required=True, help='Reference genome assembly (fasta file and fai index)')
-    parser.add_argument('--consensus_threshold', required=True, type=int, help='Number of matching calls for consensus')
+    parser.add_argument('--consensus_threshold', required=True, type=int,
+                        help='Minimum caller support at the site level')
     parser.add_argument('--version', required=True, type=str, help='Version of ChoCallate pipeline')
+    parser.add_argument('--absent_vote', choices=('ref', 'abstain'), default='ref',
+                        help='Vote of a caller without a record at a position')
+    parser.add_argument('--tie_policy', choices=('nocall', 'first', 'qual'),
+                        default='nocall', help='How to break voting ties')
+    parser.add_argument('--min_coverage', type=int, default=0,
+                        help='Coverage required for an absent caller to vote '
+                             'reference when --absent_vote is abstain')
     parser.add_argument('--split_multiallelic', action='store_true')
     parser.add_argument('--remove_invariant', action='store_true')
     args = parser.parse_args()
 
     threshold = args.consensus_threshold
+    absent_vote = args.absent_vote
+    tie_policy = args.tie_policy
+    min_coverage = args.min_coverage
     use_accel = BcfLineWriter is not None
     received, failed, input_paths = resolve_inputs(args.input, args.callers)
     if not received:
@@ -555,11 +686,6 @@ def main():
                 'caller(s) ({}) after failure(s) of {}'.format(
                     threshold, len(received), ','.join(received),
                     ','.join(failed)))
-    # write_all_positions is about the configured callers: positions without
-    # any caller record are still written as reference in degraded mode, while
-    # the votes themselves only come from the surviving callers.
-    configured_count = len(received) + len(failed)
-    write_all_positions = threshold <= configured_count
 
     with ExitStack() as stack:
         bed_file = stack.enter_context(pysam.TabixFile(args.bed, index=args.bed + '.csi'))
@@ -572,7 +698,10 @@ def main():
                                            args.remove_invariant,
                                            args.version,
                                            received,
-                                           failed)
+                                           failed,
+                                           tie_policy,
+                                           absent_vote,
+                                           min_coverage)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]
@@ -635,17 +764,25 @@ def main():
                                     min_next = records[i].pos
 
                         if min_next != vcf_start:
-                            # fast path: no caller record here, every caller
-                            # votes for the placeholder reference allele
-                            if write_all_positions:
-                                ref_base = ref_seq[rel]
-                                if has_column:
-                                    dp, ad_ref, observations = reference_support_of(ref_base)
-                                    ad_other = observations - ad_ref
-                                else:
-                                    dp = 0
-                                    ad_ref = 0
-                                    ad_other = 0
+                            # fast path: no caller record here
+                            ref_base = ref_seq[rel]
+                            if has_column:
+                                dp, ad_ref, observations = reference_support_of(ref_base)
+                            else:
+                                dp = 0
+                                ad_ref = 0
+                                observations = 0
+                            # Absent callers vote reference by default.  In
+                            # abstain mode they need at least min_coverage reads
+                            # at the position; a position without a pileup
+                            # column has no evidence.
+                            if absent_vote == 'ref' or (
+                                    has_column and dp >= min_coverage):
+                                reference_votes = n_files
+                            else:
+                                reference_votes = 0
+                            if reference_votes >= threshold:
+                                ad_other = observations - ad_ref
                                 if use_accel:
                                     alleles = _MONOMORPHIC_ALLELES.get(ref_base)
                                     if alleles is None:
@@ -662,12 +799,19 @@ def main():
 
                         # some caller has a record here: collect the votes
                         ref_base = ref_seq[rel]
-                        keys = [(ref_base, ('.',), (0, 0))] * n_files
+                        keys = [None] * n_files
+                        qualities = [0.0] * n_files
+                        present = [False] * n_files
                         for fi in range(n_files):
                             records = records_per_file[fi]
                             i = indices[fi]
                             if i < len(records) and records[i].pos == vcf_start:
-                                keys[fi] = genotype_key(records[i], ref_base)
+                                record = records[i]
+                                key = genotype_key(record, ref_base)
+                                keys[fi] = key
+                                if key is not None and record.qual is not None:
+                                    qualities[fi] = float(record.qual)
+                                present[fi] = True
                                 indices[fi] = i + 1
                         min_next = _NO_RECORD
                         for fi in range(n_files):
@@ -676,23 +820,42 @@ def main():
                             if i < len(records) and records[i].pos < min_next:
                                 min_next = records[i].pos
 
-                        consensus = consensus_genotype(keys, threshold)
+                        reference_detail = None
+                        if absent_vote == 'ref':
+                            absent_key = (ref_base, _REFERENCE_ALTS, (0, 0))
+                        elif any(not seen for seen in present):
+                            if has_column:
+                                reference_detail = reference_support_of(ref_base)
+                                absent_key = (
+                                    (ref_base, _REFERENCE_ALTS, (0, 0))
+                                    if reference_detail[0] >= min_coverage
+                                    else None)
+                            else:
+                                absent_key = None
+                        else:
+                            absent_key = None
+                        for fi in range(n_files):
+                            if not present[fi]:
+                                keys[fi] = absent_key
+
+                        consensus = consensus_genotype(keys, threshold, qualities,
+                                                       tie_policy)
                         if consensus is None:
                             vcf_start += 1
                             rel += 1
                             continue
 
-                        if consensus[1] == ('.',) and all(
+                        if consensus[1] == _REFERENCE_ALTS and all(
                                 allele == 0 for allele in consensus[2]):
                             # hom-reference consensus: write the same gVCF-style
                             # record as the fast path, with honest <*> depth
-                            if has_column:
-                                dp, ad_ref, observations = reference_support_of(ref_base)
-                                ad_other = observations - ad_ref
-                            else:
-                                dp = 0
-                                ad_ref = 0
-                                ad_other = 0
+                            if reference_detail is None:
+                                if has_column:
+                                    reference_detail = reference_support_of(ref_base)
+                                else:
+                                    reference_detail = (0, 0, 0)
+                            dp, ad_ref, observations = reference_detail
+                            ad_other = observations - ad_ref
                             if use_accel:
                                 alleles = _MONOMORPHIC_ALLELES.get(ref_base)
                                 if alleles is None:

@@ -35,6 +35,9 @@ process GENERATE_CONSENSUS {
     def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
     def split_multiallelic = params.output.split_multiallelic ? "--split_multiallelic" : ""
     def remove_invariant = params.output.remove_invariant ? "--remove_invariant" : ""
+    def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
+    def tie_policy = params.consensus.tie_policy != null ? params.consensus.tie_policy : 'nocall'
+    def min_coverage = params.coverage.min_coverage != null ? params.coverage.min_coverage : 0
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
     mkdir -p tmp/bed_chunks/
@@ -50,7 +53,7 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
+    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --absent_vote "${absent_vote}" --tie_policy "${tie_policy}" --min_coverage "${min_coverage}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
     bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf ${filter_invariant} \

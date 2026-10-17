@@ -17,6 +17,13 @@ process CALLING_FREEBAYES {
     tuple val(sample_id), path("freebayes.bcf"), emit: calling_result
 
     script:
+    def caller = params.calling.freebayes ?: [:]
+    def extra_args = caller.extra_args ?: ''
+    def min_snp = caller.min_snp_qual
+    def min_indel = caller.min_indel_qual
+    assert min_snp != null : 'calling.freebayes.min_snp_qual is required'
+    assert min_indel != null : 'calling.freebayes.min_indel_qual is required'
+    def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
@@ -31,7 +38,7 @@ process CALLING_FREEBAYES {
     EOF
 
     parallel -j ${task.cpus} \
-    'freebayes --fasta-reference tmp/ref_genome.fasta --targets {} --hwe-priors-off --no-population-priors --dont-left-align-indels ${params.calling.freebayes.extra_args} --bam tmp/input.bam | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
+    'freebayes --fasta-reference tmp/ref_genome.fasta --targets {} --hwe-priors-off --no-population-priors --dont-left-align-indels ${extra_args} --bam tmp/input.bam | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
     bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o freebayes.bcf

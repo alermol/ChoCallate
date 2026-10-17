@@ -44,16 +44,21 @@ coverage:
 
 calling:
   callers: "bcftools,gatk,freebayes"
-  min_snp_qual: 20
   cpu: 4
   bcftools:
+    min_snp_qual: 20
+    min_indel_qual: 20
     call:
       extra_args: ""
     mpileup:
       extra_args: ""
   freebayes:
+    min_snp_qual: 20
+    min_indel_qual: 20
     extra_args: ""
   gatk:
+    min_snp_qual: 20
+    min_indel_qual: 20
     extra_args: ""
 
 consensus:

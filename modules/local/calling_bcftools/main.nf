@@ -17,6 +17,14 @@ process CALLING_BCFTOOLS {
     tuple val(sample_id), path("bcftools.bcf"), emit: calling_result
 
     script:
+    def caller = params.calling.bcftools ?: [:]
+    def call_args = caller.call?.extra_args ?: ''
+    def mpileup_args = caller.mpileup?.extra_args ?: ''
+    def min_snp = caller.min_snp_qual
+    def min_indel = caller.min_indel_qual
+    assert min_snp != null : 'calling.bcftools.min_snp_qual is required'
+    assert min_indel != null : 'calling.bcftools.min_indel_qual is required'
+    def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
@@ -31,7 +39,7 @@ process CALLING_BCFTOOLS {
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${params.calling.bcftools.mpileup.extra_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.call.extra_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf;
+    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf;
     bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o bcftools.bcf

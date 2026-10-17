@@ -36,19 +36,26 @@ coverage:
 
 calling:
   callers: "bcftools,gatk,freebayes"
-  min_snp_qual: 20
   cpu: 4
   allow_caller_failure: false
   bcftools:
+    min_snp_qual: 20
+    min_indel_qual: 20
     call:
       extra_args: ""
     mpileup:
       extra_args: ""
   freebayes:
+    min_snp_qual: 20
+    min_indel_qual: 20
     extra_args: ""
   gatk:
+    min_snp_qual: 20
+    min_indel_qual: 20
     extra_args: ""
 
 consensus:
   threshold: 2
   cpu: 4
+  absent_vote: "ref"
+  tie_policy: "nocall"

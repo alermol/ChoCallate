@@ -17,6 +17,13 @@ process CALLING_GATK {
     tuple val(sample_id), path("gatk.bcf"), emit: calling_result
 
     script:
+    def caller = params.calling.gatk ?: [:]
+    def extra_args = caller.extra_args ?: ''
+    def min_snp = caller.min_snp_qual
+    def min_indel = caller.min_indel_qual
+    assert min_snp != null : 'calling.gatk.min_snp_qual is required'
+    assert min_indel != null : 'calling.gatk.min_indel_qual is required'
+    def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
     mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
@@ -31,7 +38,7 @@ process CALLING_GATK {
     EOF
 
     parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${params.calling.gatk.extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --sequence-dictionary tmp/ref_genome.dict --tmp-dir \$TMPDIR | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
+    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --sequence-dictionary tmp/ref_genome.dict --tmp-dir \$TMPDIR | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf
     bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o gatk.bcf
