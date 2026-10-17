@@ -8,6 +8,7 @@ include { MAPPING_BWA } from './modules/local/mapping_bwa'
 include { MAPPING_MINIMAP2 } from './modules/local/mapping_minimap2'
 include { PREPARE_BAM } from './modules/local/prepare_bam'
 include { GENERATE_COVERAGE } from './modules/local/generate_coverage'
+include { SCATTER_INTERVALS } from './modules/local/scatter_intervals'
 include { CALLING_BCFTOOLS } from './modules/local/calling_bcftools'
 include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
@@ -86,15 +87,18 @@ workflow {
     exclude_bed = params.input.exclude_bed == null ? file("${projectDir}/assets/NO_FILE", checkIfExists: true) : file(params.input.exclude_bed, checkIfExists: true)
     bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
 
-    // Join each sample's BAM with its own coverage BED by sample_id. This keeps the
-    // pair coupled per sample: passing the two channels independently would combine
-    // them positionally and could mix a BAM with another sample's coverage BED.
-    bam_coverage = bam_file.join(bed_coverage)
+    // Scatter the covered intervals once per sample. Every caller and the
+    // consensus step consume the same chunk list instead of rebuilding it.
+    intervals = SCATTER_INTERVALS(bed_coverage, ref_genome, fai_index, gen_dict)
+
+    // Join each sample's BAM, BAM index and interval chunks by sample_id. This
+    // keeps all per-sample inputs coupled and avoids positional mixing.
+    bam_intervals = bam_file.join(intervals)
 
     // Perform variant calling
-    bcftools = selected_callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
-    freebayes = selected_callers.contains('freebayes') ? CALLING_FREEBAYES(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
-    gatk = selected_callers.contains('gatk') ? CALLING_GATK(bam_coverage, ref_genome, fai_index, gen_dict) : channel.empty()
+    bcftools = selected_callers.contains('bcftools') ? CALLING_BCFTOOLS(bam_intervals, ref_genome, fai_index, gen_dict) : channel.empty()
+    freebayes = selected_callers.contains('freebayes') ? CALLING_FREEBAYES(bam_intervals, ref_genome, fai_index, gen_dict) : channel.empty()
+    gatk = selected_callers.contains('gatk') ? CALLING_GATK(bam_intervals, ref_genome, fai_index, gen_dict) : channel.empty()
     all_calls = bcftools
         .join(freebayes, remainder: true)
         .join(gatk, remainder: true)
@@ -111,7 +115,7 @@ workflow {
 
     // Generate consensus.  The configured caller list is passed separately so
     // the module can record the structured consensus header and warn about degrades.
-    GENERATE_CONSENSUS(all_calls.join(bam_coverage), selected_callers.join(','), ref_genome, fai_index, gen_dict)
+    GENERATE_CONSENSUS(all_calls.join(bam_intervals), selected_callers.join(','), ref_genome, fai_index)
 
     // Merge consensuses from different samples into single VCF of BCF
     if (params.output.type == 'single') {

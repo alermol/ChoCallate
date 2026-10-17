@@ -12,11 +12,10 @@ process GENERATE_CONSENSUS {
     // The `dir/*` staging pattern preserves the caller file names (bcftools.bcf,
     // freebayes.bcf, gatk.bcf), so the consensus step knows which caller each
     // file came from even when a caller is missing.
-    tuple val(sample_id), val(received_callers), path('tmp/callers/*', arity: '1..*'), path("tmp/input.bam"), path("tmp/coverage.bed")
+    tuple val(sample_id), val(received_callers), path('tmp/callers/*', arity: '1..*'), path("tmp/input.bam"), path("tmp/input.bam.csi"), path("tmp/bed_chunks/*", arity: '1..*')
     val configured_callers
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
-    path("tmp/ref_genome.dict")
 
     output:
     tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true
@@ -41,24 +40,19 @@ process GENERATE_CONSENSUS {
     def min_coverage = params.coverage.min_coverage != null ? params.coverage.min_coverage : 0
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
-    mkdir -p tmp/bed_chunks/
     mkdir -p tmp/vcf_chunks/
-
-    gatk SplitIntervals --java-options "-Djava.io.tmpdir=\$TMPDIR" --tmp-dir \$TMPDIR -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
-    parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
-
-    samtools index --threads ${task.cpus} --csi tmp/input.bam
 
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/callers/*.bcf
 
     parallel -j ${task.cpus} \
     'bgzip --threads 1 {}
     tabix --threads 1 --csi -p bed {}.gz
-    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --absent_vote "${absent_vote}" --tie_policy "${tie_policy}" --min_coverage "${min_coverage}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}
-    bcftools index --threads 1 --csi tmp/vcf_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    generate_consensus.py ${input_args} --callers "${configured_callers}" --bed {}.gz --bam tmp/input.bam --output tmp/vcf_chunks/{#}.bcf --sample_name "${sample_id}" --reference tmp/ref_genome.fasta --consensus_threshold "${params.consensus.threshold}" --absent_vote "${absent_vote}" --tie_policy "${tie_policy}" --min_coverage "${min_coverage}" --version "${workflow.manifest.version}" ${split_multiallelic} ${remove_invariant}' ::: tmp/bed_chunks/*.bed
 
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/vcf_chunks/*.bcf ${filter_invariant} ${join_multiallelic} \
+    # The interval chunks are consumed in BED order; ls -v preserves that order
+    # through concat, so no full sort is needed afterwards.
+    bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/vcf_chunks/*.bcf) ${filter_invariant} ${join_multiallelic} \
     | bcftools +fill-tags -Ou -- -t ${fill_tags} \
-    | bcftools sort ${output_format}
+    | bcftools view ${output_format}
     """
 }

@@ -2,6 +2,7 @@ input:
   samples_tsv: null
   reference_genome: null
   reference_index_dir: null
+  reference_index_prefix: null
   include_bed: null
   exclude_bed: null
   format: "fastq"
@@ -21,6 +22,8 @@ mapping:
   mapper: "bowtie2"
   extra_args: ""
   cpu: 10
+  platform: "ILLUMINA"
+  library: null
 
 bam_filter:
   min_map_qual: 0

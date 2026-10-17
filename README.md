@@ -43,7 +43,8 @@ bash cleanup.sh
 ## Testing
 
 The regression suite builds tiny pysam fixtures in code and exercises both the
-pure-pysam and the Cython consensus paths as well as the merge chain:
+pure-pysam and the Cython consensus paths, the shared BAM post-processing helper
+and the production merge script:
 
 ```bash
 python bin/build_consensus_accel.py   # optional: enables the Cython-path tests
@@ -51,7 +52,7 @@ pytest -q tests/python
 ```
 
 The suite needs `pytest` (installed by `environment.yaml`) and the environment's
-`bcftools`/`pysam`. Set `CHOCALLATE_NO_ACCEL=1` when running
+`bcftools`/`samtools`/`pysam`. Set `CHOCALLATE_NO_ACCEL=1` when running
 `generate_consensus.py` directly to force the pure-pysam implementation.
 
 
@@ -103,7 +104,7 @@ nextflow run main.nf -params-file my_run.yaml
 
 - **Reads**: FASTQs (`format: "fastq"`) or a pre-aligned BAM (`format: "bam"`). If you provide a BAM, mapping is skipped.
 - **Reference genome**: Plain or bgzipped FASTA file.
-- **Indexes of reference genome**: All indexes required by the selected mapper/callers.
+- **Indexes of reference genome**: All indexes required by the selected mapper/callers. By default the index prefix is `basename(realpath(reference_genome))`, including a `.gz` suffix; set `input.reference_index_prefix` when the indexes use a different prefix (for example, when the reference is a symlink).
 - **Tip**: Use **absolute paths** for inputs.
 
 `samples_tsv` formats:
@@ -132,7 +133,9 @@ Consensus VCF/BCF records include `FORMAT/GT`, `AD`, and `DP` (AD/DP from BAM), 
 
 Consensus rule: every position of the coverage BED is written, monomorphic sites included. Caller records are normalised before voting: multi-allelic records are split into one record per ALT and complex alleles are atomised with `bcftools norm -f ref -m -any --atomize`; all records of one caller at a position form one allele-set vote with remapped GT indices. Voting has two stages. First, an ALT allele is a candidate when at least `consensus.threshold` callers support it. Second, among the supporters of the winning ALT allele the majority zygosity (heterozygous `0/1` vs homozygous ALT `1/1`) decides the consensus genotype. Ties are resolved by `consensus.tie_policy`: `nocall` (default, no record and independent of caller order), `first` (the earliest supporter in configured caller order) or `qual` (largest summed QUAL; a remaining tie is a no-call). When several ALT alleles reach the threshold, each becomes its own split consensus record; split records are re-joined for the final output unless `output.split_multiallelic: true`. If no ALT reaches the threshold, the position is reference when at least `consensus.threshold` callers vote reference, otherwise it is a no-call. Callers without a record vote reference by default (`consensus.absent_vote: "ref"`); with `"abstain"` they vote reference only when the sample pileup has at least `coverage.min_coverage` reads at the position. Hom-reference calls (any ploidy) vote reference; caller records with a missing genotype (`./.`, `0/.`) abstain. Reference positions are emitted as gVCF-style records with the symbolic ALT `<*>` (GT `0/0`, `INFO/END`, and `AD=(reference depth, other-allele depth)`), and merged output uses `bcftools merge --gvcf`, which maps the `<*>` depth onto the real ALT at variant positions of other samples. `output.remove_invariant: true` drops the monomorphic records from the final output (per-sample files when `output.type: "sample"`, the merged file otherwise); with the default `false` all covered positions are kept.
 
-Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (default 150) so indels near the edge of a covered island are assembled, and each caller BCF is sorted and deduplicated with `bcftools norm -d exact` to remove records duplicated at chunk boundaries.
+Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (default 150) so indels near the edge of a covered island are assembled, and each caller BCF is sorted and deduplicated with `bcftools norm -d exact` to remove records duplicated at chunk boundaries. The covered BED is produced by `mosdepth --no-per-base --quantize` (keeping the runs at or above `coverage.min_coverage`), intersected with the sorted `include_bed`, subtracted with the sorted `exclude_bed`, and split once per sample (`SCATTER_INTERVALS`); the same chunks are reused by every caller and by consensus. Chunk files are concatenated in version order (`ls -v`) and are not re-sorted, except for GATK, whose interval padding can emit overlapping boundary records.
+
+Mapping and BAM input share `bin/postprocess_bam.sh`: reads are coordinate-sorted, MAPQ-filtered after mate fixing and duplicate marking, optionally deduplicated with `samtools markdup`, and indexed once. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
 
 Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,SplitMultiallelic=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`.
 

@@ -1,15 +1,10 @@
 """End-to-end regression tests for bin/generate_consensus.py.
 
-Covers the correctness bugs from the code review (ChoCallate_review.md):
-
-* C-01: the last base of every BED interval was dropped (1-bp intervals produced
-  no output at all).
-* C-02: a caller record with a missing genotype (``./.``, ``0/.``) crashed with
-  ``TypeError``; haploid hom-reference calls were mis-keyed as variants.
-
-Every test runs twice, on the pure-pysam path and (when built) on the Cython
-path, and asserts the documented all-sites behaviour: one output record per
-evaluated BED base.
+Covers interval-end handling, missing genotypes, haploid calls, the voting
+model, provenance headers, multi-allelic output and the pure/Cython equivalence
+paths.  Every test runs twice, on the pure-pysam path and (when built) on the
+Cython path, and asserts the documented all-sites behaviour: one output record
+per evaluated BED base.
 """
 
 import subprocess
@@ -53,7 +48,7 @@ def read_records_full(path):
 
 
 def test_interval_ends_are_written(consensus_runner):
-    """C-01: every base of every BED interval, last base included."""
+    """Every base of every BED interval, last base included."""
     # chr1 9 10 is a single base (1-based 10); chr1 19 25 covers 20..25.
     output = consensus_runner(
         bed_intervals=[('chr1', 9, 10), ('chr1', 19, 25)],
@@ -64,7 +59,7 @@ def test_interval_ends_are_written(consensus_runner):
 
 
 def test_adjacent_intervals_are_not_truncated(consensus_runner):
-    """C-01: adjacent intervals keep their last bases (1-based 10 and 20)."""
+    """Adjacent intervals keep their last bases (1-based 10 and 20)."""
     output = consensus_runner(
         bed_intervals=[('chr1', 0, 10), ('chr1', 10, 20)],
         caller_records=[[], []],
@@ -88,7 +83,7 @@ def test_all_sites_written_once(consensus_runner):
 
 
 def test_missing_genotype_does_not_crash(consensus_runner):
-    """C-02: a ``./.`` caller record is handled instead of raising TypeError."""
+    """A ``./.`` caller record is handled instead of raising TypeError."""
     output = consensus_runner(
         bed_intervals=[('chr1', POS_20_0B, 25)],
         caller_records=[[(POS_20_0B, REF_SEQ[POS_20_0B], [], (None, None))], [], []],
@@ -100,7 +95,7 @@ def test_missing_genotype_does_not_crash(consensus_runner):
 
 
 def test_missing_genotype_abstains_from_the_vote(consensus_runner):
-    """C-02: a no-call record is not a hom-reference vote.
+    """A no-call record is not a hom-reference vote.
 
     Two callers, threshold 2: where one caller emitted ``./.`` only the other
     caller's placeholder vote is left, so the position stays below the threshold
@@ -115,7 +110,7 @@ def test_missing_genotype_abstains_from_the_vote(consensus_runner):
 
 
 def test_missing_genotype_does_not_mask_variant(consensus_runner):
-    """C-02: a no-call must not out-vote a real call from another caller."""
+    """A no-call must not out-vote a real call from another caller."""
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
         caller_records=[
@@ -128,7 +123,7 @@ def test_missing_genotype_does_not_mask_variant(consensus_runner):
 
 
 def test_partial_missing_genotype_abstains(consensus_runner):
-    """C-02: a ``0/.`` record abstains, it is not a hom-reference vote."""
+    """A ``0/.`` record abstains, it is not a hom-reference vote."""
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
         caller_records=[
@@ -141,7 +136,7 @@ def test_partial_missing_genotype_abstains(consensus_runner):
 
 
 def test_haploid_hom_ref_is_reference(consensus_runner):
-    """C-02: a haploid ``0`` is a hom-reference vote, not a variant."""
+    """A haploid ``0`` is a hom-reference vote, not a variant."""
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, 31)],
         caller_records=[[(POS_30_0B, ref_base(30), [], (0,))]],
@@ -154,7 +149,7 @@ def test_haploid_hom_ref_is_reference(consensus_runner):
 
 
 def test_haploid_alt_is_written(consensus_runner):
-    """C-02: a haploid ``1`` does not crash and is reported as a variant."""
+    """A haploid ``1`` does not crash and is reported as a variant."""
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, 31)],
         caller_records=[[(POS_30_0B, ref_base(30), [alt_base(30)], (1,))]],
@@ -177,7 +172,7 @@ def test_consensus_below_threshold_leaves_placeholder(consensus_runner):
 
 
 def test_monomorphic_record_carries_other_allele_depth(tmp_path, use_accel):
-    """C-07 option 1: the <*> AD slot holds non-reference read depth."""
+    """The <*> AD slot holds the non-reference read depth."""
     reference = write_reference(tmp_path / 'ref.fa')
     ref = ref_base(30)
     alt = alt_base(30)
@@ -225,7 +220,7 @@ def test_concordant_callers_are_merged(consensus_runner):
 
 
 def test_accel_and_pure_paths_agree(tmp_path):
-    """T-02: the Cython and pure-pysam implementations produce identical text."""
+    """The Cython and pure-pysam implementations produce identical text."""
     if not ACCEL_AVAILABLE:
         pytest.skip('consensus_accel is not built for this interpreter')
 
@@ -258,7 +253,7 @@ def test_accel_and_pure_paths_agree(tmp_path):
 
 
 def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
-    """D.2/C-04: the structured header describes the vote and its inputs."""
+    """The structured header describes the vote and its inputs."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -291,7 +286,7 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
 
 
 def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
-    """D.2: degraded mode refuses a threshold no surviving caller can reach."""
+    """Degraded mode refuses a threshold no surviving caller can reach."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -308,7 +303,7 @@ def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
 
 
 def test_multiple_alts_are_emitted_regardless_of_caller_order(tmp_path, use_accel):
-    """D.5: distinct supported ALTs become separate order-independent records."""
+    """Distinct supported ALTs become separate order-independent records."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -350,7 +345,7 @@ def test_multiple_alts_are_emitted_regardless_of_caller_order(tmp_path, use_acce
     ('bcftools', 'freebayes', 'gatk'),
 ])
 def test_any_caller_subset(tmp_path, use_accel, callers):
-    """D.2: any non-empty caller subset produces a consensus and a header."""
+    """Any non-empty caller subset produces a consensus and a header."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -376,10 +371,10 @@ def test_any_caller_subset(tmp_path, use_accel, callers):
         (30, (ref_base(30), alt_base(30)), (0, 1))]
 
 
-# C-03 decision table with three configured callers.  ``h`` is a 0/1 call,
+# Two-stage decision table with three configured callers.  ``h`` is a 0/1 call,
 # ``m`` a 1/1 call and ``-`` a caller without a record.  The expected values
-# use the D.3 defaults: absent_vote=ref and tie_policy=nocall.
-C03_TABLE = {
+# use the defaults: absent_vote=ref and tie_policy=nocall.
+VOTING_TABLE = {
     ('--h', 1): 'variant',
     ('--h', 2): 'reference',
     ('--h', 3): None,
@@ -395,8 +390,8 @@ C03_TABLE = {
 }
 
 
-def _c03_caller_records(placement, alt):
-    """Caller records for a row of the C-03 table."""
+def _voting_caller_records(placement, alt):
+    """Caller records for a row of the decision table."""
     records = []
     for marker in placement:
         if marker == 'h':
@@ -408,16 +403,16 @@ def _c03_caller_records(placement, alt):
     return records
 
 
-@pytest.mark.parametrize('placement,threshold', C03_TABLE)
-def test_c03_voting_table(consensus_runner, placement, threshold):
-    """D.3/C-03: the two-stage vote reproduces the documented table."""
+@pytest.mark.parametrize('placement,threshold', VOTING_TABLE)
+def test_voting_table(consensus_runner, placement, threshold):
+    """The two-stage vote reproduces the documented table."""
     alt = alt_base(30)
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
-        caller_records=_c03_caller_records(placement, alt),
+        caller_records=_voting_caller_records(placement, alt),
         threshold=threshold,
     )
-    expected = C03_TABLE[(placement, threshold)]
+    expected = VOTING_TABLE[(placement, threshold)]
     if expected == 'variant':
         assert read_records(output) == [
             (30, (ref_base(30), alt), (0, 1))]
@@ -429,12 +424,12 @@ def test_c03_voting_table(consensus_runner, placement, threshold):
 
 
 @pytest.mark.parametrize('placement', ['hm-', '-hm'])
-def test_c03_genotype_tie_with_first_policy(consensus_runner, placement):
-    """D.3: ``first`` resolves a zygosity tie by configured caller order."""
+def test_genotype_tie_with_first_policy(consensus_runner, placement):
+    """``first`` resolves a zygosity tie by configured caller order."""
     alt = alt_base(30)
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
-        caller_records=_c03_caller_records(placement, alt),
+        caller_records=_voting_caller_records(placement, alt),
         threshold=1,
         tie_policy='first',
     )
@@ -442,7 +437,7 @@ def test_c03_genotype_tie_with_first_policy(consensus_runner, placement):
 
 
 def test_tie_policy_qual_uses_summed_quality(consensus_runner):
-    """D.3: ``qual`` picks the genotype class with the larger summed QUAL."""
+    """``qual`` picks the genotype class with the larger summed QUAL."""
     alt = alt_base(30)
     bed = [('chr1', POS_30_0B, POS_30_0B + 1)]
 
@@ -475,7 +470,7 @@ def test_tie_policy_qual_uses_summed_quality(consensus_runner):
 
 
 def test_absent_vote_abstain_requires_coverage(consensus_runner):
-    """D.3: an absent caller only votes ref when the position is covered."""
+    """An absent caller only votes ref when the position is covered."""
     alt = alt_base(24)
     covered_bed = [('chr1', POS_24_0B, POS_24_0B + 1)]
     covered_variant = [(POS_24_0B, ref_base(24), [alt], (0, 1))]
@@ -522,7 +517,7 @@ def test_absent_vote_abstain_requires_coverage(consensus_runner):
 
 
 def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
-    """D.3: the single header line records the applied voting rule."""
+    """The single header line records the applied voting rule."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -552,7 +547,7 @@ def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
 
 
 def test_split_multiallelic_records_are_aggregated(tmp_path, use_accel):
-    """D.5: all records of a caller at one position form one vote."""
+    """All records of a caller at one position form one vote."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -580,7 +575,7 @@ def test_split_multiallelic_records_are_aggregated(tmp_path, use_accel):
 @pytest.mark.parametrize('split_records', [True, False])
 def test_triallelic_caller_produces_split_consensus(tmp_path, use_accel,
                                                     split_records):
-    """D.5: a 1/2 call produces one consensus record per ALT."""
+    """A 1/2 call produces one consensus record per ALT."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -604,7 +599,7 @@ def test_triallelic_caller_produces_split_consensus(tmp_path, use_accel,
 
 
 def test_atomized_mnp_matches_snp(tmp_path, use_accel):
-    """D.5: an atomised freebayes-style MNP votes with the matching SNP."""
+    """An atomised freebayes-style MNP votes with the matching SNP."""
     reference = write_reference(tmp_path / 'ref.fa')
     reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
     bam = write_bam(tmp_path / 'sample.bam', reads)
@@ -631,7 +626,7 @@ def test_atomized_mnp_matches_snp(tmp_path, use_accel):
 
 
 def test_norm_dedup_removes_chunk_boundary_duplicates(tmp_path):
-    """D.5/C-10: exact duplicates from chunk boundaries are removed."""
+    """Exact duplicates from chunk boundaries are removed."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -654,7 +649,7 @@ def test_norm_dedup_removes_chunk_boundary_duplicates(tmp_path):
 
 
 def test_split_consensus_records_join_for_output(tmp_path, use_accel):
-    """D.5: per-ALT consensus records re-join when split output is off."""
+    """Per-ALT consensus records re-join when split output is off."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')

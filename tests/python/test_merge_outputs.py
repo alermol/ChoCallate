@@ -1,20 +1,19 @@
-"""Tests for the merged (multi-sample) output stage.
+"""End-to-end regression tests for the merged (multi-sample) output stage.
 
-Covers the review findings on `MERGE_OUTPUTS`:
+Covers:
 
-* C-08: with `remove_invariant: false` the merged output must contain all sites,
-  monomorphic ones included.  Per-sample files use gVCF-style `ALT="<*>"`
-  records now, so the chain drops the redundant reference-only record that
-  `bcftools merge --gvcf` + `norm -m -any` split off at variant positions.
-* C-07 (option 1): a hom-reference sample's non-reference read depth must reach
-  the merged ALT AD through the `<*>` slot, instead of a fabricated 0.
-* The merge path for N >= 2 samples as a whole (T-01): sample order, genotypes
-  at the variant position, and the invariant filter when enabled.
+* all sites are kept when ``remove_invariant`` is false, including monomorphic
+  records;
+* a hom-reference sample's non-reference read depth reaches the merged ALT AD;
+* the merge path for N >= 2 samples as a whole: sample order, genotypes at the
+  variant position, and the invariant filter when enabled.
 
-The command chain below mirrors modules/local/merge_outputs/main.nf; keep both in
-sync when the module changes.
+The command chain is exercised through `bin/merge_outputs.sh`, the same script
+used by `MERGE_OUTPUTS`; changes to the production merge path are therefore
+tested directly.
 """
 
+import os
 import subprocess
 import sys
 
@@ -34,8 +33,6 @@ from conftest import (  # noqa: I100,I202  (tests run from this directory)
     write_reference,
 )
 
-FILL_TAGS = ("AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,"
-             "'DP:1=int(sum(FORMAT/DP))'")
 
 # 1-based position and 0-based start of the variant carried by sampleA
 VARIANT_POS = 30
@@ -83,39 +80,29 @@ def build_two_samples(tmp_path, use_accel):
 
 
 def merge_chain(tmp_path, sample_files, reference, remove_invariant,
-                split_multiallelic=False):
-    """Run the MERGE_OUTPUTS command chain and return the merged BCF path."""
+                split_multiallelic=False, output_format='bcf'):
+    """Run bin/merge_outputs.sh and return the merged output path."""
     list_file = tmp_path / 'merge_list.txt'
     list_file.write_text('\n'.join(str(path) for path in sample_files.values()) + '\n')
-    # Mirror MERGE_OUTPUTS: bcftools merge drops generic meta lines, so carry
-    # the first sample's ##ChoCallate line over to the merged header.
-    first_sample = next(iter(sample_files.values()))
-    first_header = subprocess.run(
-        [BCFTOOLS, 'view', '-h', str(first_sample)], check=True,
-        capture_output=True, text=True).stdout
-    meta_file = tmp_path / 'cho_meta.hdr'
-    meta_file.write_text(''.join(
-        line + '\n' for line in first_header.splitlines()
-        if line.startswith('##ChoCallate=')))
+    output = tmp_path / ('consensus.vcf.gz' if output_format == 'vcf'
+                         else 'consensus.bcf')
+    cmd = [
+        str(BIN_DIR / 'merge_outputs.sh'),
+        '--file-list', str(list_file),
+        '--reference', str(reference),
+        '--output', str(output),
+        '--format', output_format,
+        '--cpus', '1',
+        '--bcftools', BCFTOOLS,
+        '--python', sys.executable,
+    ]
     if remove_invariant:
-        expression = 'ALT="." || ALT="<*>" || COUNT(GT="RR")=N_SAMPLES'
-        invariant_filter = f'{BCFTOOLS} filter -e \'{expression}\' -Ou'
-    else:
-        invariant_filter = f'{BCFTOOLS} view -Ou'
-    join_multiallelic = ('' if split_multiallelic
-                         else f'| {BCFTOOLS} norm -m +any -Ou')
-    output = tmp_path / 'consensus.bcf'
-    chain = (
-        f"{sys.executable} {BIN_DIR / 'merge_bcf_tree.py'}"
-        f" --gvcf {reference} --cpus 1 --file-list {list_file}"
-        f" | {BCFTOOLS} norm -m -any -Ou"
-        f" | {sys.executable} {BIN_DIR / 'drop_refonly_duplicates.py'}"
-        f" | {invariant_filter} {join_multiallelic}"
-        f" | {BCFTOOLS} +fill-tags -Ou -- -t {FILL_TAGS}"
-        f" | {BCFTOOLS} annotate -h {meta_file} -Ou"
-        f" | {BCFTOOLS} sort -Ob -o {output}"
-    )
-    subprocess.run(['bash', '-c', chain], check=True, cwd=str(REPO_ROOT))
+        cmd.append('--remove-invariant')
+    if split_multiallelic:
+        cmd.append('--split-multiallelic')
+    env = os.environ.copy()
+    env['TMPDIR'] = str(tmp_path)
+    subprocess.run(cmd, check=True, cwd=str(REPO_ROOT), env=env)
     return output
 
 
@@ -134,7 +121,7 @@ def read_merged_ad(path):
 
 
 def test_all_sites_kept_without_remove_invariant(tmp_path, use_accel):
-    """C-08: remove_invariant=false keeps every covered position exactly once."""
+    """With remove_invariant=false every covered position is kept exactly once."""
     sample_files, reference = build_two_samples(tmp_path, use_accel)
     merged = merge_chain(tmp_path, sample_files, reference, remove_invariant=False)
     records = read_merged(merged)
@@ -149,7 +136,7 @@ def test_all_sites_kept_without_remove_invariant(tmp_path, use_accel):
 
 
 def test_other_allele_depth_reaches_the_merged_alt_slot(tmp_path, use_accel):
-    """C-07 option 1: sampleB's <*> depth becomes its AD for the merged ALT."""
+    """A hom-reference sample's <*> depth becomes its AD for the merged ALT."""
     sample_files, reference = build_two_samples(tmp_path, use_accel)
     merged = merge_chain(tmp_path, sample_files, reference, remove_invariant=False)
     variant_ad = [entry for entry in read_merged_ad(merged) if entry[0] == VARIANT_POS]
@@ -183,6 +170,18 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
         header = str(variant_file.header)
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
+
+
+def test_merged_vcf_output_is_readable(tmp_path, use_accel):
+    """The production merge script writes a valid VCF.gz as well as BCF."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel)
+    merged = merge_chain(tmp_path, sample_files, reference, remove_invariant=False,
+                         output_format='vcf')
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        records = list(variant_file)
+        header = str(variant_file.header)
+    assert '##ChoCallate=' in header
+    assert [record.pos for record in records] == list(range(20, 33))
 
 
 def test_drop_refonly_duplicates_keeps_monomorphic_positions(tmp_path):

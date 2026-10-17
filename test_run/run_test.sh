@@ -10,6 +10,7 @@ input:
   samples_tsv: "$PWD/samples.tsv"
   reference_genome: "$PWD/arth_chr1.fasta.gz"
   reference_index_dir: "$PWD"
+  reference_index_prefix: null
   include_bed: null
   exclude_bed: null
   format: "fastq"
@@ -29,6 +30,8 @@ mapping:
   mapper: "bowtie2"
   extra_args: ""
   cpu: 10
+  platform: "ILLUMINA"
+  library: null
 
 bam_filter:
   min_map_qual: 0
@@ -45,6 +48,7 @@ coverage:
 calling:
   callers: "bcftools,gatk,freebayes"
   cpu: 4
+  allow_caller_failure: false
   bcftools:
     min_snp_qual: 20
     min_indel_qual: 20
@@ -59,11 +63,14 @@ calling:
   gatk:
     min_snp_qual: 20
     min_indel_qual: 20
+    interval_padding: 150
     extra_args: ""
 
 consensus:
   threshold: 2
   cpu: 4
+  absent_vote: "ref"
+  tie_policy: "nocall"
 EOF
 
 echo "Preparing genome index..."

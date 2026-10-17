@@ -1,5 +1,4 @@
 process PREPARE_BAM {
-    maxForks 1
     cpus params.mapping.cpu
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
     afterScript 'stage_cleanup.sh'
@@ -13,21 +12,34 @@ process PREPARE_BAM {
     path("tmp/ref_genome.fasta.fai")
 
     output:
-    tuple val(sample_id), path("mapping.bam"), emit: bam
+    tuple val(sample_id), path("mapping.bam"), path("mapping.bam.csi"), emit: bam
 
     script:
-    def rmdup = params.rmdup.enabled ? 'picard MarkDuplicates -I tmp/stage1.bam -O tmp/stage2.bam -M /dev/null --VALIDATION_STRINGENCY SILENT --REMOVE_DUPLICATES true' : 'mv tmp/stage1.bam tmp/stage2.bam'
-    def lai = params.left_align_indels.enabled ? 'gatk LeftAlignIndels -I tmp/stage2.bam -O mapping.bam -R tmp/ref_genome.fasta --sequence-dictionary tmp/ref_genome.dict -OBI false' : 'mv tmp/stage2.bam mapping.bam'
-    def fixmate = params.input.reads_type != 'se' ? "| samtools sort --threads ${task.cpus} -n - | samtools fixmate --threads ${task.cpus} -m - -" : ''
-    def reads = "tmp/read1"
+    def rmdup = params.rmdup.enabled ? '--rmdup' : ''
+    def left_align = params.left_align_indels.enabled ? '--left-align' : ''
+    def platform = params.mapping.platform ?: 'ILLUMINA'
+    def library = params.mapping.library ?: sample_id
     """
-    samtools addreplacerg -w -r "ID:${sample_id}" -r "SM:${sample_id}" -m overwrite_all -o tmp/rg.bam ${reads}
+    set -o pipefail
 
-    samtools view -F 4 --threads ${task.cpus} -b -q ${params.bam_filter.min_map_qual} tmp/rg.bam ${fixmate} | \
-        samtools sort --threads ${task.cpus} -o tmp/stage1.bam
-
-    ${rmdup}
-
-    ${lai}
+    samtools addreplacerg \
+        -w \
+        -r "ID:${sample_id}" \
+        -r "SM:${sample_id}" \
+        -r "PL:${platform}" \
+        -r "LB:${library}" \
+        -m overwrite_all \
+        -u \
+        -o - \
+        tmp/read1 | \
+    postprocess_bam.sh \
+        --input - \
+        --output mapping.bam \
+        --reference tmp/ref_genome.fasta \
+        --dict tmp/ref_genome.dict \
+        --mapq ${params.bam_filter.min_map_qual} \
+        --threads ${task.cpus} \
+        ${rmdup} \
+        ${left_align}
     """
 }

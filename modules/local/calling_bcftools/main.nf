@@ -1,5 +1,4 @@
 process CALLING_BCFTOOLS {
-    maxForks 1
     cpus params.calling.cpu
     errorStrategy { params.calling.allow_caller_failure ? 'ignore' : (task.attempt <= 2 ? 'retry' : 'terminate') }
     beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
@@ -8,7 +7,7 @@ process CALLING_BCFTOOLS {
     tag "${sample_id}"
 
     input:
-    tuple val(sample_id), path("tmp/input.bam"), path("tmp/coverage.bed")
+    tuple val(sample_id), path("tmp/input.bam"), path("tmp/input.bam.csi"), path("tmp/bed_chunks/*", arity: '1..*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/ref_genome.dict")
@@ -26,28 +25,19 @@ process CALLING_BCFTOOLS {
     assert min_indel != null : 'calling.bcftools.min_indel_qual is required'
     def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
-    mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
-
-    gatk SplitIntervals --java-options "-Djava.io.tmpdir=\$TMPDIR" --tmp-dir \$TMPDIR -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
-    parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
-
-    samtools index --threads ${task.cpus} --csi tmp/input.bam
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
     ${sample_id}
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf;
-    bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
-    # Split multi-allelics and atomise complex alleles once, before voting, so
-    # every caller uses the same representation.  The sort + exact dedup remove
-    # records duplicated at chunk boundaries.
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf \
+    # The chunks are emitted in genomic order; ls -v keeps that order for
+    # concat, so no full sort is needed afterwards.
+    bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/calling_chunks/*.bcf) \
     | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
-    | bcftools sort -Ou \
     | bcftools norm --threads ${task.cpus} -d exact -Ob -o bcftools.bcf
     """
 }
