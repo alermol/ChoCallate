@@ -206,9 +206,12 @@ cdef class PileupTally:
             quals.append(qual)
         return names, seqs, quals, dp
 
-    def simple(self, str ref_base):
+    def simple(self, str ref_base, int max_slots=MAX_TABLE_SLOTS):
         """Return ``(dp, n_ref, n_obs)`` for the current column, or None if the
         column is too deep for the scratch table (caller falls back to Python).
+
+        ``max_slots`` is the table capacity used for that decision; tests
+        lower it to exercise the fallback without a million-read column.
 
         ``dp`` counts every covering read except reference skips (matching
         ``samtools depth -J``).  ``n_ref`` counts reads whose collapsed allele
@@ -227,7 +230,7 @@ cdef class PileupTally:
         cdef int l_qname, qpos, i, dp = 0, n_ref = 0, n_obs = 0, is_match
         cdef char base
 
-        if n > (MAX_TABLE_SLOTS >> 1):
+        if n > (max_slots >> 1):
             return None
         if ref_base:
             ref_char = <char>ord(ref_base[0])

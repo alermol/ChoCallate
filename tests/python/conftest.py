@@ -70,15 +70,19 @@ def write_reference(path, seq=REF_SEQ, contig=CHR):
     return path
 
 
-def write_bam(path, reads, contig=CHR, length=len(REF_SEQ)):
+def write_bam(path, reads, contig=CHR, length=len(REF_SEQ), csi=False):
     """Write a coordinate-sorted indexed BAM.
 
     Args:
         path: Output BAM path.
-        reads: Iterable of (query_name, 0-based start, sequence) tuples, in
-            ascending start order.
+        reads: Iterable of tuples, in ascending start order:
+            ``(query_name, 0-based start, sequence)`` optionally followed by a
+            CIGAR tuple, a SAM flag and a base-quality string.  ``None``
+            qualities are stored as the BAM missing-quality sentinel (255).
         contig: Contig name of the single reference sequence.
         length: Contig length.
+        csi: Write a CSI index instead of a BAI index (needed for positions
+            at or above 2**29).
 
     Returns:
         The BAM path.
@@ -86,18 +90,62 @@ def write_bam(path, reads, contig=CHR, length=len(REF_SEQ)):
     header = {'HD': {'VN': '1.6', 'SO': 'coordinate'},
               'SQ': [{'SN': contig, 'LN': length}]}
     with pysam.AlignmentFile(str(path), 'wb', header=header) as bam:
-        for name, start, seq in reads:
+        for entry in reads:
+            name, start, seq = entry[:3]
+            cigar = entry[3] if len(entry) > 3 else ((0, len(seq)),)
+            flag = entry[4] if len(entry) > 4 else 0
+            qualities = entry[5] if len(entry) > 5 else 'I' * len(seq)
             read = pysam.AlignedSegment()
             read.query_name = name
             read.query_sequence = seq
-            read.flag = 0
+            read.flag = flag
             read.reference_id = 0
             read.reference_start = start
             read.mapping_quality = 60
-            read.cigar = ((0, len(seq)),)
-            read.query_qualities = pysam.qualitystring_to_array('I' * len(seq))
+            read.cigar = cigar
+            if qualities is not None:
+                read.query_qualities = pysam.qualitystring_to_array(
+                    qualities)
             bam.write(read)
-    pysam.index(str(path))
+    if csi:
+        pysam.index('-c', str(path))
+    else:
+        pysam.index(str(path))
+    return path
+
+
+def write_sparse_reference(path, contig, length, start0, seq,
+                           line_bases=60):
+    """Write a mostly-sparse FASTA with known bases and a hand-made .fai.
+
+    Only ``seq``, placed at 0-based ``start0``, is written to the file; the
+    gap before it is a filesystem hole, so a contig close to the 32-bit
+    coordinate limit costs almost no disk space.  The ``.fai`` is written
+    directly because indexing would read the whole sparse file.
+
+    Args:
+        path: Output FASTA path.
+        contig: Contig name.
+        length: Declared contig length.
+        start0: 0-based position of the first base of ``seq``.
+        seq: Known bases to place at ``start0``.
+        line_bases: FASTA line width used by the .fai arithmetic.
+
+    Returns:
+        The FASTA path.
+    """
+    line_width = line_bases + 1
+    header = f'>{contig}\n'
+    offset = len(header)
+    with open(path, 'w', encoding='utf-8') as handle:
+        handle.write(header)
+        for index, base in enumerate(seq, start=start0):
+            line, column = divmod(index, line_bases)
+            handle.seek(offset + line * line_width + column)
+            handle.write(base)
+    with open(f'{path}.fai', 'w', encoding='utf-8') as handle:
+        handle.write(f'{contig}\t{length}\t{offset}\t{line_bases}\t'
+                     f'{line_width}\n')
     return path
 
 

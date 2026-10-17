@@ -14,6 +14,7 @@ import pytest
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
     ACCEL_AVAILABLE,
     BCFTOOLS,
+    CHR,
     REF_SEQ,
     alt_base,
     ref_base,
@@ -22,6 +23,7 @@ from conftest import (  # noqa: I100,I202  (tests run from this directory)
     write_bed,
     write_caller_bcf,
     write_reference,
+    write_sparse_reference,
 )
 
 # 0-based indexes of two reference bases ('ACGT' repeats, so index % 4 picks it)
@@ -387,30 +389,97 @@ def test_concordant_callers_are_merged(consensus_runner):
     assert [pos for pos, _, _ in records] == [30, 31, 41, 42]
 
 
+# Reference for the pileup edge-case dataset: upper-case bases, then a
+# lower-case run and an N run, so both implementations must agree on case and
+# unknown bases.
+EDGE_REF_SEQ = (REF_SEQ[:30] + REF_SEQ[30:40].lower()
+                + 'N' * 10 + REF_SEQ[50:])
+EDGE_START0 = 19
+EDGE_END0 = 60
+
+
+def _bases(start, end):
+    """Upper-case reference bases at 0-based [start, end)."""
+    return EDGE_REF_SEQ[start:end].upper()
+
+
+def write_edge_dataset(tmp_path):
+    """Write a BAM covering the pileup edge cases of the equivalence tests.
+
+    The reads use htslib's 255 missing base quality, overlapping mates whose
+    qualities decide the observation, reference skips on both strands,
+    insertions and deletions at and after their anchor, and a reference that
+    mixes lower-case and N bases.
+    """
+    reference = write_reference(tmp_path / 'ref.fa', seq=EDGE_REF_SEQ)
+    reads = [
+        # full-length unique reads; the second has 255 qualities and an ALT
+        # base at the first caller record
+        ('normal', 19, _bases(19, 60), ((0, 41),), 0, 'I' * 41),
+        ('missingq', 19, _bases(19, 29) + 'A' + _bases(30, 60),
+         ((0, 41),), 0, None),
+        # same-name mates: the higher quality is the observation.  The
+        # reference base wins the first pair, the ALT base the second.
+        ('mate1', 20, _bases(20, 26), ((0, 6),), 0, 'I' * 6),
+        ('mate1', 20, _bases(20, 21) + 'A' + _bases(22, 26),
+         ((0, 6),), 0, None),
+        ('mate2', 20, _bases(20, 26), ((0, 6),), 0, None),
+        ('mate2', 20, _bases(20, 23) + 'A' + _bases(24, 26),
+         ((0, 6),), 0, 'I' * 6),
+        # reference skips on the forward and reverse strand
+        ('skipf', 19, _bases(19, 24) + _bases(34, 40),
+         ((0, 5), (3, 10), (0, 6)), 0, 'I' * 11),
+        ('skipr', 20, _bases(20, 25) + _bases(35, 41),
+         ((0, 5), (3, 10), (0, 6)), 16, 'I' * 11),
+        # insertions and deletions at a caller record, and again away from
+        # any caller record so the fast path sees the affected columns
+        ('ins', 28, _bases(28, 34) + 'AA' + _bases(34, 38),
+         ((0, 6), (1, 2), (0, 4)), 0, 'I' * 12),
+        ('del', 35, _bases(35, 39) + _bases(41, 46),
+         ((0, 4), (2, 2), (0, 5)), 0, 'I' * 9),
+        ('del2', 44, _bases(44, 47) + _bases(48, 52),
+         ((0, 3), (2, 1), (0, 4)), 0, 'I' * 7),
+        ('ins2', 48, _bases(48, 51) + 'TT' + _bases(51, 54),
+         ((0, 3), (1, 2), (0, 3)), 0, 'I' * 8),
+    ]
+    reads.sort(key=lambda entry: entry[1])
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(
+        tmp_path / 'coverage.bed',
+        [(CHR, 9, 10), (CHR, EDGE_START0, EDGE_END0), (CHR, 70, 72)])
+    callers = [
+        write_caller_bcf(tmp_path / 'caller0.bcf', 'sample1', [
+            (29, ref_base(30), [alt_base(30)], (0, 1)),
+            (33, ref_base(34), [ref_base(34) + 'AA'], (0, 1)),
+            (38, EDGE_REF_SEQ[38:41].upper(),
+             [EDGE_REF_SEQ[38].upper()], (0, 1)),
+            (44, 'N', ['A'], (0, 1)),
+        ]),
+        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', []),
+    ]
+    return {'reference': reference, 'bam': bam, 'bed': bed_gz,
+            'callers': callers}
+
+
 def test_accel_and_pure_paths_agree(tmp_path):
-    """The Cython and pure-pysam implementations produce identical text."""
+    """The Cython and pure-pysam implementations produce identical text.
+
+    The dataset exercises 255 base qualities, reference skips, deletions and
+    insertions after their anchor, and a reference that mixes lower-case and
+    N bases.
+    """
     if not ACCEL_AVAILABLE:
         pytest.skip('consensus_accel is not built for this interpreter')
 
-    reference = write_reference(tmp_path / 'ref.fa')
-    # overlapping mates (same query name) and a position without coverage
-    reads = [('r1', 19, REF_SEQ[19:25]), ('r1', 20, REF_SEQ[20:26]),
-             ('r2', 29, REF_SEQ[29:35])]
-    bam = write_bam(tmp_path / 'sample.bam', reads)
-    bed_gz = write_bed(tmp_path / 'coverage.bed',
-                       [('chr1', 9, 10), ('chr1', 19, 25), ('chr1', 29, 36)])
-    caller_bcfs = [
-        write_caller_bcf(tmp_path / 'caller0.bcf', 'sample1',
-                         [(20, REF_SEQ[20], [], (0, 0)),
-                          (POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
-        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', []),
-    ]
-    pure = run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
-                         use_accel=False, output_name='pure.bcf',
-                         reference=reference)
-    accel = run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
-                          use_accel=True, output_name='accel.bcf',
-                          reference=reference)
+    dataset = write_edge_dataset(tmp_path)
+    pure = run_consensus(
+        tmp_path, dataset['bam'], dataset['bed'], dataset['callers'],
+        threshold=1, use_accel=False, output_name='pure.bcf',
+        reference=dataset['reference'])
+    accel = run_consensus(
+        tmp_path, dataset['bam'], dataset['bed'], dataset['callers'],
+        threshold=1, use_accel=True, output_name='accel.bcf',
+        reference=dataset['reference'])
 
     def text(path):
         return subprocess.run([BCFTOOLS, 'view', '-H', str(path)],
@@ -418,6 +487,134 @@ def test_accel_and_pure_paths_agree(tmp_path):
 
     assert text(pure) == text(accel)
     assert text(pure)  # not trivially empty
+    records = read_records(pure)
+    assert (30, (ref_base(30), alt_base(30)), (0, 1)) in records
+    assert (34, (ref_base(34), ref_base(34) + 'AA'), (0, 1)) in records
+    assert (39, (EDGE_REF_SEQ[38:41].upper(),
+                 EDGE_REF_SEQ[38].upper()), (0, 1)) in records
+    assert (45, ('N', 'A'), (0, 1)) in records
+
+
+class _LimitedTally:
+    """PileupTally facade with a deliberately small scratch table."""
+
+    def __init__(self, tally, max_slots):
+        self.tally = tally
+        self.max_slots = max_slots
+        self.fallbacks = 0
+
+    def sync(self, pos1):
+        return self.tally.sync(pos1)
+
+    def simple(self, ref_base):
+        counts = self.tally.simple(ref_base, self.max_slots)
+        if counts is None:
+            self.fallbacks += 1
+        return counts
+
+    def entries(self):
+        return self.tally.entries()
+
+
+def test_accel_and_pure_paths_agree_beyond_scratch_table(tmp_path):
+    """A column too deep for the C scratch table falls back to Python."""
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+
+    import pysam
+
+    import consensus_accel
+    import generate_consensus
+
+    dataset = write_edge_dataset(tmp_path)
+    reference = EDGE_REF_SEQ.upper()
+    # Each walker owns an independent pileup iterator: pysam's columns point
+    # into the read buffer of their file handle.
+    with pysam.AlignmentFile(str(dataset['bam']), 'rb') as pure_file, \
+            pysam.AlignmentFile(str(dataset['bam']), 'rb') as accel_file:
+        def pileup(handle):
+            return handle.pileup(
+                CHR, EDGE_START0, EDGE_END0, truncate=True, stepper='all',
+                min_base_quality=0, max_depth=1000000)
+
+        pure = generate_consensus.ColumnWalker(pileup(pure_file))
+        limited = _LimitedTally(
+            consensus_accel.PileupTally(pileup(accel_file)), max_slots=4)
+        accel = generate_consensus.AccelWalker(limited)
+        for pos1 in range(EDGE_START0 + 1, EDGE_END0 + 1):
+            has_column = accel.sync(pos1)
+            assert has_column == pure.sync(pos1)
+            if not has_column:
+                continue
+            ref = reference[pos1 - 1]
+            assert accel.reference_support(ref) == pure.reference_support(ref)
+            assert accel.site() == pure.site()
+    # At least one column was deeper than the reduced table and took the
+    # Python fallback instead of the C tally.
+    assert limited.fallbacks
+
+
+MAX_POSITION = (1 << 31) - 1
+
+
+def _sparse_files_supported(directory):
+    """True when a seek-created hole is stored compactly."""
+    probe = directory / '.sparse-probe'
+    with open(probe, 'wb') as handle:
+        handle.seek(1 << 20)
+        handle.write(b'x')
+    try:
+        return probe.stat().st_blocks * 512 < (1 << 19)
+    finally:
+        probe.unlink()
+
+
+def test_accel_and_pure_paths_agree_near_position_limit(tmp_path):
+    """Positions and columns just below 2**31 agree byte for byte."""
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+    if not _sparse_files_supported(tmp_path):
+        pytest.skip('filesystem does not support sparse files')
+
+    contig = 'chrBig'
+    length = MAX_POSITION
+    seq = 'ACGTACGTACGTAC'
+    start0 = length - len(seq)
+    reference = write_sparse_reference(
+        tmp_path / 'ref.fa', contig, length, start0, seq)
+
+    # Three staggered reads cover all but the last two BED bases, so the walk
+    # also asks for columns past the end of the pileup near the limit.
+    reads = []
+    for index in range(3):
+        reads.append((f'read{index}', start0 + index, seq[index:index + 10],
+                      ((0, 10),), 0, 'I' * 10))
+    bam = write_bam(tmp_path / 'sample.bam', reads, contig=contig,
+                    length=length, csi=True)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [(contig, start0, length)])
+    alt = 'A' if seq[5] != 'A' else 'C'
+    callers = [
+        write_caller_bcf(tmp_path / 'caller0.bcf', 'sample1',
+                         [(start0 + 5, seq[5], [alt], (0, 1))],
+                         contig=contig, length=length),
+        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', [],
+                         contig=contig, length=length),
+    ]
+
+    pure = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1, use_accel=False,
+        output_name='pure.bcf', reference=reference)
+    accel = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1, use_accel=True,
+        output_name='accel.bcf', reference=reference)
+
+    def text(path):
+        return subprocess.run([BCFTOOLS, 'view', '-H', str(path)],
+                              check=True, capture_output=True, text=True).stdout
+
+    assert text(pure) == text(accel)
+    assert f'{contig}\t{MAX_POSITION}\t' in text(pure)
 
 
 def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
