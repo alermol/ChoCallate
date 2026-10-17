@@ -24,6 +24,15 @@ support the reference base.  ``bcftools merge --gvcf`` maps that slot onto the
 real ALT allele of another sample's variant, so merged hom-reference samples
 report their actual non-reference depth instead of a fabricated 0.
 
+With ``--compress_reference_blocks``, runs of consecutive hom-reference
+positions without caller records are written as one gVCF block carrying
+``INFO/END``.  FORMAT/DP is the minimum depth of the block; FORMAT/AD is omitted
+because one value cannot honestly describe every position of the block and
+``bcftools merge --gvcf`` then reports a missing depth at variant positions of
+other samples instead of a fabricated zero.  Single-base reference records keep
+their per-position AD.  Blocks are split at caller records, at positions that
+cross ``--min_coverage`` and wherever the BED coverage is not contiguous.
+
 FORMAT/AD and FORMAT/DP are recovered from the sample BAM: overlapping mate
 pairs count once (the observation with the highest base quality), and DP counts
 every covering read except reference skips, matching ``samtools depth -J`` used
@@ -118,6 +127,46 @@ def batched_intervals(bed_file, max_gap):
         span_end = end
     if span:
         yield contig, span
+
+
+class CallerCursor:
+    """Stream the records of one caller BCF over a span.
+
+    Keeping only the current head record instead of materialising
+    ``list(fetch(...))`` bounds the memory use by the number of caller records
+    at one position rather than by the size of the span.
+    """
+
+    __slots__ = ('_head', '_iterator')
+
+    def __init__(self, iterator):
+        self._iterator = iterator
+        self._head = next(iterator, None)
+
+    def position(self):
+        """1-based position of the next record, or ``_NO_RECORD``."""
+        if self._head is None:
+            return _NO_RECORD
+        return self._head.pos
+
+    def skip_before(self, pos1):
+        """Discard records that start before 1-based ``pos1``."""
+        head = self._head
+        iterator = self._iterator
+        while head is not None and head.pos < pos1:
+            head = next(iterator, None)
+        self._head = head
+
+    def take_at(self, pos1):
+        """Consume and return all records at 1-based position ``pos1``."""
+        records = []
+        head = self._head
+        iterator = self._iterator
+        while head is not None and head.pos == pos1:
+            records.append(head)
+            head = next(iterator, None)
+        self._head = head
+        return records
 
 
 def genotype_key(records, ref_base):
@@ -533,19 +582,22 @@ class AccelWalker:
         return site_from_entries(*self.tally.entries())
 
 
-def write_monomorphic_record(output_file, contig, start0, ref_base, ad_ref, ad_other, dp):
-    """Write the gVCF-style reference record of a position without a call.
+def write_monomorphic_record(output_file, contig, start0, end0, ref_base,
+                            ad, dp):
+    """Write a gVCF-style reference record or reference block.
 
-    The record carries the symbolic ALT ``<*>``; the second AD slot holds the
-    depth of reads that do not support the reference base, so that
-    ``bcftools merge --gvcf`` reports honest ALT depth for merged samples that
-    are hom-reference.
+    The record carries the symbolic ALT ``<*>``; ``end0`` is the 1-based
+    inclusive end position (equal to ``start0 + 1`` for a single base).  ``ad``
+    is a ``(reference depth, other-allele depth)`` tuple, or ``None`` for a
+    multi-base block, whose per-position depth cannot be represented by one AD
+    value.
     """
-    new_record = output_file.new_record(contig=contig, start=start0, stop=start0 + 1,
+    new_record = output_file.new_record(contig=contig, start=start0, stop=end0,
                                         alleles=(ref_base, '<*>'), qual=None)
     sample = new_record.samples[0]
     sample['GT'] = (0, 0)
-    sample['AD'] = (ad_ref, ad_other)
+    if ad is not None:
+        sample['AD'] = ad
     sample['DP'] = dp
     output_file.write(new_record)
 
@@ -559,6 +611,39 @@ def write_consensus_record(output_file, contig, start0, stop0, alleles, gt, ad, 
     sample['AD'] = ad
     sample['DP'] = dp
     output_file.write(new_record)
+
+
+def write_reference_record(output_file, writer, use_accel, rid, contig,
+                           start0, end0, ref_base, ad, dp):
+    """Write a single-base reference record or a multi-base block.
+
+    ``end0`` is the 1-based inclusive end.  ``ad`` is ``None`` for multi-base
+    blocks, whose FORMAT/AD is deliberately omitted.
+    """
+    if use_accel:
+        alleles = _MONOMORPHIC_ALLELES.get(ref_base)
+        if alleles is None:
+            alleles = (ref_base + ',<*>').encode('ascii')
+        if ad is None:
+            writer.write_reference_block(rid, start0, alleles, dp, end0)
+        else:
+            writer.write_monomorphic(rid, start0, alleles, ad[0], ad[1], dp,
+                                     end0)
+    else:
+        write_monomorphic_record(output_file, contig, start0, end0, ref_base,
+                                 ad, dp)
+
+
+def flush_reference_block(block, output_file, writer, use_accel):
+    """Write and forget a pending reference block."""
+    if block is None:
+        return
+    contig, rid, start0, end0, ref_base, ad, dp = block[:7]
+    if end0 != start0 + 1:
+        # One AD value cannot describe every position of a multi-base block.
+        ad = None
+    write_reference_record(output_file, writer, use_accel, rid, contig,
+                           start0, end0, ref_base, ad, dp)
 
 
 def _header_value(value):
@@ -582,7 +667,7 @@ def generate_mininimal_header(sample_name,
                               absent_vote,
                               min_coverage,
                               command_line=None,
-                              caller_versions=None):
+                              compress_reference_blocks=False):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -599,7 +684,7 @@ def generate_mininimal_header(sample_name,
         absent_vote: Policy for callers without a record at a position.
         min_coverage: Coverage threshold used by ``absent_vote=abstain``.
         command_line: Full pipeline command line, when known.
-        caller_versions: Comma-separated caller ``tool=version`` pairs.
+        compress_reference_blocks: Whether reference blocks were requested.
 
     Returns:
         A pysam.VariantHeader object.
@@ -616,6 +701,7 @@ def generate_mininimal_header(sample_name,
         meta.append(f'MinCoverage={min_coverage}')
     meta.append(f'RemoveInvariant={remove_invariant}')
     meta.append(f'SplitMultiallelic={split_multiallelic}')
+    meta.append(f'ReferenceBlocks={compress_reference_blocks}')
     if callers_failed:
         meta.append(f'CallersFailed="{",".join(callers_failed)}"')
     header.add_line('##ChoCallate=<' + ','.join(meta) + '>')
@@ -623,10 +709,6 @@ def generate_mininimal_header(sample_name,
         header.add_line(
             '##ChoCallateCommand="{}"'.format(
                 _header_value(command_line)))
-    if caller_versions:
-        header.add_line(
-            '##ChoCallateCallerVersions="{}"'.format(
-                _header_value(caller_versions)))
     header.add_line('##ALT=<ID=*,Description="Represents allele(s) other than observed.">')
     header.add_line('##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">')
     for ref in reference_file.references:
@@ -705,28 +787,25 @@ def main():
                              'reference when --absent_vote is abstain')
     parser.add_argument('--command_line_file', default=None,
                         help='File containing the pipeline command line')
-    parser.add_argument('--caller_versions', default=None,
-                        help='Caller provenance as tool=version pairs')
-    parser.add_argument('--caller_versions_file', default=None,
-                        help='File with tool=version lines')
     parser.add_argument('--split_multiallelic', action='store_true')
     parser.add_argument('--remove_invariant', action='store_true')
+    parser.add_argument('--compress_reference_blocks', '--reference_blocks',
+                        action='store_true',
+                        dest='compress_reference_blocks',
+                        help='Compress runs of hom-reference positions into '
+                             'multi-base gVCF blocks')
     args = parser.parse_args()
 
     threshold = args.consensus_threshold
     absent_vote = args.absent_vote
     tie_policy = args.tie_policy
     min_coverage = args.min_coverage
-    caller_versions = args.caller_versions
-    if args.caller_versions_file:
-        with open(args.caller_versions_file, encoding='utf-8') as handle:
-            caller_versions = ','.join(
-                line.strip() for line in handle if line.strip())
     command_line = None
     if args.command_line_file:
         with open(args.command_line_file, encoding='utf-8') as handle:
             command_line = handle.read().strip()
     use_accel = BcfLineWriter is not None
+    compress_blocks = args.compress_reference_blocks
     received, failed, input_paths = resolve_inputs(args.input, args.callers)
     if not received:
         sys.exit('ERROR: no caller BCF available for the configured callers')
@@ -756,7 +835,7 @@ def main():
                                            absent_vote,
                                            min_coverage,
                                            command_line,
-                                           caller_versions)
+                                           compress_blocks)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]
@@ -768,21 +847,19 @@ def main():
         else:
             output_file = stack.enter_context(pysam.VariantFile(args.output, mode='wb', header=header))
 
+        pending_block = None
         try:
             for contig, intervals in batched_intervals(bed_file, SPAN_MAX_GAP):
                 span_start = intervals[0][0]
                 span_end = intervals[-1][1]
                 rid = contig_ids[contig]
-                # Caller records are read once per span (not per BED interval)
-                # and walked with a per-file cursor; records between intervals
-                # are skipped when the cursor catches up with the next position.
-                records_per_file = [list(variant_file.fetch(contig, span_start, span_end))
-                                    for variant_file in variant_files]
-                indices = [0] * n_files
-                min_next = _NO_RECORD
-                for records in records_per_file:
-                    if records and records[0].pos < min_next:
-                        min_next = records[0].pos
+                # Caller records are streamed once per span (not per BED
+                # interval) through a per-file cursor: only the records at the
+                # current position are held in memory.
+                cursors = [CallerCursor(variant_file.fetch(
+                               contig, span_start, span_end))
+                           for variant_file in variant_files]
+                min_next = min(cursor.position() for cursor in cursors)
                 pileup = bam_file.pileup(contig, span_start, span_end,
                                          truncate=True, stepper='all',
                                          min_base_quality=0, max_depth=1000000)
@@ -808,15 +885,11 @@ def main():
                             # a multi-base consensus shift or the start of the
                             # next interval moved past some caller records
                             min_next = _NO_RECORD
-                            for fi in range(n_files):
-                                records = records_per_file[fi]
-                                i = indices[fi]
-                                n_records = len(records)
-                                while i < n_records and records[i].pos < vcf_start:
-                                    i += 1
-                                indices[fi] = i
-                                if i < n_records and records[i].pos < min_next:
-                                    min_next = records[i].pos
+                            for cursor in cursors:
+                                cursor.skip_before(vcf_start)
+                                position = cursor.position()
+                                if position < min_next:
+                                    min_next = position
 
                         if min_next != vcf_start:
                             # fast path: no caller record here
@@ -838,20 +911,44 @@ def main():
                                 reference_votes = 0
                             if reference_votes >= threshold:
                                 ad_other = observations - ad_ref
-                                if use_accel:
-                                    alleles = _MONOMORPHIC_ALLELES.get(ref_base)
-                                    if alleles is None:
-                                        alleles = (ref_base + ',<*>').encode('ascii')
-                                    writer.write_monomorphic(rid, vcf_start - 1,
-                                                             alleles, ad_ref, ad_other, dp)
+                                ad = (ad_ref, ad_other)
+                                if compress_blocks:
+                                    if (pending_block is not None
+                                            and pending_block[0] == contig
+                                            and vcf_start - 1
+                                            == pending_block[3]
+                                            and (dp >= min_coverage)
+                                            == pending_block[7]):
+                                        pending_block[3] = vcf_start
+                                        if dp < pending_block[6]:
+                                            pending_block[6] = dp
+                                    else:
+                                        flush_reference_block(
+                                            pending_block, output_file,
+                                            writer, use_accel)
+                                        pending_block = [
+                                            contig, rid, vcf_start - 1,
+                                            vcf_start, ref_base, ad, dp,
+                                            dp >= min_coverage]
                                 else:
-                                    write_monomorphic_record(output_file, contig,
-                                                             vcf_start - 1, ref_base,
-                                                             ad_ref, ad_other, dp)
+                                    write_reference_record(
+                                        output_file, writer, use_accel,
+                                        rid, contig, vcf_start - 1,
+                                        vcf_start, ref_base, ad, dp)
+                            else:
+                                flush_reference_block(
+                                    pending_block, output_file, writer,
+                                    use_accel)
+                                pending_block = None
                             vcf_start += 1
                             rel += 1
                             continue
 
+                        # A caller record bounds a reference block: the
+                        # position is evaluated individually below.
+                        flush_reference_block(pending_block, output_file,
+                                              writer, use_accel)
+                        pending_block = None
                         # some caller has a record here: collect all of its
                         # records at this position (one per split ALT after
                         # normalisation) and build one vote per caller
@@ -859,14 +956,8 @@ def main():
                         keys = [None] * n_files
                         qualities = [0.0] * n_files
                         present = [False] * n_files
-                        for fi in range(n_files):
-                            records = records_per_file[fi]
-                            i = indices[fi]
-                            caller_records = []
-                            while (i < len(records)
-                                   and records[i].pos == vcf_start):
-                                caller_records.append(records[i])
-                                i += 1
+                        for fi, cursor in enumerate(cursors):
+                            caller_records = cursor.take_at(vcf_start)
                             if caller_records:
                                 key = genotype_key(caller_records, ref_base)
                                 keys[fi] = key
@@ -877,13 +968,11 @@ def main():
                                          if record.qual is not None),
                                         default=0.0)
                                 present[fi] = True
-                                indices[fi] = i
                         min_next = _NO_RECORD
-                        for fi in range(n_files):
-                            records = records_per_file[fi]
-                            i = indices[fi]
-                            if i < len(records) and records[i].pos < min_next:
-                                min_next = records[i].pos
+                        for cursor in cursors:
+                            position = cursor.position()
+                            if position < min_next:
+                                min_next = position
 
                         reference_detail = None
                         if absent_vote == 'ref':
@@ -921,16 +1010,10 @@ def main():
                                     reference_detail = (0, 0, 0)
                             dp, ad_ref, observations = reference_detail
                             ad_other = observations - ad_ref
-                            if use_accel:
-                                alleles = _MONOMORPHIC_ALLELES.get(ref_base)
-                                if alleles is None:
-                                    alleles = (ref_base + ',<*>').encode('ascii')
-                                writer.write_monomorphic(rid, vcf_start - 1,
-                                                         alleles, ad_ref, ad_other, dp)
-                            else:
-                                write_monomorphic_record(output_file, contig,
-                                                         vcf_start - 1, ref_base,
-                                                         ad_ref, ad_other, dp)
+                            write_reference_record(
+                                output_file, writer, use_accel, rid, contig,
+                                vcf_start - 1, vcf_start, ref_base,
+                                (ad_ref, ad_other), dp)
                             vcf_start += 1
                             rel += 1
                             continue
@@ -951,6 +1034,10 @@ def main():
                                                        ad, dp)
                         vcf_start += shift
                         rel += shift
+
+                flush_reference_block(pending_block, output_file, writer,
+                                      use_accel)
+                pending_block = None
         finally:
             if writer is not None:
                 writer.close()

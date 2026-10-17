@@ -44,7 +44,7 @@ REF_DEPTH = 10
 ALT_DEPTH = 2
 
 
-def build_two_samples(tmp_path, use_accel):
+def build_two_samples(tmp_path, use_accel, compress_reference_blocks=False):
     """Per-sample consensus BCFs: sampleA is 0/1 at position 30, sampleB is ref."""
     reference = write_reference(tmp_path / 'ref.fa')
     alt = alt_base(VARIANT_POS)
@@ -76,14 +76,14 @@ def build_two_samples(tmp_path, use_accel):
             use_accel=use_accel, output_name=f'{sample}.bcf',
             reference=reference,
             command_line='nextflow run main.nf -params-file run.yaml',
-            caller_versions='bcftools=1.24,freebayes=1.3.10')
+            compress_reference_blocks=compress_reference_blocks)
         subprocess.run([BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
                        check=True)
     return sample_files, reference
 
 
 def merge_chain(tmp_path, sample_files, reference, remove_invariant,
-                split_multiallelic=False, output_format='bcf'):
+                split_multiallelic=False, output_format='bcf', cpus=1):
     """Run bin/merge_outputs.sh and return the merged output path."""
     list_file = tmp_path / 'merge_list.txt'
     list_file.write_text('\n'.join(str(path) for path in sample_files.values()) + '\n')
@@ -95,7 +95,7 @@ def merge_chain(tmp_path, sample_files, reference, remove_invariant,
         '--reference', str(reference),
         '--output', str(output),
         '--format', output_format,
-        '--cpus', '1',
+        '--cpus', str(cpus),
         '--bcftools', BCFTOOLS,
         '--python', sys.executable,
     ]
@@ -118,9 +118,31 @@ def read_merged(path):
 
 def read_merged_ad(path):
     with pysam.VariantFile(str(path), index_filename=None) as variant_file:
-        return [(record.pos,
-                 tuple(record.samples['sampleA']['AD']),
-                 tuple(record.samples['sampleB']['AD'])) for record in variant_file]
+        entries = []
+        for record in variant_file:
+            ad_a = record.samples['sampleA'].get('AD')
+            ad_b = record.samples['sampleB'].get('AD')
+            entries.append((record.pos,
+                            tuple(ad_a) if ad_a is not None else None,
+                            tuple(ad_b) if ad_b is not None else None))
+        return entries
+
+
+def read_merged_spans(path):
+    """(pos, inclusive end, alleles, GT A, GT B, DP A, DP B) tuples."""
+    with pysam.VariantFile(str(path), index_filename=None) as variant_file:
+        return [(record.pos, record.stop,
+                 (record.ref,) + tuple(record.alts),
+                 tuple(record.samples['sampleA']['GT']),
+                 tuple(record.samples['sampleB']['GT']),
+                 record.samples['sampleA']['DP'],
+                 record.samples['sampleB']['DP'])
+                for record in variant_file]
+
+
+def expanded_positions(spans):
+    return [position for start, end, *_ in spans
+            for position in range(start, end + 1)]
 
 
 def test_all_sites_kept_without_remove_invariant(tmp_path, use_accel):
@@ -165,6 +187,64 @@ def test_remove_invariant_drops_monomorphic_sites(tmp_path, use_accel):
     assert records[0][2:] == ((0, 1), (0, 0))
 
 
+def test_reference_blocks_survive_the_merge(tmp_path, use_accel):
+    """Compressed per-sample input stays compressed and covers all sites."""
+    sample_files, reference = build_two_samples(
+        tmp_path, use_accel, compress_reference_blocks=True)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False)
+    spans = read_merged_spans(merged)
+    assert expanded_positions(spans) == list(range(20, 33))
+    # 20..29 is one block, 30 the only variant, 31..32 a trailing block.
+    assert [(start, end) for start, end, *_ in spans] == [
+        (20, 29), (30, 30), (31, 32)]
+    assert any(end > start for start, end, *_ in spans)
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        assert 'ReferenceBlocks=True' in str(variant_file.header)
+    variant = [span for span in spans if span[0] == VARIANT_POS][0]
+    assert variant[2] == (ref_base(VARIANT_POS), alt_base(VARIANT_POS))
+    assert variant[3:5] == ((0, 1), (0, 0))
+    # Block DP is the minimum over the block (1 at position 20).
+    assert variant[6] == 1
+
+
+def test_reference_block_alt_depth_is_missing_not_zero(tmp_path, use_accel):
+    """A compressed hom-reference sample reports missing, not fake, ALT AD."""
+    sample_files, reference = build_two_samples(
+        tmp_path, use_accel, compress_reference_blocks=True)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False)
+    variant_ad = [entry for entry in read_merged_ad(merged)
+                  if entry[0] == VARIANT_POS]
+    assert len(variant_ad) == 1
+    _, ad_a, ad_b = variant_ad[0]
+    assert ad_a == (REF_DEPTH, ALT_DEPTH)
+    assert ad_b == (None, None)
+
+
+def test_reference_blocks_survive_a_chunked_merge(tmp_path, use_accel):
+    """Blocks pass through the chunked named-pipe merge as well."""
+    sample_files, reference = build_two_samples(
+        tmp_path, use_accel, compress_reference_blocks=True)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False, cpus=2)
+    spans = read_merged_spans(merged)
+    assert expanded_positions(spans) == list(range(20, 33))
+    variant = [span for span in spans if span[0] == VARIANT_POS][0]
+    assert variant[3:5] == ((0, 1), (0, 0))
+
+
+def test_reference_blocks_survive_remove_invariant(tmp_path, use_accel):
+    """The invariant filter sees block records and keeps only the variant."""
+    sample_files, reference = build_two_samples(
+        tmp_path, use_accel, compress_reference_blocks=True)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=True)
+    spans = read_merged_spans(merged)
+    assert [(start, end) for start, end, *_ in spans] == [(VARIANT_POS,
+                                                          VARIANT_POS)]
+
+
 def test_merged_output_has_metadata_line(tmp_path, use_accel):
     """The merged consensus keeps the ##ChoCallate metadata line."""
     sample_files, reference = build_two_samples(tmp_path, use_accel)
@@ -174,7 +254,6 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
     assert '##ChoCallateCommand="nextflow run main.nf' in header
-    assert '##ChoCallateCallerVersions="bcftools=1.24' in header
 
 
 def test_merged_vcf_output_is_readable(tmp_path, use_accel):

@@ -47,6 +47,28 @@ def read_records_full(path):
                  record.samples[0]['DP']) for record in variant_file]
 
 
+def read_spans(path):
+    """(pos, inclusive end, alleles, GT, AD or None, DP) of every record."""
+    import pysam
+    spans = []
+    with pysam.VariantFile(str(path), index_filename=None) as variant_file:
+        for record in variant_file:
+            sample = record.samples[0]
+            ad = sample.get('AD')
+            spans.append((record.pos, record.stop,
+                          (record.ref,) + tuple(record.alts),
+                          tuple(sample['GT']),
+                          tuple(ad) if ad is not None else None,
+                          sample['DP']))
+    return spans
+
+
+def span_positions(spans):
+    """Expand POS..END of each span into the covered 1-based positions."""
+    return [position for start, end, *_ in spans
+            for position in range(start, end + 1)]
+
+
 def test_interval_ends_are_written(consensus_runner):
     """Every base of every BED interval, last base included."""
     # chr1 9 10 is a single base (1-based 10); chr1 19 25 covers 20..25.
@@ -80,6 +102,152 @@ def test_all_sites_written_once(consensus_runner):
     for pos, alleles, gt in records:
         assert alleles == (ref_base(pos), '<*>')
         assert gt == (0, 0)
+
+
+def test_reference_blocks_are_optional(tmp_path, use_accel):
+    """Blocks compress hom-reference runs and omit multi-base AD."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    callers = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', []),
+               write_caller_bcf(tmp_path / 'c1.bcf', 'sample1', [])]
+
+    plain = run_consensus(tmp_path, bam, bed_gz, callers, threshold=2,
+                          use_accel=use_accel, reference=reference,
+                          output_name='plain.bcf')
+    assert [span[0] for span in read_spans(plain)] == list(range(20, 26))
+
+    blocked = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=2,
+        use_accel=use_accel, reference=reference, output_name='blocked.bcf',
+        compress_reference_blocks=True)
+    # 20..25 are one block; the minimum depth is 1 at position 20 and one AD
+    # value cannot describe the whole block, so FORMAT/AD is omitted.
+    assert read_spans(blocked) == [
+        (20, 25, (ref_base(20), '<*>'), (0, 0), None, 1)]
+
+    with pysam.VariantFile(str(blocked), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    assert 'ReferenceBlocks=True' in header
+
+    # The block rlen must let an indexed fetch find a position inside it.
+    subprocess.run([BCFTOOLS, 'index', '--csi', '-f', str(blocked)],
+                   check=True)
+    with pysam.VariantFile(str(blocked)) as variant_file:
+        assert [record.pos for record in variant_file.fetch('chr1', 23, 24)] \
+            == [20]
+
+
+def test_reference_blocks_split_at_variant(tmp_path, use_accel):
+    """A caller record ends the current block and is written separately."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (21, ref_base(22), [alt_base(22)], (0, 1))])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+    spans = read_spans(output)
+    assert [(start, end) for start, end, *_ in spans] == [
+        (20, 21), (22, 22), (23, 25)]
+    assert span_positions(spans) == list(range(20, 26))
+    assert spans[1][2] == (ref_base(22), alt_base(22))
+
+
+def test_reference_blocks_split_at_reference_caller_record(tmp_path,
+                                                          use_accel):
+    """Any caller record splits a block, even a hom-reference call."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (21, ref_base(22), [], (0, 0))])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+    assert [(start, end) for start, end, *_ in read_spans(output)] == [
+        (20, 21), (22, 22), (23, 25)]
+
+
+def test_reference_blocks_do_not_span_bed_gaps(tmp_path, use_accel):
+    """Discontiguous BED intervals become separate blocks."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', 19, 21), ('chr1', 23, 25)])
+    callers = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [])]
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+    spans = read_spans(output)
+    assert [(start, end) for start, end, *_ in spans] == [(20, 21), (24, 25)]
+    assert span_positions(spans) == [20, 21, 24, 25]
+
+
+def test_reference_blocks_split_when_depth_crosses_min_coverage(
+        tmp_path, use_accel):
+    """A block never spans positions on both sides of min_coverage."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    callers = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [])]
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1, min_coverage=3,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+    spans = read_spans(output)
+    # depths at 1-based 20..25 are 1, 2, 3, 4, 5, 5
+    assert [(start, end, dp) for start, end, *_, dp in spans] == [
+        (20, 21, 1), (22, 25, 3)]
+    assert span_positions(spans) == list(range(20, 26))
+
+
+def test_accel_and_pure_paths_agree_on_blocks(tmp_path):
+    """Both implementations write byte-identical reference blocks."""
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [('r1', 19, REF_SEQ[19:25]), ('r2', 29, REF_SEQ[29:35])]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 36)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'caller0.bcf', 'sample1',
+                         [(19, REF_SEQ[19], [], (0, 0)),
+                          (POS_30_0B, ref_base(30), [alt_base(30)], (0, 1))]),
+        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', []),
+    ]
+    pure = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=1, use_accel=False,
+        output_name='pure.bcf', reference=reference,
+        compress_reference_blocks=True)
+    accel = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=1, use_accel=True,
+        output_name='accel.bcf', reference=reference,
+        compress_reference_blocks=True)
+
+    def text(path):
+        return subprocess.run([BCFTOOLS, 'view', '-H', str(path)],
+                              check=True, capture_output=True,
+                              text=True).stdout
+
+    assert text(pure) == text(accel)
+    assert text(pure)
 
 
 def test_missing_genotype_does_not_crash(consensus_runner):
@@ -277,7 +445,8 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
         records = list(variant_file)
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
                 'Rule=two-stage,Tie=nocall,AbsentVote=ref,RemoveInvariant=False,'
-                'SplitMultiallelic=False,CallersFailed="freebayes">')
+                'SplitMultiallelic=False,ReferenceBlocks=False,'
+                'CallersFailed="freebayes">')
     assert expected in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
@@ -285,8 +454,8 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
         (30, (ref_base(30), alt_base(30)), (0, 1))]
 
 
-def test_command_and_caller_version_header_lines(tmp_path, use_accel):
-    """The command line and caller versions are recorded in the header."""
+def test_command_header_line(tmp_path, use_accel):
+    """The pipeline command line is recorded in the header."""
     import pysam
 
     reference = write_reference(tmp_path / 'ref.fa')
@@ -304,14 +473,11 @@ def test_command_and_caller_version_header_lines(tmp_path, use_accel):
         tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
         callers=['bcftools', 'gatk'], use_accel=use_accel,
         reference=reference,
-        command_line='nextflow run main.nf -params-file run.yaml',
-        caller_versions='bcftools=1.24,gatk=4.6.2.0')
+        command_line='nextflow run main.nf -params-file run.yaml')
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
     assert ('##ChoCallateCommand="nextflow run main.nf '
             '-params-file run.yaml"' in header)
-    assert ('##ChoCallateCallerVersions="bcftools=1.24,gatk=4.6.2.0"'
-            in header)
 
 
 def test_threshold_above_surviving_callers_fails(tmp_path, use_accel):
@@ -571,7 +737,7 @@ def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
                 'Rule=two-stage,Tie=qual,AbsentVote=abstain,MinCoverage=3,'
                 'RemoveInvariant=False,SplitMultiallelic=False,'
-                'CallersFailed="freebayes">')
+                'ReferenceBlocks=False,CallersFailed="freebayes">')
     assert expected in header
 
 

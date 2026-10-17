@@ -84,6 +84,10 @@
                 "split_multiallelic": {
                     "type": "boolean",
                     "description": "Keep one record per ALT allele instead of re-joining multi-allelic sites."
+                },
+                "compress_reference_blocks": {
+                    "type": "boolean",
+                    "description": "Compress runs of hom-reference positions into gVCF blocks with INFO/END. FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
                 }
             }
         },

@@ -166,7 +166,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
                   use_accel=False, output_name='out.bcf', reference=None,
                   callers=None, configured_callers=None, check=True,
                   absent_vote='ref', tie_policy='nocall', min_coverage=0,
-                  command_line=None, caller_versions=None):
+                  command_line=None, compress_reference_blocks=False):
     """Run bin/generate_consensus.py as a subprocess and return its output path.
 
     Args:
@@ -180,7 +180,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         tie_policy: ``nocall``, ``first`` or ``qual`` tie-breaking.
         min_coverage: Coverage required by ``absent_vote=abstain``.
         command_line: Pipeline command line recorded in the header.
-        caller_versions: Caller ``tool=version`` provenance string.
+        compress_reference_blocks: Compress hom-reference runs into blocks.
     """
     output = tmp_path / output_name
     if reference is None:
@@ -214,8 +214,8 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         command_line_file = tmp_path / 'command_line.txt'
         command_line_file.write_text(command_line)
         cmd += ['--command_line_file', str(command_line_file)]
-    if caller_versions is not None:
-        cmd += ['--caller_versions', caller_versions]
+    if compress_reference_blocks:
+        cmd.append('--compress_reference_blocks')
     subprocess.run(cmd, check=check, env=env, cwd=str(tmp_path),
                    capture_output=True, text=True)
     return output

@@ -337,6 +337,9 @@ cdef class BcfLineWriter:
             end_value = end_pos
             if bcf_update_info_int32(self.hdr, rec, b"END", &end_value, 1) < 0:
                 raise MemoryError("could not set END")
+            # rlen drives CSI overlap queries; without it an indexed multi-base
+            # block is invisible to fetches that start inside the block.
+            rec.rlen = end_pos - pos0
         if n_gt > 0 and bcf_update_genotypes(self.hdr, rec, gt, n_gt) < 0:
             raise MemoryError("could not set GT")
         if n_ad > 0 and bcf_update_format_int32(self.hdr, rec, b"AD", ad,
@@ -349,20 +352,36 @@ cdef class BcfLineWriter:
         return 0
 
     def write_monomorphic(self, int rid, int pos0, bytes alleles,
-                          int ad_ref, int ad_other, int dp):
-        """Write a gVCF-style reference record ``alleles`` (precomputed, e.g.
-        b'A,<*>'), GT 0/0, AD (ad_ref, ad_other) and DP.
+                          int ad_ref, int ad_other, int dp, int end_pos=-1):
+        """Write a gVCF-style reference record or block ``alleles``
+        (precomputed, e.g. b'A,<*>'), GT 0/0, AD (ad_ref, ad_other) and DP.
 
         ``ad_other`` is the depth of reads that do not support the reference
-        base (the ``<*>`` slot).
+        base (the ``<*>`` slot).  ``end_pos`` is the 1-based inclusive end; a
+        negative value means the single base at ``pos0``.
         """
         cdef int32_t ad[2]
+        if end_pos < 0:
+            end_pos = pos0 + 1
         self.gt_buf[0] = 2  # bcf_gt_unphased(0)
         self.gt_buf[1] = 2
         ad[0] = ad_ref
         ad[1] = ad_other
         return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
-                           ad, 2, dp, pos0 + 1)
+                           ad, 2, dp, end_pos)
+
+    def write_reference_block(self, int rid, int pos0, bytes alleles, int dp,
+                              int end_pos):
+        """Write a multi-base gVCF reference block without FORMAT/AD.
+
+        A single AD value cannot describe every position of the block, and
+        ``bcftools merge --gvcf`` reports missing depth when the block is used
+        to fill a hom-reference sample at another sample's variant.
+        """
+        self.gt_buf[0] = 2  # bcf_gt_unphased(0)
+        self.gt_buf[1] = 2
+        return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
+                           NULL, 0, dp, end_pos)
 
     def write_record(self, int rid, int pos0, object alleles, object gt,
                      object ad, int dp):

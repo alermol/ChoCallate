@@ -13,6 +13,7 @@ process CREATE_FAI_INDEX {
     """
     samtools faidx --threads ${task.cpus} \
         --output ref_genome.fasta.fai tmp/ref_genome.fasta
+    check_contig_lengths.py ref_genome.fasta.fai
     """
 }
 

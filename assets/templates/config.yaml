@@ -1,62 +1,148 @@
+# ChoCallate configuration template.
+#
+# Copy this file, edit it, and run:
+#   nextflow run main.nf -params-file my_run.yaml
+#
+# The values below are the pipeline defaults. Only override what differs.
+# Every parameter is documented here; the pipeline has no --help output.
+
 input:
+  # Tab-separated samplesheet. Columns depend on input.format/reads_type:
+  #   fastq + pe: sample_id, R1, R2
+  #   fastq + se: sample_id, R1
+  #   fastq + mx: sample_id, R1, R2, unpaired
+  #   bam:        sample_id, BAM
+  # Relative read paths are resolved from the samplesheet directory.
   samples_tsv: null
+
+  # Reference FASTA. Plain and bgzip-compressed files are detected
+  # automatically. Contigs longer than 2^31-1 bp are rejected.
   reference_genome: null
+
+  # Directory containing the mapper and caller indexes.
   reference_index_dir: null
+
+  # Index prefix inside reference_index_dir. null uses
+  # basename(realpath(reference_genome)).
   reference_index_prefix: null
+
+  # Optional BED of regions to call. null calls every covered region.
   include_bed: null
+
+  # Optional BED of regions to exclude. null excludes no region.
   exclude_bed: null
+
+  # Input molecule type: "fastq" or "bam".
   format: "fastq"
+
+  # FASTQ layout: "se" (single-end), "pe" (paired-end) or "mx" (mixed
+  # paired/unpaired; bowtie2 only).
   reads_type: "pe"
 
 output:
+  # Directory for published results and Nextflow reports.
   directory: "ChoCallate_output"
+
+  # "single": one merged consensus file; "sample": one file per sample.
   type: "single"
+
+  # Consensus file format: "bcf" or "vcf" (VCF is bgzip-compressed).
   format: "bcf"
+
+  # Drop monomorphic/reference-only records from the published output.
   remove_invariant: true
+
+  # Keep one record per ALT allele instead of re-joining multi-allelic
+  # sites.
   split_multiallelic: false
 
+  # Compress consecutive hom-reference positions into multi-base gVCF
+  # blocks with INFO/END, in both per-sample and merged output. Multi-base
+  # blocks carry the minimum DP and omit AD, so merged ALT depth for a
+  # hom-reference sample is missing rather than a fabricated zero.
+  compress_reference_blocks: false
+
 mapping:
+  # Read mapper: "bowtie2", "bwa" or "minimap2".
   mapper: "bowtie2"
+
+  # Extra arguments passed verbatim to the mapper.
   extra_args: ""
+
+  # CPUs requested per mapping task.
   cpu: 10
+
+  # Read-group PL value.
   platform: "ILLUMINA"
+
+  # Read-group LB value. null uses the sample id.
   library: null
 
 bam_filter:
+  # Minimum mapping quality; alignments below it are discarded.
   min_map_qual: 10
 
 rmdup:
+  # Mark and remove duplicate reads with samtools markdup.
   enabled: false
 
 left_align_indels:
+  # Run GATK LeftAlignIndels on the final BAM.
   enabled: true
 
 coverage:
+  # Minimum depth for a base to enter the coverage BED and consensus.
   min_coverage: 5
 
 calling:
+  # Comma-separated non-empty subset of bcftools, freebayes and gatk.
   callers: "bcftools,gatk,freebayes"
+
+  # CPUs requested per calling task.
   cpu: 4
+
+  # Continue with the surviving callers when one fails. false aborts the
+  # run.
   allow_caller_failure: false
+
   bcftools:
+    # Minimum QUAL for SNPs and for indels/other records.
     min_snp_qual: 20
     min_indel_qual: 20
     call:
+      # Extra arguments for bcftools call.
       extra_args: ""
     mpileup:
+      # Extra arguments for bcftools mpileup.
       extra_args: ""
+
   freebayes:
+    # Minimum QUAL for SNPs and for indels/other records.
     min_snp_qual: 20
     min_indel_qual: 20
+    # Extra arguments for freebayes.
     extra_args: ""
+
   gatk:
+    # Minimum QUAL for SNPs and for indels/other records.
     min_snp_qual: 20
     min_indel_qual: 20
+    # Padding added to each calling interval so indels at covered-region
+    # edges are assembled.
     interval_padding: 150
+    # Extra arguments for GATK HaplotypeCaller.
     extra_args: ""
 
 consensus:
+  # Minimum number of callers supporting an ALT allele (or the reference).
   threshold: 2
+
+  # CPUs requested for consensus and merge tasks.
   cpu: 4
+
+  # Vote of a caller without a record: "ref" or "abstain". "abstain"
+  # requires at least coverage.min_coverage reads at the position.
   absent_vote: "ref"
+
+  # Zygosity tie-breaker: "nocall", "first" or "qual".
   tie_policy: "nocall"

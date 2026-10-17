@@ -14,34 +14,9 @@ include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
-include { VERSIONS } from './modules/local/versions'
-include { validateParameters; paramsHelp } from 'plugin/nf-schema'
+include { validateParameters } from 'plugin/nf-schema'
 
 workflow {
-
-    if (params.help || params.helpFull) {
-        def help_options = [command: "nextflow run main.nf --help"]
-        def help_value = params.help?.toString() ?: 'false'
-        if (help_value != 'true' && help_value != 'false') {
-            help_options['parameter'] = help_value
-        }
-        if (params.helpFull?.toString() == 'true') {
-            help_options['fullHelp'] = true
-        }
-        // nf-schema filters its built-in help options by line prefix; the
-        // wrapped continuation lines of those descriptions would otherwise
-        // remain in the output.
-        def help_text = paramsHelp(help_options)
-            .readLines()
-            .findAll { line ->
-                !line.startsWith(
-                    'help message of that parameter will be printed.'
-                ) && !line.startsWith('or `--helpFull`.')
-            }
-            .join('\n')
-        log.info help_text
-        exit 0
-    }
 
     // Unknown keys are rejected before any process starts.
     validateParameters()
@@ -77,18 +52,6 @@ workflow {
             params.consensus.cpu as int
         )
     }
-
-    // All tasks share one environment, so one probe records the versions of
-    // every tool used by this run.
-    def version_tools = [
-        'samtools', 'gatk', 'bcftools', 'bedops', 'mosdepth',
-        'parallel', 'bgzip', 'tabix', 'python', 'pysam'
-    ]
-    if (params.input.format != 'bam') {
-        version_tools << params.mapping.mapper
-    }
-    version_tools.addAll(selected_callers)
-    VERSIONS(version_tools)
 
     // Create the sample channel.  Absent read slots stage the empty NO_FILE
     // instead of /dev/null so every input is a real, portable file.

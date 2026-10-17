@@ -76,12 +76,11 @@ def _environment():
     return env
 
 
-def _run(tmp_path, params=None, extra_args=None, ulimit=None):
+def _run(tmp_path, params=None, ulimit=None):
     command = [NEXTFLOW, "run", str(PROJECT_ROOT / "main.nf")]
     if params is not None:
         command += ["-params-file", str(params)]
     command += ["-ansi-log", "false"]
-    command += extra_args or []
     if ulimit is not None:
         shell_command = "ulimit -n {}; exec {}".format(
             ulimit, " ".join(shlex.quote(part) for part in command)
@@ -101,26 +100,6 @@ def _output(result):
     return result.stdout + result.stderr
 
 
-def test_help_lists_parameter_groups(tmp_path):
-    result = _run(tmp_path, extra_args=["--help"])
-
-    assert result.returncode == 0
-    output = _output(result)
-    assert "Typical pipeline command" in output
-    assert "--input" in output
-    assert "--consensus" in output
-
-
-def test_help_full_lists_nested_parameters(tmp_path):
-    result = _run(tmp_path, extra_args=["--helpFull"])
-
-    assert result.returncode == 0
-    output = _output(result)
-    assert "--input.samples_tsv" in output
-    assert "--consensus.tie_policy" in output
-    assert "accepted: nocall, first, qual" in output
-
-
 def test_pipeline_defaults_for_depth_and_mapq(tmp_path):
     result = subprocess.run(
         [NEXTFLOW, "config", str(PROJECT_ROOT / "main.nf")],
@@ -135,6 +114,7 @@ def test_pipeline_defaults_for_depth_and_mapq(tmp_path):
     output = _output(result)
     assert "min_map_qual = 10" in output
     assert "min_coverage = 5" in output
+    assert "compress_reference_blocks = false" in output
 
 
 def test_missing_required_parameter_is_named(tmp_path):
