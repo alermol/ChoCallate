@@ -23,9 +23,6 @@ output:
   remove_invariant: true
   split_multiallelic: false
 
-ref_genome:
-  bgzip: true
-
 mapping:
   mapper: "bowtie2"
   extra_args: ""
@@ -34,7 +31,7 @@ mapping:
   library: null
 
 bam_filter:
-  min_map_qual: 0
+  min_map_qual: 10
 
 rmdup:
   enabled: false
@@ -43,7 +40,7 @@ left_align_indels:
   enabled: false
 
 coverage:
-  min_coverage: 2
+  min_coverage: 5
 
 calling:
   callers: "bcftools,gatk,freebayes"

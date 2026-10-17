@@ -14,7 +14,9 @@ process GENERATE_COVERAGE {
     tuple val(sample_id), path("coverage.bed"), emit: coverage
 
     script:
-    def min_coverage = params.coverage.min_coverage != null ? params.coverage.min_coverage as int : 0
+    def min_coverage = params.coverage.min_coverage != null
+        ? params.coverage.min_coverage as int
+        : 5
     def quantize = min_coverage > 0 ? "0:${min_coverage}:" : "0:1:"
     def keep_bin = min_coverage > 0 ? "${min_coverage}:inf" : "1:inf"
     def sort_include = include_bed.name != "N1_FILE" ? "sort-bed \"${include_bed}\" > tmp/include.sorted.bed" : ""

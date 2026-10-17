@@ -1,0 +1,304 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/alermol/ChoCallate/develop/nextflow_schema.json",
+    "title": "ChoCallate pipeline parameters",
+    "description": "Consensus variant calling with bcftools, FreeBayes and GATK.",
+    "type": "object",
+    "properties": {
+        "input": {
+            "type": "object",
+            "title": "Input",
+            "description": "Samples, reference genome and optional target regions.",
+            "properties": {
+                "samples_tsv": {
+                    "type": "string",
+                    "description": "Tab-separated samplesheet. Relative read paths are resolved from the samplesheet directory.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "reference_genome": {
+                    "type": "string",
+                    "description": "Reference FASTA, plain or bgzip-compressed (detected from the file header).",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "reference_index_dir": {
+                    "type": "string",
+                    "description": "Directory containing the mapper and caller reference indexes.",
+                    "format": "directory-path",
+                    "exists": true
+                },
+                "reference_index_prefix": {
+                    "type": ["string", "null"],
+                    "description": "Index prefix inside reference_index_dir. Defaults to basename(realpath(reference_genome))."
+                },
+                "include_bed": {
+                    "type": ["string", "null"],
+                    "description": "Optional BED file restricting calling to the listed regions.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "exclude_bed": {
+                    "type": ["string", "null"],
+                    "description": "Optional BED file of regions to exclude from calling.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Input molecule type.",
+                    "enum": ["fastq", "bam"]
+                },
+                "reads_type": {
+                    "type": "string",
+                    "description": "FASTQ layout: single-end, paired-end or mixed (paired plus unpaired reads).",
+                    "enum": ["se", "pe", "mx"]
+                }
+            },
+            "required": ["samples_tsv", "reference_genome", "reference_index_dir"]
+        },
+        "output": {
+            "type": "object",
+            "title": "Output",
+            "description": "Consensus output location, layout and filtering.",
+            "properties": {
+                "directory": {
+                    "type": "string",
+                    "description": "Directory for published results and Nextflow reports.",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Publish one merged consensus ('single') or one file per sample ('sample').",
+                    "enum": ["single", "sample"]
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Consensus file format.",
+                    "enum": ["bcf", "vcf"]
+                },
+                "remove_invariant": {
+                    "type": "boolean",
+                    "description": "Drop monomorphic records from the published consensus."
+                },
+                "split_multiallelic": {
+                    "type": "boolean",
+                    "description": "Keep one record per ALT allele instead of re-joining multi-allelic sites."
+                }
+            }
+        },
+        "mapping": {
+            "type": "object",
+            "title": "Mapping",
+            "description": "Read mapping options.",
+            "properties": {
+                "mapper": {
+                    "type": "string",
+                    "description": "Read mapper. Mixed reads are supported by bowtie2 only.",
+                    "enum": ["bowtie2", "bwa", "minimap2"]
+                },
+                "extra_args": {
+                    "type": "string",
+                    "description": "Extra arguments passed verbatim to the mapper."
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs requested per mapping task.",
+                    "minimum": 1
+                },
+                "platform": {
+                    "type": "string",
+                    "description": "Read-group PL value.",
+                    "minLength": 1
+                },
+                "library": {
+                    "type": ["string", "null"],
+                    "description": "Read-group LB value. Defaults to the sample id."
+                }
+            }
+        },
+        "bam_filter": {
+            "type": "object",
+            "title": "BAM filter",
+            "description": "Alignment filtering applied after mapping.",
+            "properties": {
+                "min_map_qual": {
+                    "type": "integer",
+                    "description": "Minimum mapping quality; alignments below it are discarded.",
+                    "minimum": 0
+                }
+            }
+        },
+        "rmdup": {
+            "type": "object",
+            "title": "Duplicate removal",
+            "description": "Optical/PCR duplicate marking.",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Mark and remove duplicate reads with samtools markdup."
+                }
+            }
+        },
+        "left_align_indels": {
+            "type": "object",
+            "title": "Left-align indels",
+            "description": "Normalise indel alignment with GATK LeftAlignIndels.",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Run GATK LeftAlignIndels on the final BAM."
+                }
+            }
+        },
+        "coverage": {
+            "type": "object",
+            "title": "Coverage",
+            "description": "Coverage-based site selection.",
+            "properties": {
+                "min_coverage": {
+                    "type": "integer",
+                    "description": "Minimum depth for a base to be included in the consensus.",
+                    "minimum": 0
+                }
+            }
+        },
+        "calling": {
+            "type": "object",
+            "title": "Variant calling",
+            "description": "Caller selection and per-caller quality filters.",
+            "properties": {
+                "callers": {
+                    "type": "string",
+                    "description": "Comma-separated non-empty subset of bcftools, freebayes and gatk.",
+                    "minLength": 1
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs requested per calling task.",
+                    "minimum": 1
+                },
+                "allow_caller_failure": {
+                    "type": "boolean",
+                    "description": "Continue with the surviving callers when a caller fails. When false, a failed caller aborts the run."
+                },
+                "bcftools": {
+                    "type": "object",
+                    "title": "bcftools",
+                    "description": "bcftools mpileup/call options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum bcftools QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum bcftools QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "call": {
+                            "type": "object",
+                            "title": "bcftools call",
+                            "properties": {
+                                "extra_args": {
+                                    "type": "string",
+                                    "description": "Extra arguments for bcftools call."
+                                }
+                            }
+                        },
+                        "mpileup": {
+                            "type": "object",
+                            "title": "bcftools mpileup",
+                            "properties": {
+                                "extra_args": {
+                                    "type": "string",
+                                    "description": "Extra arguments for bcftools mpileup."
+                                }
+                            }
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                },
+                "freebayes": {
+                    "type": "object",
+                    "title": "FreeBayes",
+                    "description": "FreeBayes options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum freebayes QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum freebayes QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "extra_args": {
+                            "type": "string",
+                            "description": "Extra arguments for freebayes."
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                },
+                "gatk": {
+                    "type": "object",
+                    "title": "GATK",
+                    "description": "GATK HaplotypeCaller options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum GATK QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum GATK QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "interval_padding": {
+                            "type": "integer",
+                            "description": "Padding added to each calling interval so indels at region edges are assembled.",
+                            "minimum": 0
+                        },
+                        "extra_args": {
+                            "type": "string",
+                            "description": "Extra arguments for HaplotypeCaller."
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                }
+            },
+            "required": ["callers", "cpu"]
+        },
+        "consensus": {
+            "type": "object",
+            "title": "Consensus",
+            "description": "Voting, output and resource options for the consensus stage.",
+            "properties": {
+                "threshold": {
+                    "type": "integer",
+                    "description": "Minimum number of callers that must support an ALT allele.",
+                    "minimum": 1
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs requested for consensus and merge tasks.",
+                    "minimum": 1
+                },
+                "absent_vote": {
+                    "type": "string",
+                    "description": "How a caller without a record at a position votes.",
+                    "enum": ["ref", "abstain"]
+                },
+                "tie_policy": {
+                    "type": "string",
+                    "description": "Zygosity tie-breaker among supporters of the winning ALT.",
+                    "enum": ["nocall", "first", "qual"]
+                }
+            },
+            "required": ["threshold", "cpu"]
+        }
+    }
+}

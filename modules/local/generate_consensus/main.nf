@@ -37,7 +37,9 @@ process GENERATE_CONSENSUS {
     def join_multiallelic = params.output.type == 'sample' && !params.output.split_multiallelic ? "| bcftools norm --threads ${task.cpus} -m +any -Ou" : ""
     def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
     def tie_policy = params.consensus.tie_policy != null ? params.consensus.tie_policy : 'nocall'
-    def min_coverage = params.coverage.min_coverage != null ? params.coverage.min_coverage : 0
+    def min_coverage = params.coverage.min_coverage != null
+        ? params.coverage.min_coverage
+        : 5
     def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
     mkdir -p tmp/vcf_chunks/
