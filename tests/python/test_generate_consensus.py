@@ -488,20 +488,24 @@ def test_deletion_does_not_duplicate_or_skip_interval_boundaries(
     assert [pos for pos, _, _ in read_records(output)] == [20, 21, 22, 23, 24]
 
 
-def test_consensus_calls_keys_alleles_by_ref_and_alt():
-    """The documented reproduction: same anchor ALT, different REF."""
+def _caller_record(ref, alts, gt):
+    """Minimal pysam.VariantRecord stand-in for genotype_key tests."""
     from types import SimpleNamespace
 
+    return SimpleNamespace(ref=ref, alts=alts, samples=[{'GT': gt}],
+                           filter=SimpleNamespace(keys=lambda: ()))
+
+
+def test_consensus_calls_keys_alleles_by_ref_and_alt():
+    """The documented reproduction: same anchor ALT, different REF."""
     import generate_consensus
 
-    def record(ref, alts, gt):
-        return SimpleNamespace(ref=ref, alts=alts, samples=[{'GT': gt}])
-
     short = generate_consensus.genotype_key(
-        [record('AT', ('A',), (0, 1))], 'A')
+        [_caller_record('AT', ('A',), (0, 1))], 'A')
     long = generate_consensus.genotype_key(
-        [record('ATT', ('A',), (0, 1))], 'A')
-    reference = ('A', ('.',), (0, 0))
+        [_caller_record('ATT', ('A',), (0, 1))], 'A')
+    reference = generate_consensus.genotype_key(
+        [_caller_record('A', (), (0, 0))], 'A')
     # Each deletion has one supporter, so threshold 2 leaves only one
     # reference vote: below the threshold, no consensus call at all.
     assert generate_consensus.consensus_calls(
@@ -516,6 +520,72 @@ def test_consensus_calls_keys_alleles_by_ref_and_alt():
         [short, long, reference], 1) == expected_variants
     assert generate_consensus.consensus_calls(
         [long, short, reference], 1) == expected_variants
+
+
+def test_genotype_key_votes_per_ref_alt_allele():
+    """Atomised SNP and deletion at one POS stay separate alleles.
+
+    A caller reporting ``A>G 0/1`` and ``AT>A 0/1`` at the same POS supports
+    both alleles with one copy each; the ploidy is 2.  Two such callers reach
+    threshold 2 and produce one consensus record per allele.
+    """
+    import generate_consensus
+
+    key = generate_consensus.genotype_key([
+        _caller_record('A', ('G',), (0, 1)),
+        _caller_record('AT', ('A',), (0, 1)),
+    ], 'A')
+    assert key == ('A', {('A', 'G'): 1, ('AT', 'A'): 1}, 2)
+    assert generate_consensus.consensus_calls([key, key], 2) == [
+        ('A', ('G',), (0, 1)),
+        ('AT', ('A',), (0, 1)),
+    ]
+
+
+def test_genotype_key_abstains_on_inconsistent_split_copies():
+    """Split records whose ALT copies exceed the ploidy abstain.
+
+    A diploid caller cannot be ``1/1`` for the SNP and ``0/1`` for the
+    deletion at the same time, so the combination is a no-call instead of a
+    fabricated genotype.  Two such callers produce no consensus record.
+    """
+    import generate_consensus
+
+    key = generate_consensus.genotype_key([
+        _caller_record('A', ('G',), (1, 1)),
+        _caller_record('AT', ('A',), (0, 1)),
+    ], 'A')
+    assert key is None
+    assert generate_consensus.consensus_calls([key, key], 2) == []
+
+
+def test_atomized_snp_and_deletion_with_different_refs(tmp_path, use_accel):
+    """Both callers support A>G and AT>A at one POS; both reach consensus.
+
+    Atomisation emits the SNP and the deletion as separate records with
+    different REF alleles at the same POS.  Keying votes by ``(REF, ALT)``
+    keeps the caller from abstaining, so threshold 2 writes one record per
+    allele.
+    """
+    seq = 'AT' * 30
+    reference = write_reference(tmp_path / 'ref.fa', seq=seq)
+    reads = [(f'read{i}', 18, seq[18:24]) for i in range(2)]
+    bam = write_bam(tmp_path / 'sample.bam', reads, length=len(seq))
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 20, 21)])
+    callers = [
+        write_caller_bcf(tmp_path / f'c{index}.bcf', 'sample1', [
+            (20, 'A', ['G'], (0, 1)),
+            (20, 'AT', ['A'], (0, 1)),
+        ], length=len(seq))
+        for index in range(2)
+    ]
+    output = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=2,
+        use_accel=use_accel, reference=reference)
+    assert read_records(output) == [
+        (21, ('A', 'G'), (0, 1)),
+        (21, ('AT', 'A'), (0, 1)),
+    ]
 
 
 # Reference for the pileup edge-case dataset: upper-case bases, then a
@@ -782,7 +852,8 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
         records = list(variant_file)
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
                 'Rule=two-stage,Tie=nocall,AbsentVote=ref,'
-                'ReferenceBlocks=False,CallersFailed="freebayes">')
+                'FilteredVote=abstain,ReferenceBlocks=False,'
+                'CallersFailed="freebayes">')
     assert expected in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
@@ -989,6 +1060,45 @@ def test_absent_vote_abstain_requires_coverage(consensus_runner):
         (30, (ref_base(30), '<*>'), (0, 0))]
 
 
+def test_filtered_record_abstains_from_the_vote(consensus_runner):
+    """A soft-filtered record is not a reference vote.
+
+    Caller A calls 1/1 with FILTER=PASS, caller B has the same variant with
+    FILTER=LowQual and caller C has no record.  With threshold 2 the filtered
+    record abstains (the default), so the position has neither a variant nor a
+    hom-reference record.  Counting it as reference would produce a confident
+    hom-reference call.
+    """
+    alt = alt_base(30)
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
+        caller_records=[
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), None, 'PASS')],
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), None, 'LowQual')],
+            [],
+        ],
+        threshold=2,
+    )
+    assert read_records(output) == []
+
+
+def test_filtered_vote_ref_counts_as_reference(consensus_runner):
+    """``filtered_vote=ref`` turns a filtered record into a reference vote."""
+    alt = alt_base(30)
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
+        caller_records=[
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), None, 'PASS')],
+            [(POS_30_0B, ref_base(30), [alt], (1, 1), None, 'LowQual')],
+            [],
+        ],
+        threshold=2,
+        filtered_vote='ref',
+    )
+    assert read_records(output) == [
+        (30, (ref_base(30), '<*>'), (0, 0))]
+
+
 def test_header_describes_abstain_and_tie_policies(tmp_path, use_accel):
     """The single header line records the applied voting rule."""
     import pysam
@@ -1015,7 +1125,8 @@ def test_header_describes_abstain_and_tie_policies(tmp_path, use_accel):
     expected = ('##ChoCallate=<Version=test,Threshold=2,'
                 'Callers="bcftools,gatk",Rule=two-stage,Tie=first,'
                 'AbsentVote=abstain,MinCoverage=3,'
-                'ReferenceBlocks=False,CallersFailed="freebayes">')
+                'FilteredVote=abstain,ReferenceBlocks=False,'
+                'CallersFailed="freebayes">')
     assert expected in header
 
 

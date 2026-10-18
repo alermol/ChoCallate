@@ -32,7 +32,7 @@ process CALLING_BCFTOOLS {
     EOF
 
     parallel -j ${task.cpus} \
-    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    'bcftools mpileup ${mpileup_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     # The chunks are emitted in genomic order; ls -v keeps that order for
     # concat, so no full sort is needed afterwards.

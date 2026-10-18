@@ -15,8 +15,11 @@ hom-reference when at least
 A caller without a record votes reference by default (``--absent_vote ref``).
 With ``--absent_vote abstain`` it only votes reference when the sample pileup
 has at least ``--min_coverage`` reads at the position; a caller record with a
-missing genotype (``./.``, ``0/.``) always abstains.  Hom-reference calls of any
-ploidy vote reference.  Positions without a consensus variant are written as
+missing genotype (``./.``, ``0/.``) always abstains.  A caller record whose
+FILTER is not ``PASS``/``.`` abstains as well by default
+(``--filtered_vote abstain``); with ``--filtered_vote ref`` it votes reference
+instead.  Hom-reference calls of any ploidy vote reference.  Positions without
+a consensus variant are written as
 gVCF-style records with the symbolic ALT ``<*>``: the reference allele plus
 "any other allele", whose FORMAT/AD slot carries the depth of reads that do not
 support the reference base.  ``bcftools merge --gvcf`` maps that slot onto the
@@ -93,7 +96,7 @@ SPAN_MAX_GAP = 10000
 # Sentinel for "no caller record left in this span".
 _NO_RECORD = 1 << 60
 
-# Voting key of a reference call (no ALT allele).
+# ALT placeholder of a reference call (no ALT allele).
 _REFERENCE_ALTS = ('.',)
 
 # Pre-encoded alleles for the monomorphic fast path (REF + ALT='<*>').
@@ -168,81 +171,82 @@ class CallerCursor:
         return records
 
 
-def genotype_key(records, ref_base):
+def genotype_key(records, ref_base, filtered_vote='abstain'):
     """Consensus voting key of one caller at a position.
 
     ``records`` are all records of the caller at the position: normally one,
-    but several after multi-allelic splitting or allele atomisation.  Their ALT
-    alleles are merged into one sorted allele set and the genotype indices are
-    remapped to that order.  Hom-reference calls (any ploidy) become the
-    reference placeholder; records with a missing genotype abstain.
+    but several after multi-allelic splitting or allele atomisation.  Each
+    record contributes the copies of its own ``(REF, ALT)`` alleles, so
+    atomised records with different REF alleles at the same POS stay distinct
+    instead of forcing the caller to abstain.  Hom-reference calls (any ploidy)
+    become the reference vote; records with a missing genotype are ignored.
+    Records whose FILTER is not ``PASS``/``.`` are ignored; when every record
+    is filtered the caller abstains (``filtered_vote='abstain'``) or votes
+    reference (``filtered_vote='ref'``).
+
+    Split records must be consistent with one ploidy: when the ALT copies of
+    all records exceed the ploidy (for example a split ``1/1`` plus ``0/1`` in
+    a diploid caller), the caller abstains instead of inventing a genotype.
 
     Args:
         records: Non-empty list of pysam.VariantRecord objects at one position.
         ref_base: Reference base at the position, upper case.
+        filtered_vote: Vote of a caller whose records are all filtered.
 
     Returns:
-        (reference allele, alternate alleles, genotype) tuple, or ``None`` when
-        the records do not form a usable vote.
+        ``(reference allele, {(ref, alt): copies}, ploidy)``, or ``None`` when
+        the records do not form a usable vote.  A reference vote has an empty
+        copies dictionary.
     """
+    usable = [record for record in records
+              if not record.filter.keys()
+              or set(record.filter.keys()) == {'PASS'}]
+    if not usable:
+        if filtered_vote == 'ref':
+            return (ref_base, {}, 0)
+        return None
     alt_copies = {}
     ploidy = 0
-    variant_ref = None
-    for record in records:
+    for record in usable:
         gt = record.samples[0].get('GT')
         if gt is None or any(allele is None for allele in gt):
             continue
+        ploidy = max(ploidy, len(gt))
         alts = tuple(allele.upper() for allele in (record.alts or ()))
         if not alts or alts == _REFERENCE_ALTS:
-            ploidy = max(ploidy, len(gt))
             continue
         ref = record.ref.upper()
-        if variant_ref is None:
-            variant_ref = ref
-        elif ref != variant_ref:
-            # two records at the same position with different REF alleles
-            # cannot be represented by one voting key
-            return None
-        ploidy = max(ploidy, len(gt))
         for allele_index, alt in enumerate(alts, 1):
             copies = sum(1 for allele in gt if allele == allele_index)
             if copies:
-                alt_copies[alt] = max(alt_copies.get(alt, 0), copies)
-    if variant_ref is None or not alt_copies:
-        if ploidy:
-            return (ref_base, _REFERENCE_ALTS, (0, 0))
-        return None
-    alts = tuple(sorted(alt_copies))
-    total_copies = sum(alt_copies[alt] for alt in alts)
+                allele = (ref, alt)
+                alt_copies[allele] = max(alt_copies.get(allele, 0), copies)
+    total_copies = sum(alt_copies.values())
     if total_copies > ploidy:
         # inconsistent split genotypes (for example 1/1 plus 0/1 in a diploid
         # caller): abstain instead of inventing a genotype
         return None
-    gt = [0] * (ploidy - total_copies)
-    for allele_index, alt in enumerate(alts, 1):
-        gt.extend([allele_index] * alt_copies[alt])
-    return (variant_ref, alts, tuple(gt))
+    if not alt_copies:
+        if ploidy:
+            return (ref_base, {}, ploidy)
+        return None
+    return (ref_base, alt_copies, ploidy)
 
 
 def _zygosity(key, allele):
     """Classify a vote supporting ``allele`` as ``het`` or ``hom`` ALT.
 
-    ``allele`` is a ``(ref, alt)`` pair and both parts must match the vote:
-    after normalisation a deletion ALT is only its anchor base, so the same
-    ALT string can describe deletions of different lengths.  Haploid ALT calls
-    count as homozygous (one ALT copy out of one).  A multi-allelic or split
-    genotype is reduced to the winning ALT allele.
+    ``allele`` is a ``(ref, alt)`` pair, and copies are keyed by that pair, so
+    deletions whose anchor ALT is the same but whose REF differs are distinct.
+    Copies equal to the caller ploidy are homozygous ALT; fewer copies are
+    heterozygous.  A haploid ALT call is therefore homozygous (one ALT copy
+    out of one).
     """
-    key_ref, alts, gt = key
-    ref, alt = allele
-    if key_ref != ref:
+    _, copies, ploidy = key
+    count = copies.get(allele, 0)
+    if count == 0:
         return None
-    indices = {index + 1 for index, candidate in enumerate(alts)
-               if candidate == alt}
-    copies = sum(1 for copy in gt if copy in indices)
-    if copies == 0:
-        return None
-    if copies == len(gt):
+    if count >= ploidy:
         return 'hom'
     return 'het'
 
@@ -272,12 +276,16 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
     stage re-joins them unless split output was requested.  When no ALT reaches
     the threshold, the position is hom-reference if at least
     ``consensus_threshold`` reference votes remain, otherwise the list is empty.
+    A caller key of ``None`` (an abstention) does not support any allele; a
+    caller whose split records carry more ALT copies than its ploidy abstains
+    in ``genotype_key`` and therefore supports nothing here.
 
     Args:
-        keys: List of (ref, alt tuple, gt tuple) keys and ``None`` for
-            abstentions, one entry per caller.  An ALT is identified by its
-            ``(ref, alt)`` pair, not by the ALT string alone, so deletions of
-            different lengths are distinct alleles.
+        keys: List of ``(ref, {(allele_ref, allele_alt): copies}, ploidy)``
+            keys and ``None`` for abstentions, one entry per caller.  An ALT is
+            identified by its ``(ref, alt)`` pair, not by the ALT string alone,
+            so deletions of different lengths are distinct alleles and a caller
+            may support several alleles at one position.
         consensus_threshold: Minimum number of callers supporting an ALT (or
             the reference) at the site stage.
         tie_policy: ``nocall`` or ``first``.
@@ -292,16 +300,14 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
     for index, key in enumerate(keys):
         if key is None:
             continue
-        ref, alts, gt = key
-        if not alts or alts == _REFERENCE_ALTS:
+        ref, copies, ploidy = key
+        if not copies:
             reference_count += 1
             if reference_key is None:
                 reference_key = (ref, _REFERENCE_ALTS, (0, 0))
             continue
-        for allele_index in sorted({allele for allele in gt if allele > 0}):
-            if allele_index <= len(alts):
-                allele = (ref, alts[allele_index - 1])
-                alt_support.setdefault(allele, []).append((index, key))
+        for allele in copies:
+            alt_support.setdefault(allele, []).append((index, key))
 
     candidates = sorted(
         (allele, supporters) for allele, supporters in alt_support.items()
@@ -331,7 +337,7 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
                 # unresolved genotype tie: this ALT gets no consensus record
                 continue
         zygosity, members = winners[0]
-        ploidy = max(len(key[2]) for _, key in members)
+        ploidy = max(key[2] for _, key in members)
         allele_ref, allele_alt = allele
         calls.append((allele_ref, (allele_alt,),
                       _genotype_for(zygosity, ploidy)))
@@ -650,6 +656,7 @@ def generate_minimal_header(sample_name,
                             callers_failed,
                             tie_policy,
                             absent_vote,
+                            filtered_vote,
                             min_coverage,
                             compress_reference_blocks=False):
     """
@@ -664,6 +671,7 @@ def generate_minimal_header(sample_name,
         callers_failed: Configured callers without a usable record set.
         tie_policy: Tie policy applied by the voting model.
         absent_vote: Policy for callers without a record at a position.
+        filtered_vote: Policy for caller records with a non-PASS FILTER.
         min_coverage: Coverage threshold used by ``absent_vote=abstain``.
         compress_reference_blocks: Whether reference blocks were requested.
 
@@ -680,6 +688,7 @@ def generate_minimal_header(sample_name,
             f'AbsentVote={absent_vote}']
     if absent_vote == 'abstain':
         meta.append(f'MinCoverage={min_coverage}')
+    meta.append(f'FilteredVote={filtered_vote}')
     meta.append(f'ReferenceBlocks={compress_reference_blocks}')
     if callers_failed:
         meta.append(f'CallersFailed="{",".join(callers_failed)}"')
@@ -755,6 +764,10 @@ def main():
     parser.add_argument('--version', required=True, type=str, help='Version of ChoCallate pipeline')
     parser.add_argument('--absent_vote', choices=('ref', 'abstain'), default='ref',
                         help='Vote of a caller without a record at a position')
+    parser.add_argument('--filtered_vote', choices=('abstain', 'ref'),
+                        default='abstain',
+                        help='Vote of a caller record whose FILTER is not '
+                             'PASS or .')
     parser.add_argument('--tie_policy', choices=('nocall', 'first'),
                         default='nocall', help='How to break voting ties')
     parser.add_argument('--min_coverage', type=int, default=0,
@@ -769,6 +782,7 @@ def main():
 
     threshold = args.consensus_threshold
     absent_vote = args.absent_vote
+    filtered_vote = args.filtered_vote
     tie_policy = args.tie_policy
     min_coverage = args.min_coverage
     use_accel = BcfLineWriter is not None
@@ -798,6 +812,7 @@ def main():
                                          failed,
                                          tie_policy,
                                          absent_vote,
+                                         filtered_vote,
                                          min_coverage,
                                          compress_blocks)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
@@ -923,7 +938,8 @@ def main():
                         for fi, cursor in enumerate(cursors):
                             caller_records = cursor.take_at(vcf_start)
                             if caller_records:
-                                key = genotype_key(caller_records, ref_base)
+                                key = genotype_key(caller_records, ref_base,
+                                                   filtered_vote)
                                 keys[fi] = key
                                 present[fi] = True
                         min_next = _NO_RECORD
@@ -934,12 +950,12 @@ def main():
 
                         reference_detail = None
                         if absent_vote == 'ref':
-                            absent_key = (ref_base, _REFERENCE_ALTS, (0, 0))
+                            absent_key = (ref_base, {}, 0)
                         elif any(not seen for seen in present):
                             if has_column:
                                 reference_detail = reference_support_of(ref_base)
                                 absent_key = (
-                                    (ref_base, _REFERENCE_ALTS, (0, 0))
+                                    (ref_base, {}, 0)
                                     if reference_detail[0] >= min_coverage
                                     else None)
                             else:

@@ -33,7 +33,7 @@ process CALLING_GATK {
     EOF
 
     parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir "\$TMPDIR" | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir "\$TMPDIR" | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
 
     # GATK runs with interval padding, so calls near a chunk boundary can be
     # emitted out of order by the padded neighbours. Sort only this caller;

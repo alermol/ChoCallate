@@ -33,6 +33,9 @@ process GENERATE_CONSENSUS {
         ? "--compress_reference_blocks"
         : ""
     def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
+    def filtered_vote = params.consensus.filtered_vote != null
+        ? params.consensus.filtered_vote
+        : 'abstain'
     def tie_policy = params.consensus.tie_policy != null ? params.consensus.tie_policy : 'nocall'
     def min_coverage = params.coverage.min_coverage != null
         ? params.coverage.min_coverage
@@ -55,6 +58,7 @@ process GENERATE_CONSENSUS {
         --reference tmp/ref_genome.fasta \
         --consensus_threshold "${params.consensus.threshold}" \
         --absent_vote "${absent_vote}" \
+        --filtered_vote "${filtered_vote}" \
         --tie_policy "${tie_policy}" \
         --min_coverage "${min_coverage}" \
         --version "${workflow.manifest.version}" \

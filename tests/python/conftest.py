@@ -180,10 +180,11 @@ def write_caller_bcf(path, sample_name, records, contig=CHR, length=len(REF_SEQ)
         sample_name: Name of the single sample.
         records: Iterable of (start0, ref, alts, gt) tuples; ``gt`` is a tuple
             such as (0, 1), (0, 0) or (None, None).  An optional fifth item sets
-            the record QUAL (used by the ``qual`` tie policy).  An empty
-            ``alts`` is written as the VCF placeholder ALT ``.``, the same
-            representation generate_consensus.py itself emits for
-            hom-reference records.
+            the record QUAL.  An optional sixth item sets the FILTER: a name
+            such as ``'PASS'``/``'LowQual'``, a sequence of names, or
+            ``None``/``'.'`` for no filter.  An empty ``alts`` is written as the
+            VCF placeholder ALT ``.``, the same representation
+            generate_consensus.py itself emits for hom-reference records.
         contig: Contig name.
         length: Contig length.
 
@@ -193,17 +194,24 @@ def write_caller_bcf(path, sample_name, records, contig=CHR, length=len(REF_SEQ)
     header = pysam.VariantHeader()
     header.add_line(f'##contig=<ID={contig},length={length}>')
     header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">')
+    header.add_line('##FILTER=<ID=LowQual,Description="Low quality">')
     header.add_sample(sample_name)
     with pysam.VariantFile(str(path), 'wb', header=header) as out:
         for entry in records:
             start0, ref, alts, gt = entry[:4]
             qual = entry[4] if len(entry) > 4 else None
+            filters = entry[5] if len(entry) > 5 else None
             alleles = (ref,) + (tuple(alts) if alts else ('.',))
             record = out.new_record(contig=contig, start=start0,
                                     stop=start0 + len(ref),
                                     alleles=alleles)
             if qual is not None:
                 record.qual = qual
+            if isinstance(filters, str):
+                filters = (filters,)
+            for name in filters or ():
+                if name != '.':
+                    record.filter.add(name)
             record.samples[0]['GT'] = gt
             out.write(record)
     subprocess.run([BCFTOOLS, 'index', '--csi', '-f', str(path)], check=True)
@@ -214,7 +222,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
                   use_accel=False, output_name='out.bcf', reference=None,
                   callers=None, configured_callers=None, check=True,
                   absent_vote='ref', tie_policy='nocall', min_coverage=0,
-                  compress_reference_blocks=False):
+                  filtered_vote='abstain', compress_reference_blocks=False):
     """Run bin/generate_consensus.py as a subprocess and return its output path.
 
     Args:
@@ -227,6 +235,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         absent_vote: ``ref`` or ``abstain`` voting for absent callers.
         tie_policy: ``nocall`` or ``first`` tie-breaking.
         min_coverage: Coverage required by ``absent_vote=abstain``.
+        filtered_vote: ``abstain`` or ``ref`` voting for filtered records.
         compress_reference_blocks: Compress hom-reference runs into blocks.
     """
     output = tmp_path / output_name
@@ -253,6 +262,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         '--reference', str(reference),
         '--consensus_threshold', str(threshold),
         '--absent_vote', absent_vote,
+        '--filtered_vote', filtered_vote,
         '--tie_policy', tie_policy,
         '--min_coverage', str(min_coverage),
         '--version', 'test',

@@ -182,5 +182,10 @@ consensus:
   # requires at least coverage.min_coverage reads at the position.
   absent_vote: "ref"
 
+  # Vote of a caller record whose FILTER is not PASS/".": "abstain" or
+  # "ref". "abstain" keeps a soft-filtered record out of the vote instead of
+  # counting it as reference evidence.
+  filtered_vote: "abstain"
+
   # Zygosity tie-breaker: "nocall" or "first".
   tie_policy: "nocall"

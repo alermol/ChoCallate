@@ -42,7 +42,9 @@ nextflow_process {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(bcf) == 296
+            // Low-QUAL records are retained with FILTER=LowQual, so the
+            // count includes both passing and soft-filtered records.
+            assert ChoCallateTestUtils.recordCount(bcf) == 1858
             assert snapshot(
                 ChoCallateTestUtils.statsLines(bcf)
             ).match()

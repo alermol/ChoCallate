@@ -383,6 +383,11 @@
                     "description": "How a caller without a record at a position votes.",
                     "enum": ["ref", "abstain"]
                 },
+                "filtered_vote": {
+                    "type": "string",
+                    "description": "How a caller record whose FILTER is not PASS or . votes.",
+                    "enum": ["abstain", "ref"]
+                },
                 "tie_policy": {
                     "type": "string",
                     "description": "Zygosity tie-breaker among supporters of the winning ALT.",

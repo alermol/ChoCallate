@@ -141,7 +141,7 @@ class ChoCallateTestUtils {
                 'Description="Read depth">',
             '##ChoCallate=<Version=test,Threshold=1,Callers="bcftools",' +
                 'Rule=two-stage,Tie=nocall,AbsentVote=ref,' +
-                'ReferenceBlocks=False>',
+                'FilteredVote=abstain,ReferenceBlocks=False>',
             '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\t' +
                 "FORMAT\t${sample}"
         ]
