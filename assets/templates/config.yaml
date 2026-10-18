@@ -107,7 +107,8 @@ mapping:
   # Extra arguments passed verbatim to the mapper.
   extra_args: ""
 
-  # CPUs requested per mapping task.
+  # CPUs requested per mapping task. The mapper and BAM post-processing run
+  # concurrently, so this is split between them.
   cpu: 10
 
   # Read-group PL value.

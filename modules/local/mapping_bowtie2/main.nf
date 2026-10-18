@@ -26,6 +26,13 @@ process MAPPING_BOWTIE2 {
         file(params.input.reference_genome).name
     def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
         ResourceUtils.javaHeapOption(task.memory)
+    // The aligner and BAM post-processing run concurrently in one pipe, so
+    // split the requested CPUs. samtools view between them adds one thread.
+    def cpus = task.cpus as int
+    def aligner_cpus = Math.max(1, (cpus + 1).intdiv(2))
+    def postprocess_cpus = Math.max(1, cpus - aligner_cpus)
+    def memory_mb = task.memory ? task.memory.toMega() : 0
+    def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
     def reads = params.input.reads_type == 'se' ? "-U tmp/read1" :
                 params.input.reads_type == 'pe' ? "-1 tmp/read1 -2 tmp/read2" :
                 params.input.reads_type == 'mx' ? "-1 tmp/read1 -2 tmp/read2 -U tmp/read3" : ''
@@ -34,21 +41,22 @@ process MAPPING_BOWTIE2 {
 
     bowtie2 \
         ${params.mapping.extra_args} \
-        --threads ${task.cpus} \
+        --threads ${aligner_cpus} \
         --rg-id "${sample_id}" \
         --rg "SM:${sample_id}" \
         --rg "PL:${platform}" \
         --rg "LB:${library}" \
         -x "index/${index_prefix}" \
         ${reads} | \
-    samtools view --threads ${task.cpus} -b | \
+    samtools view -u | \
     postprocess_bam.sh \
         --input - \
         --output mapping.bam \
         --reference tmp/ref_genome.fasta \
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
-        --threads ${task.cpus} \
+        --threads ${postprocess_cpus} \
+        ${memory_option} \
         --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}

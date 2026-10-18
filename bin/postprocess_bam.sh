@@ -10,6 +10,7 @@ Usage: postprocess_bam.sh --input BAM|-
   --dict DICT            Sequence dictionary (required with --left-align)
   --mapq INT             Minimum mapping quality (default: 0)
   --threads INT          Worker threads (default: 1)
+  --memory-mb INT        Task memory in MiB (sort uses half)
   --java-options OPTS    JVM options for GATK LeftAlignIndels
   --rmdup                Remove duplicates with samtools markdup
   --left-align           Left-align indels with GATK LeftAlignIndels
@@ -22,6 +23,7 @@ reference=""
 dict=""
 mapq=0
 threads=1
+memory_mb=0
 java_options=""
 rmdup=false
 left_align=false
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --threads)
             threads="$2"
+            shift 2
+            ;;
+        --memory-mb)
+            memory_mb="$2"
             shift 2
             ;;
         --java-options)
@@ -92,6 +98,10 @@ if [[ "$threads" -lt 1 ]]; then
     echo "--threads must be >= 1" >&2
     exit 2
 fi
+if [[ "$memory_mb" -lt 0 ]]; then
+    echo "--memory-mb must be >= 0" >&2
+    exit 2
+fi
 
 tmpdir="$(mktemp -d -p "$PWD" .postprocess.XXXXXX)"
 cleanup() {
@@ -99,14 +109,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Half of the task memory is shared by the sorting threads; the rest is left
+# for the aligner or for the other BAM-processing stages.
+sort_memory_mb=768
+if [[ "$memory_mb" -gt 0 ]]; then
+    sort_memory_mb=$(( memory_mb / 2 / threads ))
+    if [[ "$sort_memory_mb" -lt 1 ]]; then
+        sort_memory_mb=1
+    fi
+fi
+
 if [[ "$rmdup" == true ]]; then
-    samtools collate --threads "$threads" -O -u -T "$tmpdir/collate" "$input" \
+    samtools collate --threads "$threads" -O -u -T "$tmpdir/collate" \
+            "$input" \
         | samtools fixmate --threads "$threads" -m -u - - \
-        | samtools sort --threads "$threads" -u -T "$tmpdir/sort" - \
-        | samtools markdup --threads "$threads" -r -T "$tmpdir/markdup" - "$tmpdir/dedup.bam"
+        | samtools sort --threads "$threads" -m "${sort_memory_mb}M" -u \
+            -T "$tmpdir/sort" - \
+        | samtools markdup --threads "$threads" -r \
+            -T "$tmpdir/markdup" - "$tmpdir/dedup.bam"
     filtered_source="$tmpdir/dedup.bam"
 else
-    samtools sort --threads "$threads" -o "$tmpdir/sorted.bam" "$input"
+    samtools sort --threads "$threads" -m "${sort_memory_mb}M" \
+        -o "$tmpdir/sorted.bam" "$input"
     filtered_source="$tmpdir/sorted.bam"
 fi
 

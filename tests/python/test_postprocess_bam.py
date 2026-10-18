@@ -63,17 +63,40 @@ def write_paired_bam(path):
     return path
 
 
-def run_helper(tmp_path, *args, env=None):
+def run_helper(tmp_path, *args, env=None, threads=1, memory_mb=None):
     output = tmp_path / 'mapping.bam'
-    subprocess.run(
-        [str(BIN_DIR / 'postprocess_bam.sh'),
-         '--input', str(tmp_path / 'in.bam'),
-         '--output', str(output),
-         '--mapq', '10',
-         '--threads', '1',
-         *args],
-        check=True, cwd=str(tmp_path), env=env)
+    command = [
+        str(BIN_DIR / 'postprocess_bam.sh'),
+        '--input', str(tmp_path / 'in.bam'),
+        '--output', str(output),
+        '--mapq', '10',
+        '--threads', str(threads),
+    ]
+    if memory_mb is not None:
+        command += ['--memory-mb', str(memory_mb)]
+    command += list(args)
+    subprocess.run(command, check=True, cwd=str(tmp_path), env=env)
     return output
+
+
+def write_stub_samtools(tmp_path):
+    """Replace samtools with a wrapper that logs and forwards arguments."""
+    real_samtools = shutil.which('samtools')
+    stub_dir = tmp_path / 'stub_samtools_bin'
+    stub_dir.mkdir()
+    log = tmp_path / 'samtools_args.txt'
+    stub = stub_dir / 'samtools'
+    stub.write_text(
+        '#!/bin/bash\n'
+        'printf "%s\\n" "$*" >> "$SAMTOOLS_ARGS_LOG"\n'
+        'exec "$REAL_SAMTOOLS" "$@"\n'
+    )
+    stub.chmod(0o755)
+    env = os.environ.copy()
+    env['PATH'] = str(stub_dir) + os.pathsep + env['PATH']
+    env['SAMTOOLS_ARGS_LOG'] = str(log)
+    env['REAL_SAMTOOLS'] = real_samtools
+    return env, log
 
 
 def write_stub_gatk(tmp_path):
@@ -122,6 +145,23 @@ def test_postprocess_without_rmdup_keeps_duplicates(tmp_path):
         'dup1', 'dup1', 'dup2', 'dup2', 'uniq', 'uniq']
     assert (tmp_path / 'mapping.bam.csi').is_file()
     subprocess.run([SAMTOOLS, 'quickcheck', str(output)], check=True)
+
+
+@pytest.mark.parametrize('extra_args', [[], ['--rmdup']],
+                         ids=['sort', 'markdup'])
+def test_sort_memory_comes_from_task_memory(tmp_path, extra_args):
+    write_paired_bam(tmp_path / 'in.bam')
+    env, log = write_stub_samtools(tmp_path)
+
+    run_helper(
+        tmp_path, *extra_args, threads=2, memory_mb=4096, env=env)
+
+    sort_calls = [
+        line for line in log.read_text().splitlines()
+        if line.startswith('sort ')
+    ]
+    assert sort_calls
+    assert all('-m 1024M' in line for line in sort_calls)
 
 
 def test_left_align_receives_task_java_options(tmp_path):

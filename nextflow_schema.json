@@ -195,7 +195,7 @@
                 },
                 "cpu": {
                     "type": "integer",
-                    "description": "CPUs requested per mapping task.",
+                    "description": "CPUs per task, shared by mapper and sort.",
                     "minimum": 1
                 },
                 "platform": {

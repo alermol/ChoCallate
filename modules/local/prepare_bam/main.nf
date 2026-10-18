@@ -23,6 +23,8 @@ process PREPARE_BAM {
     def library = params.mapping.library ?: sample_id
     def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
         ResourceUtils.javaHeapOption(task.memory)
+    def memory_mb = task.memory ? task.memory.toMega() : 0
+    def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
     """
     set -o pipefail
 
@@ -43,6 +45,7 @@ process PREPARE_BAM {
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
         --threads ${task.cpus} \
+        ${memory_option} \
         --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}

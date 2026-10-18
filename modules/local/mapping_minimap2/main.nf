@@ -27,6 +27,13 @@ process MAPPING_MINIMAP2 {
         file(params.input.reference_genome).name
     def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
         ResourceUtils.javaHeapOption(task.memory)
+    // The aligner and BAM post-processing run concurrently in one pipe, so
+    // split the requested CPUs. samtools view between them adds one thread.
+    def cpus = task.cpus as int
+    def aligner_cpus = Math.max(1, (cpus + 1).intdiv(2))
+    def postprocess_cpus = Math.max(1, cpus - aligner_cpus)
+    def memory_mb = task.memory ? task.memory.toMega() : 0
+    def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
     def reads = params.input.reads_type == 'se' ? "tmp/read1" :
                 params.input.reads_type == 'pe' ? "tmp/read1 tmp/read2" : ''
     """
@@ -35,18 +42,19 @@ process MAPPING_MINIMAP2 {
     minimap2 \
         ${params.mapping.extra_args} \
         -ax sr \
-        -t ${task.cpus} \
+        -t ${aligner_cpus} \
         -R "${rg_id}" \
         -a "index/${index_prefix}.mmi" \
         ${reads} | \
-    samtools view --threads ${task.cpus} -b | \
+    samtools view -u | \
     postprocess_bam.sh \
         --input - \
         --output mapping.bam \
         --reference tmp/ref_genome.fasta \
         --dict tmp/ref_genome.dict \
         --mapq ${params.bam_filter.min_map_qual} \
-        --threads ${task.cpus} \
+        --threads ${postprocess_cpus} \
+        ${memory_option} \
         --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}

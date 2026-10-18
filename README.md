@@ -131,7 +131,9 @@ label CPU defaults. JVM heaps are derived from the memory requested for the
 task, including GATK processes started by GNU parallel. A task that exits with
 status 137 or 140 (typically an out-of-memory kill) is retried up to
 `resources.max_retries` times with memory multiplied by the attempt number.
-Ordinary caller failures use the same limit.
+Ordinary caller failures use the same limit. Mapping tasks split
+`mapping.cpu` between the mapper and the concurrent BAM post-processing, and
+`samtools sort` receives half of the task memory split across its threads.
 
 
 
@@ -199,7 +201,7 @@ Reference positions are emitted internally as gVCF-style records with the symbol
 
 Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (default 150) so indels near the edge of a covered island are assembled, but each padded chunk's calls are restricted to its own unpadded BED interval with `bcftools view -T` before concatenation. Boundary sites therefore come from exactly one chunk, even when the padded neighbours emit different allele representations that `bcftools norm -d exact` cannot deduplicate. Each caller BCF is sorted and deduplicated with `bcftools norm -d exact`. The covered BED is produced by `mosdepth --no-per-base --quantize` (keeping the runs at or above `coverage.min_coverage`, default 5), intersected with the sorted `include_bed`, subtracted with the sorted `exclude_bed`, and split once per sample (`SCATTER_INTERVALS`); the same chunks are reused by every caller and by consensus. Chunk files are concatenated in version order (`ls -v`) and are not re-sorted, except for GATK, which keeps one sort as a guard for padded boundary order. When no base of a sample reaches `coverage.min_coverage`, `GENERATE_COVERAGE` aborts with the sample id and threshold by default. Set `coverage.on_empty: "skip"` to drop that sample with a warning instead; it is then listed in `dropped_samples.txt` and in the merged `SamplesDropped=` header field.
 
-Mapping and BAM input share `bin/postprocess_bam.sh`: reads are coordinate-sorted, MAPQ-filtered after mate fixing and duplicate marking (`bam_filter.min_map_qual`, default 10), optionally deduplicated with `samtools markdup`, and indexed once. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
+Mapping and BAM input share `bin/postprocess_bam.sh`: aligner output is piped through `samtools view -u` as uncompressed BAM, then reads are coordinate-sorted, MAPQ-filtered after mate fixing and duplicate marking (`bam_filter.min_map_qual`, default 10), optionally deduplicated with `samtools markdup`, and indexed once. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
 
 Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,FilteredVote=abstain,ReferenceBlocks=True>`. `CallersFailed="..."` is added in degraded mode, `SamplesDropped="..."` lists samples that were removed entirely, and `MinCoverage=...` is added when `absent_vote` is `abstain`. The final output also records `##ChoCallateCommand="<full nextflow command>"`. The command line is read from the `NXF_CLI` runtime variable, not embedded in a task script, so changing launch options such as adding `-resume` does not invalidate cached consensus or merge tasks.
 
