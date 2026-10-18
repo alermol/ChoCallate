@@ -57,6 +57,18 @@ workflow {
         )
     }
 
+    // Compression is detected from the header.  BGZF is decompressed below;
+    // plain gzip cannot be indexed by samtools faidx or read by GATK, so it
+    // is rejected before any task starts.
+    def reference_file =
+        file(params.input.reference_genome, checkIfExists: true)
+    def reference_is_bgzip = CLIParamsValidation.is_bgzip(reference_file)
+    if (!reference_is_bgzip && CLIParamsValidation.is_gzip(reference_file)) {
+        error(
+            "reference is gzip-compressed but not BGZF; recompress with bgzip"
+        )
+    }
+
     // Mapper indexes are staged as task inputs. The prefix is resolved here,
     // so the command never depends on a host path, and a missing index aborts
     // before the first task starts.
@@ -88,11 +100,7 @@ workflow {
         }
     )
 
-    // Prepare genome assembly, fai index and sequence dictionary.  BGZF is
-    // detected from the header, so ref_genome.bgzip is no longer a parameter.
-    def reference_file =
-        file(params.input.reference_genome, checkIfExists: true)
-    def reference_is_bgzip = CLIParamsValidation.is_bgzip(reference_file)
+    // Prepare genome assembly, fai index and sequence dictionary.
     ref_genome = reference_is_bgzip
         ? DECOMPRESS_ASSEMBLY(reference_file)
         : reference_file

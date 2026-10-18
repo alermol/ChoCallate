@@ -5,6 +5,7 @@ suite does not need mapping or calling tools.  A Nextflow installation and the
 pipeline plugins are required; the tests are skipped otherwise.
 """
 
+import gzip
 import json
 import os
 import shlex
@@ -217,6 +218,25 @@ def test_missing_read_file_is_rejected(tmp_path):
     output = _output(result)
     assert "missing.fq" in output
     assert "file not found" in output
+
+
+def test_plain_gzip_reference_is_rejected(tmp_path):
+    _prepare_inputs(tmp_path)
+    reference = tmp_path / "ref.fa.gz"
+    with gzip.open(reference, "wb") as handle:
+        handle.write((tmp_path / "ref.fa").read_bytes())
+    params = _config(
+        tmp_path,
+        overrides={"input": {"reference_genome": str(reference)}},
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    assert (
+        "reference is gzip-compressed but not BGZF; recompress with bgzip"
+        in _output(result)
+    )
 
 
 def test_header_and_comment_lines_are_skipped(tmp_path):

@@ -406,6 +406,29 @@ class CLIParamsValidation {
     }
 
     /**
+     * Detects plain gzip from the magic bytes, ignoring the extra fields.
+     * A gzip-compressed reference that is not BGZF cannot be indexed by
+     * samtools faidx, so the workflow rejects it before any task starts.
+     */
+    static boolean is_gzip(Path fasta) {
+        try {
+            return Files.newInputStream(fasta).withCloseable { stream ->
+                byte[] magic = new byte[2]
+                int read = stream.readNBytes(magic, 0, magic.length)
+                return read == magic.length &&
+                    (magic[0] & 0xff) == 0x1f &&
+                    (magic[1] & 0xff) == 0x8b
+            }
+        } catch (IOException exception) {
+            fail(
+                "input.reference_genome: cannot read '${fasta}': " +
+                exception.message
+            )
+        }
+        return false
+    }
+
+    /**
      * Fails early when the merge step cannot open the descriptors it needs.
      * Each chunk opens its BCFs plus their indexes; the final merge opens one
      * named pipe per chunk.  A small fixed margin covers stdio and htslib

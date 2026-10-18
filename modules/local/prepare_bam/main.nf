@@ -28,6 +28,8 @@ process PREPARE_BAM {
     """
     set -o pipefail
 
+    check_bam_reference.py tmp/read1 tmp/ref_genome.fasta.fai
+
     samtools addreplacerg \
         -w \
         -r "ID:${sample_id}" \
