@@ -336,6 +336,18 @@
                             "type": "object",
                             "title": "bcftools mpileup",
                             "properties": {
+                                "max_depth": {
+                                    "type": "integer",
+                                    "default": 100000,
+                                    "description": "Maximum raw depth per input file. The bcftools default of 250 silently down-samples high-coverage libraries.",
+                                    "minimum": 1
+                                },
+                                "max_idepth": {
+                                    "type": "integer",
+                                    "default": 100000,
+                                    "description": "Maximum per-file depth for indel calling. The bcftools default of 250 silently down-samples high-coverage libraries.",
+                                    "minimum": 1
+                                },
                                 "extra_args": {
                                     "type": "string",
                                     "description": "Extra arguments for bcftools mpileup."
@@ -359,6 +371,18 @@
                             "type": "number",
                             "description": "Minimum freebayes QUAL for indels and other non-SNP records.",
                             "minimum": 0
+                        },
+                        "use_best_n_alleles": {
+                            "type": "integer",
+                            "default": 4,
+                            "description": "Evaluate only the N best alleles per site, ranked by supporting quality. 0 evaluates all alleles, which can exhaust memory in repeat regions.",
+                            "minimum": 0
+                        },
+                        "limit_coverage": {
+                            "type": "integer",
+                            "default": 100000,
+                            "description": "Per-sample coverage cap; freebayes down-samples coverage above this depth.",
+                            "minimum": 1
                         },
                         "extra_args": {
                             "type": "string",

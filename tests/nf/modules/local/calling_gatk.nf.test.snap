@@ -3,18 +3,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t687",
+                "SN\t0\tnumber of records:\t716",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t614",
+                "SN\t0\tnumber of SNPs:\t637",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t71",
+                "SN\t0\tnumber of indels:\t77",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t0",
                 "SN\t0\tnumber of multiallelic SNP sites:\t0",
-                "TSTV\t0\t368\t246\t1.50\t368\t246\t1.50"
+                "TSTV\t0\t379\t258\t1.47\t379\t258\t1.47"
             ]
         ],
-        "timestamp": "2026-10-17T23:47:09.391575114",
+        "timestamp": "2026-10-18T23:18:21.249924049",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"

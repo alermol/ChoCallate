@@ -62,7 +62,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
@@ -128,7 +128,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
         }
     }
 
@@ -187,7 +187,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
@@ -256,7 +256,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(vcf) == 308
+            assert ChoCallateTestUtils.recordCount(vcf) == 303
             assert snapshot(
                 ChoCallateTestUtils.statsLines(vcf)
             ).match()
@@ -325,7 +325,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(consensus) == 297
+            assert ChoCallateTestUtils.recordCount(consensus) == 305
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
@@ -393,7 +393,7 @@ nextflow_pipeline {
             )
             // Soft-filtered caller records abstain, so positions where the
             // only caller record is LowQual are not written as reference.
-            assert ChoCallateTestUtils.recordCount(consensus) == 560
+            assert ChoCallateTestUtils.recordCount(consensus) == 578
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
@@ -472,7 +472,7 @@ nextflow_pipeline {
             assert ChoCallateTestUtils.statsValue(
                 consensus, 'number of samples'
             ) == 3
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
@@ -543,7 +543,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
         }
     }
 
@@ -600,7 +600,7 @@ nextflow_pipeline {
             assert consensus.length() > 0
             assert ChoCallateTestUtils.vcfSamples(consensus) ==
                 ['sample1']
-            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert ChoCallateTestUtils.recordCount(consensus) == 271
         }
     }
 

@@ -24,6 +24,7 @@ process CALLING_GATK {
     def heap_option = ResourceUtils.javaHeapOption(task.memory, task.cpus)
     assert min_snp != null : 'calling.gatk.min_snp_qual is required'
     assert min_indel != null : 'calling.gatk.min_indel_qual is required'
+    def call_confidence = [min_snp, min_indel].min()
     def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
     mkdir -p tmp/calling_chunks/
@@ -39,7 +40,9 @@ process CALLING_GATK {
     # -T streams the BED and needs no index.
     cat > tmp/run_chunk.sh <<'EOF'
     set -euo pipefail
-    gatk HaplotypeCaller ${extra_args} \
+    gatk HaplotypeCaller \
+        --standard-min-confidence-threshold-for-calling ${call_confidence} \
+        ${extra_args} \
         --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
         --do-not-run-physical-phasing true \
         --smith-waterman FASTEST_AVAILABLE \
@@ -52,7 +55,6 @@ process CALLING_GATK {
         --tmp-dir "\$TMPDIR" \
     | bcftools reheader -s tmp/calling_chunks/sample_id.txt \
         -f tmp/ref_genome.fasta.fai \
-    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ou \
     | bcftools view -T "\$1" -Ob -o "tmp/calling_chunks/\$2.bcf"
     EOF
 
@@ -75,6 +77,7 @@ process CALLING_GATK {
     bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/calling_chunks/*.bcf) \
     | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
     | bcftools sort -Ou \
-    | bcftools norm --threads ${task.cpus} -d exact -Ob -o gatk.bcf
+    | bcftools norm --threads ${task.cpus} -d exact -Ou \
+    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o gatk.bcf
     """
 }

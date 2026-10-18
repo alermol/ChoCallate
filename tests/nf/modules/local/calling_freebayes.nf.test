@@ -44,10 +44,72 @@ nextflow_process {
             )
             // Low-QUAL records are retained with FILTER=LowQual, so the
             // count includes both passing and soft-filtered records.
-            assert ChoCallateTestUtils.recordCount(bcf) == 1858
+            assert ChoCallateTestUtils.recordCount(bcf) == 1855
             assert snapshot(
                 ChoCallateTestUtils.statsLines(bcf)
             ).match()
+        }
+    }
+
+    test("filters atomised records by their resulting type") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            def chunks = new File(launchDir, 'chunks')
+            chunks.mkdirs()
+            new File(chunks, 'full.bed').text =
+                "CP002684.1\t0\t200001\n"
+        }
+
+        when {
+            params {
+                calling {
+                    freebayes {
+                        min_snp_qual = 20
+                        min_indel_qual = 1000
+                    }
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi"),
+                    file("${launchDir}/chunks/full.bed")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[2] = file("${launchDir}/reference/genome.fasta.fai")
+                input[3] = file("${launchDir}/reference/genome.dict")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(
+                process.out.calling_result[0][1]
+            )
+            def rows = ChoCallateTestUtils.run(
+                bcf.parentFile,
+                "bcftools query -f '%TYPE\\t%QUAL\\t%FILTER\\n' " +
+                "'${bcf}'"
+            ).readLines().collect { line -> line.split('\t', -1) }
+
+            // MNP and complex records are split before filtering, so an
+            // atomised SNP must use min_snp_qual even though the indel
+            // threshold is 1000.
+            def snps = rows.findAll { row -> row[0] == 'SNP' }
+            def indels = rows.findAll { row -> row[0] == 'INDEL' }
+            assert snps.every { row ->
+                (row[1] as double) < 20 || row[2] == 'PASS'
+            }
+            assert indels.every { row ->
+                (row[1] as double) >= 1000 || row[2] == 'LowQual'
+            }
+            assert snps.any { row -> (row[1] as double) < 1000 }
+            assert indels.any { row -> (row[1] as double) < 1000 }
         }
     }
 }

@@ -170,6 +170,12 @@ calling:
       # Extra arguments for bcftools call.
       extra_args: ""
     mpileup:
+      # Maximum raw depth per input file. bcftools defaults to 250, which
+      # silently down-samples high-coverage libraries.
+      max_depth: 100000
+      # Maximum per-file depth for indel calling. bcftools also defaults this
+      # separately to 250.
+      max_idepth: 100000
       # Extra arguments for bcftools mpileup.
       extra_args: ""
 
@@ -177,6 +183,11 @@ calling:
     # Minimum QUAL for SNPs and for indels/other records.
     min_snp_qual: 20
     min_indel_qual: 20
+    # Evaluate only the N best alleles per site, ranked by supporting
+    # quality; 0 evaluates all and can blow up in repeat regions.
+    use_best_n_alleles: 4
+    # Cap per-sample coverage; freebayes down-samples above this depth.
+    limit_coverage: 100000
     # Extra arguments for freebayes.
     extra_args: ""
 

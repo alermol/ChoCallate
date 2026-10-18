@@ -4,18 +4,18 @@
             [
                 "[W::bcf_hdr_check_sanity] MQ should be declared as Type=Float",
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t314",
+                "SN\t0\tnumber of records:\t313",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t284",
+                "SN\t0\tnumber of SNPs:\t283",
                 "SN\t0\tnumber of MNPs:\t0",
                 "SN\t0\tnumber of indels:\t30",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t0",
                 "SN\t0\tnumber of multiallelic SNP sites:\t0",
-                "TSTV\t0\t151\t133\t1.14\t151\t133\t1.14"
+                "TSTV\t0\t151\t132\t1.14\t151\t132\t1.14"
             ]
         ],
-        "timestamp": "2026-10-17T23:43:16.987906791",
+        "timestamp": "2026-10-19T00:04:37.685798997",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"

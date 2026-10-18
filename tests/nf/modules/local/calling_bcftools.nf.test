@@ -44,7 +44,7 @@ nextflow_process {
             )
             // Low-QUAL records are retained with FILTER=LowQual, so the
             // count includes both passing and soft-filtered records.
-            assert ChoCallateTestUtils.recordCount(bcf) == 314
+            assert ChoCallateTestUtils.recordCount(bcf) == 313
             assert snapshot(
                 ChoCallateTestUtils.statsLines(bcf)
             ).match()
@@ -97,7 +97,7 @@ nextflow_process {
             assert ChoCallateTestUtils.vcfHeader(bcf).contains(
                 '##FORMAT=<ID=SP,'
             )
-            assert ChoCallateTestUtils.recordCount(bcf) == 314
+            assert ChoCallateTestUtils.recordCount(bcf) == 313
         }
     }
 }

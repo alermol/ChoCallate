@@ -4,18 +4,18 @@
             [
                 "[W::bcf_hdr_check_sanity] GQ should be declared as Type=Integer",
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t1858",
+                "SN\t0\tnumber of records:\t1855",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t1727",
+                "SN\t0\tnumber of SNPs:\t1725",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t131",
+                "SN\t0\tnumber of indels:\t130",
                 "SN\t0\tnumber of others:\t0",
-                "SN\t0\tnumber of multiallelic sites:\t32",
+                "SN\t0\tnumber of multiallelic sites:\t28",
                 "SN\t0\tnumber of multiallelic SNP sites:\t0",
-                "TSTV\t0\t867\t860\t1.01\t867\t860\t1.01"
+                "TSTV\t0\t867\t858\t1.01\t867\t858\t1.01"
             ]
         ],
-        "timestamp": "2026-10-17T23:43:53.180620826",
+        "timestamp": "2026-10-18T23:15:10.460961383",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"

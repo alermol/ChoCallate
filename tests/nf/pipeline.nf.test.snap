@@ -3,18 +3,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t297",
+                "SN\t0\tnumber of records:\t305",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t275",
+                "SN\t0\tnumber of SNPs:\t287",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t22",
+                "SN\t0\tnumber of indels:\t18",
                 "SN\t0\tnumber of others:\t0",
-                "SN\t0\tnumber of multiallelic sites:\t5",
-                "SN\t0\tnumber of multiallelic SNP sites:\t3",
-                "TSTV\t0\t158\t120\t1.32\t158\t117\t1.35"
+                "SN\t0\tnumber of multiallelic sites:\t4",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t164\t125\t1.31\t164\t123\t1.33"
             ]
         ],
-        "timestamp": "2026-10-17T23:59:14.634726384",
+        "timestamp": "2026-10-18T23:32:12.539506763",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"
@@ -24,18 +24,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t308",
+                "SN\t0\tnumber of records:\t303",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t289",
+                "SN\t0\tnumber of SNPs:\t287",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t19",
+                "SN\t0\tnumber of indels:\t17",
                 "SN\t0\tnumber of others:\t0",
-                "SN\t0\tnumber of multiallelic sites:\t3",
-                "SN\t0\tnumber of multiallelic SNP sites:\t2",
-                "TSTV\t0\t168\t123\t1.37\t168\t121\t1.39"
+                "SN\t0\tnumber of multiallelic sites:\t5",
+                "SN\t0\tnumber of multiallelic SNP sites:\t3",
+                "TSTV\t0\t166\t124\t1.34\t165\t122\t1.35"
             ]
         ],
-        "timestamp": "2026-10-17T23:58:14.761009458",
+        "timestamp": "2026-10-18T23:30:36.724053717",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"
@@ -45,18 +45,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of records:\t271",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of SNPs:\t256",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of indels:\t15",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t3",
                 "SN\t0\tnumber of multiallelic SNP sites:\t2",
-                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+                "TSTV\t0\t145\t113\t1.28\t145\t111\t1.31"
             ]
         ],
-        "timestamp": "2026-10-17T23:56:42.309618951",
+        "timestamp": "2026-10-18T23:27:29.765635124",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"
@@ -66,18 +66,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t3",
-                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of records:\t271",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of SNPs:\t256",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of indels:\t15",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t3",
                 "SN\t0\tnumber of multiallelic SNP sites:\t2",
-                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+                "TSTV\t0\t145\t113\t1.28\t145\t111\t1.31"
             ]
         ],
-        "timestamp": "2026-10-18T08:21:18.781508192",
+        "timestamp": "2026-10-18T23:35:39.517778135",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"
@@ -87,18 +87,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t560",
-                "SN\t0\tnumber of no-ALTs:\t300",
-                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of records:\t578",
+                "SN\t0\tnumber of no-ALTs:\t307",
+                "SN\t0\tnumber of SNPs:\t256",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of indels:\t15",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t3",
                 "SN\t0\tnumber of multiallelic SNP sites:\t2",
-                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+                "TSTV\t0\t145\t113\t1.28\t145\t111\t1.31"
             ]
         ],
-        "timestamp": "2026-10-18T19:58:14.507005539",
+        "timestamp": "2026-10-18T23:33:57.991736434",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"
@@ -108,18 +108,18 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of records:\t271",
                 "SN\t0\tnumber of no-ALTs:\t0",
-                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of SNPs:\t256",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of indels:\t15",
                 "SN\t0\tnumber of others:\t0",
                 "SN\t0\tnumber of multiallelic sites:\t3",
                 "SN\t0\tnumber of multiallelic SNP sites:\t2",
-                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+                "TSTV\t0\t145\t113\t1.28\t145\t111\t1.31"
             ]
         ],
-        "timestamp": "2026-10-18T08:16:58.085648748",
+        "timestamp": "2026-10-18T23:29:36.028215182",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"

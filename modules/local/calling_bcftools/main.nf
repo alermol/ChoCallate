@@ -19,8 +19,12 @@ process CALLING_BCFTOOLS {
     def caller = params.calling.bcftools ?: [:]
     def call_args = caller.call?.extra_args ?: ''
     def mpileup_args = caller.mpileup?.extra_args ?: ''
+    def max_depth = caller.mpileup?.max_depth
+    def max_idepth = caller.mpileup?.max_idepth
     def min_snp = caller.min_snp_qual
     def min_indel = caller.min_indel_qual
+    assert max_depth != null : 'calling.bcftools.mpileup.max_depth is required'
+    assert max_idepth != null : 'calling.bcftools.mpileup.max_idepth is required'
     assert min_snp != null : 'calling.bcftools.min_snp_qual is required'
     assert min_indel != null : 'calling.bcftools.min_indel_qual is required'
     def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
@@ -33,15 +37,15 @@ process CALLING_BCFTOOLS {
 
     cat > tmp/run_chunk.sh <<'EOF'
     set -euo pipefail
-    bcftools mpileup ${mpileup_args} \
+    bcftools mpileup --max-depth ${max_depth} --max-idepth ${max_idepth} \
+        ${mpileup_args} \
         -a FORMAT/AD,FORMAT/DP --count-orphans -Ou \
         --fasta-ref tmp/ref_genome.fasta --regions-file "\$1" \
         tmp/input.bam \
     | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou \
     | bcftools reheader -s tmp/calling_chunks/sample_id.txt \
         -f tmp/ref_genome.fasta.fai \
-    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob \
-        -o "tmp/calling_chunks/\$2.bcf"
+    | bcftools view -Ob -o "tmp/calling_chunks/\$2.bcf"
     EOF
 
     # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
@@ -60,6 +64,7 @@ process CALLING_BCFTOOLS {
     # concat, so no full sort is needed afterwards.
     bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/calling_chunks/*.bcf) \
     | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
-    | bcftools norm --threads ${task.cpus} -d exact -Ob -o bcftools.bcf
+    | bcftools norm --threads ${task.cpus} -d exact -Ou \
+    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o bcftools.bcf
     """
 }

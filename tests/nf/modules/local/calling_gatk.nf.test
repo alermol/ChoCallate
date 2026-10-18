@@ -42,7 +42,7 @@ nextflow_process {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(bcf) == 687
+            assert ChoCallateTestUtils.recordCount(bcf) == 716
             assert snapshot(
                 ChoCallateTestUtils.statsLines(bcf)
             ).match()
