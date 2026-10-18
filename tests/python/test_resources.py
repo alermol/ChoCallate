@@ -165,12 +165,8 @@ def test_caller_failure_is_ignored_when_enabled(tmp_path):
     assert (tmp_path / 'attempts.txt').read_text().split() == ['1']
 
 
-@pytest.mark.parametrize(
-    'max_retries, expected_attempts',
-    [(3, ['1', '2', '3', '4']), (1, ['1', '2'])],
-)
-def test_caller_failure_retries_max_retries_times(
-        tmp_path, max_retries, expected_attempts):
+@pytest.mark.parametrize('max_retries', [3, 1])
+def test_deterministic_caller_failure_is_not_retried(tmp_path, max_retries):
     params = _params(
         tmp_path,
         {
@@ -183,4 +179,21 @@ def test_caller_failure_retries_max_retries_times(
 
     assert result.returncode != 0
     attempts = (tmp_path / 'attempts.txt').read_text().split()
-    assert attempts == expected_attempts
+    assert attempts == ['1']
+
+
+def test_transient_caller_failure_is_retried(tmp_path):
+    params = _params(
+        tmp_path,
+        {
+            'attempt_log': str(tmp_path / 'attempts.txt'),
+            'caller_exit_status': 137,
+            'calling': {'allow_caller_failure': False},
+            'resources': {'max_retries': 2},
+        },
+    )
+    result = _run_fixture(CALLER_FIXTURE, params, tmp_path)
+
+    assert result.returncode != 0
+    attempts = (tmp_path / 'attempts.txt').read_text().split()
+    assert attempts == ['1', '2', '3']

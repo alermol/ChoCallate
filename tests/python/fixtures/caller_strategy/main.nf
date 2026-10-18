@@ -4,7 +4,7 @@ process CALLING_BCFTOOLS {
     script:
     """
     printf '%s\\n' "${task.attempt}" >> "${params.attempt_log}"
-    exit 1
+    exit ${params.caller_exit_status ?: 1}
     """
 }
 

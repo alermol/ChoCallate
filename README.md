@@ -133,7 +133,10 @@ status 137 (typically an out-of-memory kill) or 140 (a walltime kill) is
 retried up to `resources.max_retries` times with memory and time multiplied by
 the attempt number. `resources.limits` (`cpus`, `memory_mb`, `time`) caps the
 escalated request, so a late retry cannot ask for resources the executor will
-never provide. Ordinary caller failures use the same retry limit. GNU parallel
+never provide. A caller failure that is not transient (for example an
+invalid extra argument) terminates immediately; set
+`calling.allow_caller_failure: true` to ignore it and continue with the
+surviving callers. GNU parallel
 is started with `--halt now,fail=1` and its job log is inspected, so a
 SIGKILLed child (signal 9, exit 137, or the GATK launcher's 247) is reported
 as task exit 137 instead of a generic non-zero parallel status. Mapping tasks
@@ -211,7 +214,7 @@ Mapping and BAM input share `bin/postprocess_bam.sh`: aligner output is piped th
 
 Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,FilteredVote=abstain,ReferenceBlocks=True>`. `CallersFailed="..."` is added in degraded mode, `SamplesDropped="..."` lists samples that were removed entirely, and `MinCoverage=...` is added when `absent_vote` is `abstain`. The final output also records `##ChoCallateCommand="<full nextflow command>"`. The command line is read from the `NXF_CLI` runtime variable, not embedded in a task script, so changing launch options such as adding `-resume` does not invalidate cached consensus or merge tasks.
 
-Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller is retried up to `resources.max_retries` times and a failure then terminates the run. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers. If every caller fails for a sample, that sample is dropped with a warning in degraded mode (and with an error otherwise); it is listed in `dropped_samples.txt` and in `SamplesDropped=` in the merged header.
+Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller retries transient failures (exit status 137 or 140) up to `resources.max_retries` times; any other failure terminates the run immediately. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers. If every caller fails for a sample, that sample is dropped with a warning in degraded mode (and with an error otherwise); it is listed in `dropped_samples.txt` and in `SamplesDropped=` in the merged header.
 
 Quality filtering is per caller and per variant type: `calling.<caller>.min_snp_qual` and `calling.<caller>.min_indel_qual` (20/20 in `assets/templates/config.yaml`). The filter runs after `bcftools norm -m -any --atomize`, so multi-allelic, MNP and complex records are split first and each resulting record is filtered by its own type (an atomised SNP uses `min_snp_qual`, not the indel threshold). Records below the threshold are kept with `FILTER=LowQual` and enter the consensus vote according to `consensus.filtered_vote` (default `abstain`). Both keys are required; the shared `calling.min_snp_qual` key and the `calling.<caller>.min_qual` alias were removed in 4.0.0.
 
