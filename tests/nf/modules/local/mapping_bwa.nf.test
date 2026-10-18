@@ -1,0 +1,61 @@
+nextflow_process {
+
+    name "Test process MAPPING_BWA"
+    script "../../../../modules/local/mapping_bwa/main.nf"
+    process "MAPPING_BWA"
+
+    test("maps paired-end reads and adds read groups") {
+        setup {
+            ChoCallateTestUtils.bwaIndex(
+                projectDir, new File(launchDir)
+            )
+        }
+
+        when {
+            params {
+                input {
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    reads_type = "pe"
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${projectDir}/test_run/test_reads_R1.fq.gz"),
+                    file("${projectDir}/test_run/test_reads_R2.fq.gz"),
+                    file("${projectDir}/assets/NO_FILE")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[2] = file("${launchDir}/reference/genome.fasta")
+                input[3] = file("${launchDir}/reference/genome.dict")
+                input[4] = file("${launchDir}/reference/genome.fasta.fai")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bam = ChoCallateTestUtils.outputFile(
+                process.out.bam[0][1]
+            )
+            def csi = ChoCallateTestUtils.outputFile(
+                process.out.bam[0][2]
+            )
+            assert bam.isFile()
+            assert csi.isFile()
+            assert ChoCallateTestUtils.bamRecords(bam) > 0
+            def header = ChoCallateTestUtils.bamHeader(bam)
+            assert header.contains('@RG')
+            assert header.contains('ID:sample1')
+            assert header.contains('SM:sample1')
+            assert header.contains('PL:ILLUMINA')
+            assert header.contains('LB:sample1')
+            def rg = header.readLines().find { it.startsWith('@RG') }
+            assert snapshot(
+                [ChoCallateTestUtils.bamRecords(bam), rg]
+            ).match()
+        }
+    }
+}

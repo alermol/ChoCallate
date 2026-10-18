@@ -1,0 +1,40 @@
+nextflow_process {
+
+    name "Test process CREATE_SEQ_DICT"
+    script "../../../../modules/local/create_seq_dict/main.nf"
+    process "CREATE_SEQ_DICT"
+
+    test("creates a sequence dictionary for the reference") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+        }
+
+        when {
+            process {
+                """
+                input[0] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def dict = ChoCallateTestUtils.outputFile(
+                process.out.gen_dict[0]
+            )
+            assert dict.isFile()
+            def lines = dict.readLines()
+            assert lines.any { it.startsWith('@HD') }
+            def sq = lines.find { it.startsWith('@SQ') }
+            assert sq.startsWith('@SQ\tSN:CP002684.1\tLN:200001')
+            def stable = lines.collect { line ->
+                line.startsWith('@SQ')
+                    ? line.split('\t')[0..2].join('\t')
+                    : line
+            }
+            assert snapshot(stable).match()
+        }
+    }
+}

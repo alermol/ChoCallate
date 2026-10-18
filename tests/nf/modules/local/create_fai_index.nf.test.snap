@@ -1,0 +1,14 @@
+{
+    "creates a fai index for the reference": {
+        "content": [
+            [
+                "CP002684.1\t200001\t73\t70\t71"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:41:15.901525881",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

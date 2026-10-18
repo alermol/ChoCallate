@@ -1,68 +1,50 @@
 nextflow_pipeline {
 
-    name "ChoCallate pipeline"
+    name "ChoCallate pipeline modes"
     script "main.nf"
 
-    test("PE bowtie2, single bcftools caller, merged output") {
+    test("test_pe_bowtie2_single") {
         setup {
-            def reference = new File(
-                projectDir, 'test_run/arth_chr1.fasta.gz')
-            def indexDir = new File(launchDir, 'index')
-            indexDir.mkdirs()
-            def indexPrefix = new File(indexDir, reference.name)
-            def build = [
-                'bowtie2-build', '--quiet', '--threads', '2',
-                reference.absolutePath, indexPrefix.absolutePath
-            ].execute()
-            build.waitFor()
-            assert build.exitValue() == 0
-
-            def samples = new File(launchDir, 'samples.tsv')
-            samples.text = "sample1\t${reference.parent}/" +
-                "test_reads_R1.fq.gz\t${reference.parent}/" +
-                "test_reads_R2.fq.gz\n"
+            ChoCallateTestUtils.bowtie2Index(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
         }
 
         when {
             params {
                 input {
                     samples_tsv = "${launchDir}/samples.tsv"
-                    reference_genome = "${projectDir}/" +
-                        "test_run/arth_chr1.fasta.gz"
-                    reference_index_dir = "${launchDir}/index"
-                    reference_index_prefix = "arth_chr1.fasta.gz"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "pe"
                 }
                 output {
                     directory = "${outputDir}"
-                    remove_invariant = false
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
                 }
                 coverage {
                     min_coverage = 1
                 }
-                mapping {
-                    cpu = 2
-                }
                 calling {
                     callers = "bcftools"
-                    cpu = 2
                 }
                 consensus {
                     threshold = 1
-                    cpu = 2
-                }
-                resources {
-                    low {
-                        cpus = 1
-                        memory_mb = 2048
-                    }
-                    medium {
-                        cpus = 2
-                        memory_mb = 4096
-                    }
-                    high {
-                        cpus = 2
-                        memory_mb = 4096
-                    }
                 }
             }
         }
@@ -71,25 +53,364 @@ nextflow_pipeline {
             assert workflow.success
             def consensus = new File("${outputDir}/consensus.bcf")
             assert consensus.isFile()
-            assert consensus.length() > 100000
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample1']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
+        }
+    }
 
-            def headerFile = new File(launchDir, 'consensus.header.txt')
-            def header = new ProcessBuilder(
-                'bash', '-c',
-                "bcftools view -h '${consensus}' > '${headerFile}'"
-            ).start()
-            assert header.waitFor() == 0
-            assert headerFile.text.contains('##ChoCallate=<')
-            assert headerFile.text.contains('##ChoCallateCommand=')
-            assert headerFile.text.contains('##contig=<ID=CP002684.1')
+    test("test_bam_input") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'bam_sample'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    ['bam_sample', "${launchDir}/bam_sample.bam"]
+                ]
+            )
+        }
 
-            def countFile = new File(launchDir, 'consensus.count.txt')
-            def count = new ProcessBuilder(
-                'bash', '-c',
-                "bcftools view -H '${consensus}' | wc -l > '${countFile}'"
-            ).start()
-            assert count.waitFor() == 0
-            assert countFile.text.trim() as int > 1000
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['bam_sample']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
+        }
+    }
+
+    test("test_se_bwa_sample_vcf") {
+        setup {
+            ChoCallateTestUtils.bwaIndex(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample_se',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "se"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "sample"
+                    format = "vcf"
+                    remove_invariant = true
+                }
+                mapping {
+                    mapper = "bwa"
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def vcf = new File(
+                "${outputDir}/per_sample/sample_se.vcf.gz"
+            )
+            assert vcf.isFile()
+            assert vcf.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(vcf) == ['sample_se']
+            def header = ChoCallateTestUtils.vcfHeader(vcf)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(vcf) == 307
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(vcf)
+            ).match()
+        }
+    }
+
+    test("test_minimap2") {
+        setup {
+            ChoCallateTestUtils.minimap2Index(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                mapping {
+                    mapper = "minimap2"
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample1']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(consensus) == 297
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
+        }
+    }
+
+    test("test_remove_invariant_false") {
+        setup {
+            ChoCallateTestUtils.bowtie2Index(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = false
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample1']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(consensus) == 199785
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
+        }
+    }
+
+    test("test_multi_sample_merge") {
+        setup {
+            ChoCallateTestUtils.bowtie2Index(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample_c',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ],
+                    [
+                        'sample_a',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ],
+                    [
+                        'sample_b',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample_c', 'sample_a', 'sample_b']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('##ChoCallate=<')
+            assert header.contains('##ChoCallateCommand=')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.statsValue(
+                consensus, 'number of samples'
+            ) == 3
+            assert ChoCallateTestUtils.recordCount(consensus) == 260
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
         }
     }
 }

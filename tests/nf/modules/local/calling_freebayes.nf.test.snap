@@ -1,0 +1,24 @@
+{
+    "calls variants from a BAM": {
+        "content": [
+            [
+                "[W::bcf_hdr_check_sanity] GQ should be declared as Type=Integer",
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t296",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t269",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t27",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t8",
+                "SN\t0\tnumber of multiallelic SNP sites:\t0",
+                "TSTV\t0\t154\t115\t1.34\t154\t115\t1.34"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:43:53.180620826",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

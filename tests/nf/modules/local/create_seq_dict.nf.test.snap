@@ -1,0 +1,15 @@
+{
+    "creates a sequence dictionary for the reference": {
+        "content": [
+            [
+                "@HD\tVN:1.6",
+                "@SQ\tSN:CP002684.1\tLN:200001"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:53:21.266370039",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

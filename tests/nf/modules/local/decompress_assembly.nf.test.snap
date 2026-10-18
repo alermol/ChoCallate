@@ -1,0 +1,16 @@
+{
+    "decompresses the bgzip reference": {
+        "content": [
+            [
+                ">CP002684.1 Arabidopsis thaliana chromosome 1 CI slice 11800000-12000000",
+                2859,
+                70
+            ]
+        ],
+        "timestamp": "2026-10-17T23:48:23.889114381",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

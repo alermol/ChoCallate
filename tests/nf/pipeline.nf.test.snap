@@ -1,0 +1,128 @@
+{
+    "test_minimap2": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t297",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t275",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t22",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t5",
+                "SN\t0\tnumber of multiallelic SNP sites:\t3",
+                "TSTV\t0\t158\t120\t1.32\t158\t117\t1.35"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:59:14.634726384",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    },
+    "test_se_bwa_sample_vcf": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t307",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t289",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t2",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t168\t123\t1.37\t168\t121\t1.39"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:58:14.761009458",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    },
+    "test_pe_bowtie2_single": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t3",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:56:42.309618951",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    },
+    "test_multi_sample_merge": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t3",
+                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t3",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+            ]
+        ],
+        "timestamp": "2026-10-18T08:21:18.781508192",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    },
+    "test_remove_invariant_false": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t199785",
+                "SN\t0\tnumber of no-ALTs:\t199525",
+                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t3",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+            ]
+        ],
+        "timestamp": "2026-10-18T08:20:08.017391813",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    },
+    "test_bam_input": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t260",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t242",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t3",
+                "SN\t0\tnumber of multiallelic SNP sites:\t2",
+                "TSTV\t0\t135\t109\t1.24\t135\t107\t1.26"
+            ]
+        ],
+        "timestamp": "2026-10-18T08:16:58.085648748",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

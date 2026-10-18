@@ -1,0 +1,23 @@
+{
+    "builds a consensus BCF from caller records": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t1",
+                "SN\t0\tnumber of records:\t199764",
+                "SN\t0\tnumber of no-ALTs:\t199454",
+                "SN\t0\tnumber of SNPs:\t281",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t29",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t0",
+                "SN\t0\tnumber of multiallelic SNP sites:\t0",
+                "TSTV\t0\t150\t131\t1.15\t150\t131\t1.15"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:54:07.802920032",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

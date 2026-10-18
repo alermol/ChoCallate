@@ -1,0 +1,15 @@
+{
+    "maps paired-end reads and adds read groups": {
+        "content": [
+            [
+                39943,
+                "@RG\tID:sample1\tSM:sample1\tPL:ILLUMINA\tLB:sample1"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:49:44.513064875",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}
