@@ -16,6 +16,7 @@ tested directly.
 import os
 import subprocess
 import sys
+import time
 
 import pysam
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
@@ -328,6 +329,31 @@ def test_drop_refonly_duplicates_does_not_cross_contigs(tmp_path):
         assert [(record.chrom, record.pos, tuple(record.alts))
                 for record in variant_file] == [
             ('chr1', 5, ('<*>',)), ('chr2', 5, ('T',))]
+
+
+def test_failed_final_merge_does_not_hang_on_fifos(tmp_path):
+    """A failing final merge must not leave chunk writers blocked on FIFOs."""
+    inputs = [
+        write_caller_bcf(tmp_path / f'sample{index}.bcf',
+                         f'sample{index}', [])
+        for index in range(2)]
+    file_list = tmp_path / 'merge_list.txt'
+    file_list.write_text('\n'.join(str(path) for path in inputs) + '\n')
+    env = os.environ.copy()
+    env['TMPDIR'] = str(tmp_path)
+
+    started = time.monotonic()
+    result = subprocess.run(
+        [sys.executable, str(BIN_DIR / 'merge_bcf_tree.py'),
+         '--file-list', str(file_list),
+         '--gvcf', str(tmp_path / 'missing.fa'),
+         '--cpus', '2'],
+        capture_output=True, text=True, timeout=10,
+        cwd=str(REPO_ROOT), env=env)
+    elapsed = time.monotonic() - started
+
+    assert result.returncode != 0
+    assert elapsed < 5
 
 
 def test_drop_refonly_duplicates_keeps_monomorphic_positions(tmp_path):

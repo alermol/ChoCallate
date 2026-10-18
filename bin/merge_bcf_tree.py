@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 
 class BcfChunkMerge:
@@ -23,15 +24,19 @@ class BcfChunkMerge:
         self.pipe_dir = pipe_dir or os.environ.get("TMPDIR", "/tmp")
         self.pipes = []
         self.processes = []
+        self.unblock_fds = []
 
     def cleanup(self):
-        for proc in self.processes:
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+        alive = [proc for proc in self.processes
+                 if proc.poll() is None]
+        if alive:
+            self._abort(alive)
+        for fd in self.unblock_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self.unblock_fds = []
         for pipe in self.pipes:
             try:
                 os.unlink(pipe)
@@ -83,14 +88,46 @@ class BcfChunkMerge:
             f"--gvcf {shlex.quote(self.gvcf)} --threads {self.cpus} {inputs}"
         )
 
+    def _unblock_writers(self):
+        """Open the pipes so writers blocked in ``open`` can proceed."""
+        for pipe in self.pipes:
+            try:
+                fd = os.open(pipe, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            self.unblock_fds.append(fd)
+
+    def _abort(self, pending):
+        for proc in pending:
+            if proc.poll() is None:
+                proc.terminate()
+        # Open readers before reaping: a shell may leave a child behind that
+        # is blocked opening its FIFO, and only a reader releases it.
+        self._unblock_writers()
+        for proc in pending:
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
     def _wait_all(self):
-        errors = []
-        for proc in self.processes:
-            rc = proc.wait()
-            if rc != 0:
-                errors.append(rc)
-        if errors:
-            raise SystemExit(f"Merge failed with exit codes: {errors}")
+        pending = list(self.processes)
+        while pending:
+            failed = []
+            for proc in list(pending):
+                rc = proc.poll()
+                if rc is None:
+                    continue
+                pending.remove(proc)
+                if rc != 0:
+                    failed.append(rc)
+            if failed:
+                self._abort(pending)
+                raise SystemExit(
+                    f"Merge failed with exit codes: {failed}")
+            if pending:
+                time.sleep(0.05)
 
     def run(self, files):
         for path in files:
