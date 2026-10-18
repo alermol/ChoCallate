@@ -31,6 +31,7 @@ process SCATTER_INTERVALS {
         -O tmp/bed_chunks/
 
     cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
     dir=\${1%/*}
     stem=\${1##*/}
     stem=\${stem%.*}
@@ -42,5 +43,11 @@ process SCATTER_INTERVALS {
 
     parallel -j ${task.cpus} bash tmp/run_chunk.sh {} \
         ::: tmp/bed_chunks/*
+
+    # A failed IntervalListToBed can still leave an empty file behind; fail
+    # instead of emitting a region that no caller will process.
+    for f in chunks/*.bed; do
+        [ -s "\$f" ] || { echo "empty chunk \$f" >&2; exit 1; }
+    done
     """
 }

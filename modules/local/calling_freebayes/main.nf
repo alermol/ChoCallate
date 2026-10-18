@@ -31,6 +31,7 @@ process CALLING_FREEBAYES {
     EOF
 
     cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
     freebayes --fasta-reference tmp/ref_genome.fasta --targets "\$1" \
         --hwe-priors-off --no-population-priors \
         --dont-left-align-indels ${extra_args} --bam tmp/input.bam \

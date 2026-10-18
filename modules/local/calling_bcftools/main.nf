@@ -32,6 +32,7 @@ process CALLING_BCFTOOLS {
     EOF
 
     cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
     bcftools mpileup ${mpileup_args} \
         -a FORMAT/AD,FORMAT/DP --count-orphans -Ou \
         --fasta-ref tmp/ref_genome.fasta --regions-file "\$1" \

@@ -38,6 +38,7 @@ process CALLING_GATK {
     # Restrict each chunk to its own unpadded interval before concatenating;
     # -T streams the BED and needs no index.
     cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
     gatk HaplotypeCaller ${extra_args} \
         --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
         --do-not-run-physical-phasing true \

@@ -53,6 +53,7 @@ process GENERATE_CONSENSUS {
         ::: tmp/callers/*.bcf
 
     cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
     bgzip --threads 1 "\$1"
     tabix --threads 1 --csi -p bed "\$1.gz"
     generate_consensus.py ${input_args} \
