@@ -10,7 +10,7 @@ pure-pysam implementation, so the pipeline keeps working from a plain checkout.
     the current column of a pysam pileup iterator directly from the htslib
     pileup buffer.  This mirrors ``build_pileup_site``'s overlap handling: one
     observation per query name, highest base quality wins (ties keep the first
-    observation).
+    observation), so DP matches the overlap-corrected mosdepth coverage BED.
 
 ``BcfLineWriter``
     Writes records from VCF text lines through htslib's ``vcf_parse`` +
@@ -64,7 +64,8 @@ cdef inline uint64_t _hash_qname(const char *name, size_t length) noexcept:
 
 
 cdef class PileupTally:
-    """DP/reference-base counts and full column entries of a pysam pileup.
+    """Overlap-corrected DP/reference-base counts and full column entries of a
+    pysam pileup.
 
     The object drives the pileup itself (through the iterator's C ``cnext``),
     so no PileupColumn object is created per reference position.  ``sync``
@@ -154,7 +155,7 @@ cdef class PileupTally:
     def entries(self):
         """Materialise the current column like pysam's bulk accessors.
 
-        Returns ``(names, sequences, qualities, dp)`` where sequences carry
+        Returns ``(names, sequences, qualities)`` where sequences carry
         samtools-style indel annotations ('A+2TT', 'A-2', '*', '>', '<') and
         qualities use htslib's 255 for missing values, so the shared Python
         full-tally code can consume them unchanged.
@@ -164,7 +165,7 @@ cdef class PileupTally:
         cdef const bam_pileup1_t *p
         cdef char *qname
         cdef char *buf
-        cdef int i, j, l_qname, qpos, dp = 0, indel
+        cdef int i, j, l_qname, qpos, indel
         cdef uint32_t qual
         cdef str base, inserted, seq
         names = []
@@ -179,11 +180,9 @@ cdef class PileupTally:
                 seq = '<' if (p.b.core.flag & 16) else '>'
                 qual = 255
             elif p.is_del or p.qpos < 0:
-                dp += 1
                 seq = '*'
                 qual = 255
             else:
-                dp += 1
                 qpos = p.qpos
                 indel = p.indel
                 base = chr(seq_nt16_str[bam_seqi(bam_get_seq(p.b), qpos)])
@@ -204,7 +203,7 @@ cdef class PileupTally:
                 qual = (<uint8_t *>bam_get_qual(p.b))[qpos]
             seqs.append(seq)
             quals.append(qual)
-        return names, seqs, quals, dp
+        return names, seqs, quals
 
     def simple(self, str ref_base, int max_slots=MAX_TABLE_SLOTS):
         """Return ``(dp, n_ref, n_obs)`` for the current column, or None if the
@@ -213,11 +212,12 @@ cdef class PileupTally:
         ``max_slots`` is the table capacity used for that decision; tests
         lower it to exercise the fallback without a million-read column.
 
-        ``dp`` counts every covering read except reference skips (matching
-        ``samtools depth -J``).  ``n_ref`` counts reads whose collapsed allele
-        is the plain reference base.  ``n_obs`` counts distinct query names with
-        an allele at the column (base, insertion or deletion); ``n_obs - n_ref``
-        is the ``<*>`` (other-allele) depth.
+        ``dp`` is the number of collapsed observations and equals ``n_obs``:
+        one per distinct query name with an allele at the column (base,
+        insertion or deletion), excluding reference skips.  This matches the
+        overlap-corrected mosdepth coverage BED.  ``n_ref`` counts those
+        observations whose collapsed allele is the plain reference base, so
+        ``dp - n_ref`` is the ``<*>`` (other-allele) depth.
         """
         cdef int n = self.it.n_plp
         cdef const bam_pileup1_t *start = self.it.plp
@@ -227,7 +227,7 @@ cdef class PileupTally:
         cdef uint64_t h
         cdef size_t slot, mask
         cdef char *qname
-        cdef int l_qname, qpos, i, dp = 0, n_ref = 0, n_obs = 0, is_match
+        cdef int l_qname, qpos, i, n_ref = 0, n_obs = 0, is_match
         cdef char base
 
         if n > (max_slots >> 1):
@@ -247,7 +247,6 @@ cdef class PileupTally:
             p = start + i
             if p.is_refskip:
                 continue
-            dp += 1
             qpos = p.qpos
             if p.is_del or qpos < 0:
                 # a deletion at this position is an observation that does not
@@ -283,7 +282,7 @@ cdef class PileupTally:
                 self.is_ref[slot] = is_match
                 n_ref += is_match
                 n_obs += 1
-        return (dp, n_ref, n_obs)
+        return (n_obs, n_ref, n_obs)
 
 
 cdef class BcfLineWriter:

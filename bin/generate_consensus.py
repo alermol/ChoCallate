@@ -43,8 +43,8 @@ the merged output still needs them for ``bcftools merge --gvcf``.
 
 FORMAT/AD and FORMAT/DP are recovered from the sample BAM: overlapping mate
 pairs count once (the observation with the highest base quality), and DP counts
-every covering read except reference skips, matching ``samtools depth -J`` used
-for the coverage BED.
+the collapsed observations, matching the coverage BED produced by mosdepth,
+which also corrects for overlapping mates.
 
 Performance notes
 -----------------
@@ -350,27 +350,34 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
     return calls
 
 
-def site_from_entries(names, seqs, quals, dp):
+def site_from_entries(names, seqs, quals):
     """Per-allele counters from materialised pileup column entries.
 
-    Overlapping PE mates are deduplicated for allele counts (one observation per
-    query name, keeping the highest base quality).
+    Overlapping PE mates are deduplicated (one observation per query name,
+    keeping the highest base quality), and DP is the number of collapsed
+    observations, matching the overlap correction of the mosdepth coverage BED.
+    Reference skips are not observations; a deletion is an observation without
+    an allele to count.
 
     Args:
         names: Query names at the column.
         seqs: Bases with samtools-style indel annotations ('A+2TT', 'A-2',
             '*', '>', '<').
         quals: Base qualities (255 means missing).
-        dp: Depth of the column.
 
     Returns:
         PileupSite(snp dict, insertion dict, deletion-length dict, depth).
     """
     best = {}
+    observations = set()
     for i, name in enumerate(names):
         seq = seqs[i]
-        if seq == '>' or seq == '<' or seq == '*':
-            # reference skip or deleted base: no allele at this position
+        if seq == '>' or seq == '<':
+            # reference skip: no observation at this position
+            continue
+        observations.add(name)
+        if seq == '*':
+            # deleted base: an observation, but no allele to count
             continue
         qual = quals[i]
         if qual == 255:
@@ -400,15 +407,16 @@ def site_from_entries(names, seqs, quals, dp):
         else:
             base = allele.upper()
             snp[base] = snp.get(base, 0) + 1
-    return PileupSite(snp=snp, ins=ins, dele=dele, dp=dp)
+    return PileupSite(snp=snp, ins=ins, dele=dele, dp=len(observations))
 
 
 def build_pileup_site(column):
     """Summarise a single pileup column into per-allele counters.
 
-    DP counts every covering read so it matches samtools depth used for the
-    coverage BED.  The per-read data comes from pysam's bulk accessors, which
-    are much cheaper than iterating PileupRead/AlignedSegment objects.
+    DP is the number of collapsed observations, matching the mosdepth coverage
+    BED, which corrects for overlapping mates by default.  The per-read data
+    comes from pysam's bulk accessors, which are much cheaper than iterating
+    PileupRead/AlignedSegment objects.
 
     Args:
         column: pysam.PileupColumn.
@@ -418,9 +426,7 @@ def build_pileup_site(column):
     """
     names = column.get_query_names()
     seqs = column.get_query_sequences(add_indels=True)
-    # reference skips are not part of DP
-    dp = len(seqs) - seqs.count('>') - seqs.count('<')
-    return site_from_entries(names, seqs, column.get_query_qualities(), dp)
+    return site_from_entries(names, seqs, column.get_query_qualities())
 
 
 def count_allele_depth(site, ref, allele):
@@ -472,7 +478,7 @@ def recover_ad_dp(site, alleles):
 
 
 def reference_support(column, ref_base):
-    """Reference-base support, observation count and depth of a pileup column.
+    """Reference-base support, depth and observation count of a pileup column.
 
     Equivalent to ``build_pileup_site`` followed by
     ``count_allele_depth(site, ref_base, ref_base)``, but avoids building the
@@ -484,23 +490,25 @@ def reference_support(column, ref_base):
         ref_base: Reference base at the position (upper case).
 
     Returns:
-        (dp, number of collapsed reads supporting the reference base, number of
-        collapsed observations that have an allele at this position).  The last
-        value feeds the ``<*>`` AD slot; reference skips are not observations.
+        (depth, number of collapsed reads supporting the reference base, number
+        of collapsed observations that have an allele at this position).  Depth
+        is the number of collapsed observations, matching the mosdepth coverage
+        BED; the last value feeds the ``<*>`` AD slot.  Reference skips are not
+        observations.
     """
     names = column.get_query_names()
     if not names:
         return 0, 0, 0
     seqs = column.get_query_sequences(add_indels=True)
-    # reference skips are not part of DP (see build_pileup_site)
-    dp = len(seqs) - seqs.count('>') - seqs.count('<')
     if len(set(names)) == len(names):
         # no overlapping mate pair at this column: nothing to collapse; every
         # read that is not a reference skip is one observation
-        return dp, seqs.count(ref_base) + seqs.count(ref_base.lower()), dp
+        observations = len(seqs) - seqs.count('>') - seqs.count('<')
+        support = seqs.count(ref_base) + seqs.count(ref_base.lower())
+        return observations, support, observations
     support, observations = _collapsed_support(
         names, seqs, column.get_query_qualities(), ref_base)
-    return dp, support, observations
+    return observations, support, observations
 
 
 def _collapsed_support(names, seqs, quals, ref_base):
@@ -581,9 +589,10 @@ class AccelWalker:
         counts = self.tally.simple(ref_base)
         if counts is None:
             # pathologically deep column: the C scratch table is too small
-            names, seqs, quals, dp = self.tally.entries()
-            support, observations = _collapsed_support(names, seqs, quals, ref_base)
-            return dp, support, observations
+            names, seqs, quals = self.tally.entries()
+            support, observations = _collapsed_support(
+                names, seqs, quals, ref_base)
+            return observations, support, observations
         return counts
 
     def site(self):

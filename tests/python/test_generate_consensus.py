@@ -388,6 +388,37 @@ def test_monomorphic_record_carries_other_allele_depth(tmp_path, use_accel):
     assert read_records_full(output) == [(30, (ref, '<*>'), (0, 0), (10, 2), 12)]
 
 
+def test_overlapping_mates_count_once_in_dp(tmp_path, use_accel):
+    """DP counts collapsed observations, including deletions, in both paths."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    match = REF_SEQ[POS_30_0B:POS_30_0B + 6]
+    # The unique read deletes 1-based position 31.
+    deleted = (REF_SEQ[POS_30_0B]
+               + REF_SEQ[POS_30_0B + 2:POS_30_0B + 6])
+    # Two same-name mate pairs and one unique read cover 1-based 30..35, so a
+    # raw pileup has depth 5 while only 3 observations remain after collapsing.
+    reads = [('pair1', POS_30_0B, match), ('pair1', POS_30_0B, match),
+             ('pair2', POS_30_0B, match), ('pair2', POS_30_0B, match),
+             ('unique', POS_30_0B, deleted,
+              ((0, 1), (2, 1), (0, 4)))]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', POS_30_0B, POS_30_0B + 2)])
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [
+            (POS_30_0B + 1, ref_base(31), [alt_base(31)], (0, 1))]),
+        write_caller_bcf(tmp_path / 'c1.bcf', 'sample1', []),
+    ]
+
+    output = run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
+                           use_accel=use_accel, reference=reference)
+    records = read_records_full(output)
+    # 30 is hom-reference (fast path); 31 is a variant (full tally) and the
+    # unique read's deletion is still one observation, not a reference base.
+    assert [(pos, dp) for pos, *_, dp in records] == [(30, 3), (31, 3)]
+    assert records[1][3] == (2, 0)
+
+
 def test_concordant_callers_are_merged(consensus_runner):
     """Two matching ALT calls win over one placeholder vote.
 
