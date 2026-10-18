@@ -3,8 +3,9 @@
 Covers interval-end handling, missing genotypes, haploid calls, the voting
 model, provenance headers, multi-allelic output and the pure/Cython equivalence
 paths.  Every test runs twice, on the pure-pysam path and (when built) on the
-Cython path, and asserts the documented all-sites behaviour: one output record
-per evaluated BED base.
+Cython path, and asserts the documented all-sites behaviour: every evaluated
+BED base is covered by an output record (reference blocks and the REF span of
+a called deletion included).
 """
 
 import subprocess
@@ -510,27 +511,41 @@ def test_deletion_does_not_skip_caller_records_inside_span(tmp_path,
     assert (102, (snp_ref, snp_alt), (0, 1)) in records
 
 
-def test_deletion_keeps_all_sites(consensus_runner):
-    """Every BED position is present, including those covered by a deletion."""
+@pytest.mark.parametrize('compress', [False, True])
+def test_deletion_suppresses_reference_records_inside_span(
+        consensus_runner, compress):
+    """A called deletion replaces reference records over its REF span.
+
+    The deleted bases are covered by the deletion record's POS..END, so no
+    hom-reference ``0/0`` record may contradict the deletion.  A hom-reference
+    caller record inside the span must not bypass that suppression either.
+    """
     deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
     deletion_alt = REF_SEQ[POS_20_0B].upper()
     output = consensus_runner(
         bed_intervals=[('chr1', POS_20_0B, 30)],
         caller_records=[[
-            (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))]],
+            (POS_20_0B, deletion_ref, [deletion_alt], (0, 1)),
+            (POS_20_0B + 2, ref_base(22), [], (0, 0)),
+        ]],
         threshold=1,
+        compress_reference_blocks=compress,
     )
     spans = read_spans(output)
     assert spans[0][:3] == (20, 23, (deletion_ref, deletion_alt))
-    # POS 21..23 are evaluated individually after the deletion record, so the
-    # output has one record per BED position and POS..END covers every base.
-    assert [start for start, *_ in spans] == list(range(20, 31))
-    assert set(span_positions(spans)) == set(range(20, 31))
+    if compress:
+        assert [(start, end) for start, end, *_ in spans] == [
+            (20, 23), (24, 30)]
+    else:
+        assert [start for start, *_ in spans] == [20] + list(range(24, 31))
+    # The deletion's REF span still covers 21..23, so every BED position is
+    # represented exactly once.
+    assert span_positions(spans) == list(range(20, 31))
 
 
 def test_deletion_does_not_duplicate_or_skip_interval_boundaries(
         consensus_runner):
-    """A deletion spanning two BED intervals writes each position once."""
+    """A deletion spanning two BED intervals writes each site once."""
     deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
     deletion_alt = REF_SEQ[POS_20_0B].upper()
     output = consensus_runner(
@@ -540,7 +555,8 @@ def test_deletion_does_not_duplicate_or_skip_interval_boundaries(
             (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))]],
         threshold=1,
     )
-    assert [pos for pos, _, _ in read_records(output)] == [20, 21, 22, 23, 24]
+    assert [pos for pos, _, _ in read_records(output)] == [20, 24]
+    assert span_positions(read_spans(output)) == [20, 21, 22, 23, 24]
 
 
 def _caller_record(ref, alts, gt):

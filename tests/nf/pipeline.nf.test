@@ -787,15 +787,83 @@ nextflow_pipeline {
         }
 
         then {
-            assert workflow.success
+            assert workflow.failed
             def log = new File(launchDir, 'meta/nextflow.log')
             assert log.isFile()
             assert log.text.contains(
                 'Sample sample1: no caller produced calls'
             )
+            def output = ([workflow.errorMessage ?: ''] +
+                          workflow.stdout + workflow.stderr).join('\n')
+            assert output.contains(
+                'All samples were dropped; see dropped_samples.txt'
+            )
             def dropped = new File("${outputDir}/dropped_samples.txt")
             assert dropped.isFile()
             assert dropped.readLines().findAll { it.trim() } == ['sample1']
+        }
+    }
+
+    test("test_all_samples_dropped_per_sample_fails") {
+        tag "dropped_samples"
+        tag "all_samples_dropped"
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.emptyBam(
+                new File(launchDir), 'sample_empty'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [['sample_empty', "${launchDir}/sample_empty.bam"]]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "sample"
+                    format = "vcf"
+                    remove_invariant = true
+                }
+                left_align_indels {
+                    enabled = false
+                }
+                coverage {
+                    min_coverage = 1
+                    on_empty = "skip"
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.failed
+            def output = ([workflow.errorMessage ?: ''] +
+                          workflow.stdout + workflow.stderr).join('\n')
+            assert output.contains(
+                'All samples were dropped; see dropped_samples.txt'
+            )
+            def dropped = new File("${outputDir}/dropped_samples.txt")
+            assert dropped.isFile()
+            assert dropped.readLines().findAll { it.trim() } ==
+                ['sample_empty']
         }
     }
 

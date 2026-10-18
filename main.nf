@@ -237,8 +237,9 @@ workflow {
             (empty + failed).unique().sort()
         }
 
-    // Always publish the dropped list, even when it is empty.
-    REPORT_DROPPED_SAMPLES(dropped_samples)
+    // Always publish the dropped list, even when it is empty. The output is
+    // used below to order the all-dropped error after the file is published.
+    dropped_report = REPORT_DROPPED_SAMPLES(dropped_samples)
 
     // Generate consensus.  The per-sample consensus is always an internal BCF.
     // Reference records are written whenever a later merge may need them;
@@ -253,6 +254,8 @@ workflow {
     // A single output is one multi-sample file: merge the internal BCFs first.
     // Both paths end in EXPORT_OUTPUT, which applies output.format, output.type
     // and the final record transformations.
+    def all_dropped_message =
+        "All samples were dropped; see dropped_samples.txt"
     if (params.output.type == 'single') {
         sample_rank = sample_run_ch
                         .map { item -> item[0] }
@@ -263,6 +266,10 @@ workflow {
                             }
                         }
         consensus = GENERATE_CONSENSUS.out.consensus_bcf
+                        .combine(dropped_report)
+                        .map { sample_id, bcf, _report ->
+                            tuple(sample_id, bcf)
+                        }
                         .join(sample_rank)
                         .toSortedList { item -> item[2] }
                         .map { items ->
@@ -270,6 +277,7 @@ workflow {
                             [ids.join(','), items.collect { item -> item[1] }]
                         }
                         .filter { item -> !item[1].isEmpty() }
+                        .ifEmpty { error(all_dropped_message) }
         merged = MERGE_OUTPUTS(
             consensus, ref_genome, fai_index, dropped_samples
         )
@@ -281,7 +289,11 @@ workflow {
         // Per-sample output has no merge stage, so the command-line header is
         // attached by a dedicated final step. Its script reads NXF_CLI at
         // runtime and therefore stays cacheable across command-line changes.
-        annotated = ANNOTATE_HEADER(GENERATE_CONSENSUS.out.consensus_bcf)
+        consensus_bcf = GENERATE_CONSENSUS.out.consensus_bcf
+            .combine(dropped_report)
+            .map { sample_id, bcf, _report -> tuple(sample_id, bcf) }
+            .ifEmpty { error(all_dropped_message) }
+        annotated = ANNOTATE_HEADER(consensus_bcf)
         EXPORT_OUTPUT(
             annotated,
             ref_genome

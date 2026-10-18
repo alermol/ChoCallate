@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate the consensus BCF of one sample from its caller BCFs.
 
-By default every position of the (bgzipped, tabixed) coverage BED is written
-to the output, so the consensus contains all sites, monomorphic ones included;
-``--variants_only`` omits the reference records instead.  At each
+By default every position of the (bgzipped, tabixed) coverage BED is
+represented in the output, so the consensus contains all sites, monomorphic
+ones included; a called deletion's REF span represents the positions it
+covers, and ``--variants_only`` omits reference records instead.  At each
 position the callers vote with their genotype in two stages: an ALT allele must
 first be supported by at least ``--consensus_threshold`` callers, then the
 majority zygosity among the supporters of the winning ALT decides between
@@ -846,8 +847,16 @@ def main():
             output_file = stack.enter_context(pysam.VariantFile(args.output, mode='wb', header=header))
 
         pending_block = None
+        # 1-based inclusive end of the furthest called deletion.  Reference
+        # records must not be written over that span: the deletion record's
+        # REF already covers those positions.
+        deletion_end = 0
+        current_contig = None
         try:
             for contig, intervals in batched_intervals(bed_file, SPAN_MAX_GAP):
+                if contig != current_contig:
+                    current_contig = contig
+                    deletion_end = 0
                 span_start = intervals[0][0]
                 span_end = intervals[-1][1]
                 rid = contig_ids[contig]
@@ -895,6 +904,18 @@ def main():
                             # variants_only such positions are not written and
                             # need no reference support count.
                             if variants_only:
+                                vcf_start += 1
+                                rel += 1
+                                continue
+                            if vcf_start <= deletion_end:
+                                # The position is inside a called deletion.
+                                # Its REF span covers the site, so a
+                                # hom-reference record would contradict the
+                                # deletion genotype.
+                                flush_reference_block(
+                                    pending_block, output_file, writer,
+                                    use_accel)
+                                pending_block = None
                                 vcf_start += 1
                                 rel += 1
                                 continue
@@ -1001,7 +1022,8 @@ def main():
                                 and all(allele == 0 for allele in calls[0][2]):
                             # hom-reference consensus: write the same gVCF-style
                             # record as the fast path, with honest <*> depth
-                            if not variants_only:
+                            if (not variants_only
+                                    and vcf_start > deletion_end):
                                 if reference_detail is None:
                                     if has_column:
                                         reference_detail = \
@@ -1021,7 +1043,8 @@ def main():
                         # one split record per qualifying ALT; every BED
                         # position is evaluated, including positions covered
                         # by a deletion, so caller records inside the deletion
-                        # span are not discarded
+                        # span are not discarded.  Reference records inside
+                        # that span are suppressed above.
                         site = site_of() if has_column else None
                         for ref, alts, gt in calls:
                             alleles = [ref] + list(alts)
@@ -1034,6 +1057,10 @@ def main():
                                                        vcf_start - 1,
                                                        vcf_start, alleles, gt,
                                                        ad, dp)
+                            if (len(ref) > len(alts[0])
+                                    and any(allele > 0 for allele in gt)):
+                                deletion_end = max(
+                                    deletion_end, vcf_start + len(ref) - 1)
                         vcf_start += 1
                         rel += 1
 
