@@ -30,8 +30,18 @@ process CALLING_FREEBAYES {
     ${sample_id}
     EOF
 
-    parallel -j ${task.cpus} \
-    'freebayes --fasta-reference tmp/ref_genome.fasta --targets {} --hwe-priors-off --no-population-priors --dont-left-align-indels ${extra_args} --bam tmp/input.bam | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    cat > tmp/run_chunk.sh <<'EOF'
+    freebayes --fasta-reference tmp/ref_genome.fasta --targets "\$1" \
+        --hwe-priors-off --no-population-priors \
+        --dont-left-align-indels ${extra_args} --bam tmp/input.bam \
+    | bcftools reheader -s tmp/calling_chunks/sample_id.txt \
+        -f tmp/ref_genome.fasta.fai \
+    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob \
+        -o "tmp/calling_chunks/\$2.bcf"
+    EOF
+
+    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed
 
     # The chunks are emitted in genomic order; ls -v keeps that order for
     # concat, so no full sort is needed afterwards.

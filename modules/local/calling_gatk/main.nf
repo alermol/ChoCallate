@@ -37,8 +37,26 @@ process CALLING_GATK {
     # different allele representations, which -d exact cannot deduplicate).
     # Restrict each chunk to its own unpadded interval before concatenating;
     # -T streams the BED and needs no index.
-    parallel -j ${task.cpus} \
-    'gatk HaplotypeCaller ${extra_args} --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" --do-not-run-physical-phasing true --smith-waterman FASTEST_AVAILABLE --create-output-variant-index false --native-pair-hmm-threads 1 --input tmp/input.bam --reference tmp/ref_genome.fasta --output /dev/stdout --intervals {} --interval-padding ${interval_padding} --sequence-dictionary tmp/ref_genome.dict --tmp-dir "\$TMPDIR" | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ou | bcftools view -T {} -Ob -o tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    cat > tmp/run_chunk.sh <<'EOF'
+    gatk HaplotypeCaller ${extra_args} \
+        --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
+        --do-not-run-physical-phasing true \
+        --smith-waterman FASTEST_AVAILABLE \
+        --create-output-variant-index false \
+        --native-pair-hmm-threads 1 \
+        --input tmp/input.bam --reference tmp/ref_genome.fasta \
+        --output /dev/stdout --intervals "\$1" \
+        --interval-padding ${interval_padding} \
+        --sequence-dictionary tmp/ref_genome.dict \
+        --tmp-dir "\$TMPDIR" \
+    | bcftools reheader -s tmp/calling_chunks/sample_id.txt \
+        -f tmp/ref_genome.fasta.fai \
+    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ou \
+    | bcftools view -T "\$1" -Ob -o "tmp/calling_chunks/\$2.bcf"
+    EOF
+
+    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed
 
     # Each chunk now contributes only its own interval, so the concatenated
     # records are disjoint and ordered. Sort only this caller as a guard for

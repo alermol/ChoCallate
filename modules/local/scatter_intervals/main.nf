@@ -30,11 +30,17 @@ process SCATTER_INTERVALS {
         --scatter-count ${scatter_count} \
         -O tmp/bed_chunks/
 
-    parallel -j ${task.cpus} \
-        'gatk IntervalListToBed --java-options "${heap_option}" \
-         -I {} -O {//}/{/.}.bed.tmp
-         cut -f 1-3 {//}/{/.}.bed.tmp > chunks/{/.}.bed
-         rm -f {} {//}/{/.}.bed.tmp' \
+    cat > tmp/run_chunk.sh <<'EOF'
+    dir=\${1%/*}
+    stem=\${1##*/}
+    stem=\${stem%.*}
+    gatk IntervalListToBed --java-options "${heap_option}" \
+        -I "\$1" -O "\$dir/\$stem.bed.tmp"
+    cut -f 1-3 "\$dir/\$stem.bed.tmp" > "chunks/\$stem.bed"
+    rm -f "\$1" "\$dir/\$stem.bed.tmp"
+    EOF
+
+    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} \
         ::: tmp/bed_chunks/*
     """
 }

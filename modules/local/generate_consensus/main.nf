@@ -52,14 +52,14 @@ process GENERATE_CONSENSUS {
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' \
         ::: tmp/callers/*.bcf
 
-    parallel -j ${task.cpus} \
-    'bgzip --threads 1 {}
-    tabix --threads 1 --csi -p bed {}.gz
+    cat > tmp/run_chunk.sh <<'EOF'
+    bgzip --threads 1 "\$1"
+    tabix --threads 1 --csi -p bed "\$1.gz"
     generate_consensus.py ${input_args} \
         --callers "${configured_callers}" \
-        --bed {}.gz \
+        --bed "\$1.gz" \
         --bam tmp/input.bam \
-        --output tmp/bcf_chunks/{#}.bcf \
+        --output "tmp/bcf_chunks/\$2.bcf" \
         --sample_name "${sample_id}" \
         --reference tmp/ref_genome.fasta \
         --consensus_threshold "${params.consensus.threshold}" \
@@ -69,7 +69,10 @@ process GENERATE_CONSENSUS {
         --min_coverage "${min_coverage}" \
         --version "${workflow.manifest.version}" \
         ${compress_blocks} \
-        ${variants_only_arg}' \
+        ${variants_only_arg}
+    EOF
+
+    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
         ::: tmp/bed_chunks/*.bed
 
     # The interval chunks are consumed in BED order; ls -v preserves that order
