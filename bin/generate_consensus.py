@@ -10,9 +10,11 @@ first be supported by at least ``--consensus_threshold`` callers, then the
 majority zygosity among the supporters of the winning ALT decides between
 heterozygous and homozygous ALT.  Ties are resolved by ``--tie_policy``:
 ``nocall`` (default, independent of caller order) or ``first`` (the earliest
-supporter in configured caller order).  A position without ALT support is
-hom-reference when at least
-``--consensus_threshold`` callers vote reference, otherwise it is a no-call.
+supporter in configured caller order).  When several ALT alleles qualify, each
+becomes a split consensus record, but their combined ALT copies must fit the
+site ploidy; otherwise the position is a no-call.  A position without ALT
+support is hom-reference when at least ``--consensus_threshold`` callers vote
+reference, otherwise it is a no-call.
 
 A caller without a record votes reference by default (``--absent_vote ref``).
 With ``--absent_vote abstain`` it only votes reference when the sample pileup
@@ -280,12 +282,16 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
         Use the earliest supporter in the configured caller order.
 
     Every qualifying ALT produces its own split consensus record; the output
-    stage re-joins them unless split output was requested.  When no ALT reaches
-    the threshold, the position is hom-reference if at least
-    ``consensus_threshold`` reference votes remain, otherwise the list is empty.
-    A caller key of ``None`` (an abstention) does not support any allele; a
-    caller whose split records carry more ALT copies than its ploidy abstains
-    in ``genotype_key`` and therefore supports nothing here.
+    stage re-joins them unless split output was requested.  The split records
+    share one downstream genotype, so their combined ALT copies must fit the
+    site ploidy.  When the qualifying ALTs would use more copies than the
+    ploidy (for example two hom-ALT alleles at a diploid site), the position is
+    a no-call and the list is empty.  When no ALT reaches the threshold, the
+    position is hom-reference if at least ``consensus_threshold`` reference
+    votes remain, otherwise the list is empty.  A caller key of ``None`` (an
+    abstention) does not support any allele; a caller whose split records carry
+    more ALT copies than its ploidy abstains in ``genotype_key`` and therefore
+    supports nothing here.
 
     Args:
         keys: List of ``(ref, {(allele_ref, allele_alt): copies}, ploidy)``
@@ -348,6 +354,15 @@ def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
         allele_ref, allele_alt = allele
         calls.append((allele_ref, (allele_alt,),
                       _genotype_for(zygosity, ploidy)))
+    # The split calls are re-joined into a single multiallelic genotype by the
+    # output stage, so their ALT copies must fit the site ploidy.  For example,
+    # two hom-ALT alleles at a diploid site would contribute four copies and
+    # the joined genotype could keep only one of them.
+    site_ploidy = max((len(gt) for _, _, gt in calls), default=0)
+    alt_copies = sum(sum(1 for allele in gt if allele)
+                     for _, _, gt in calls)
+    if alt_copies > site_ploidy:
+        return []
     return calls
 
 

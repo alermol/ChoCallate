@@ -56,8 +56,17 @@ process CALLING_GATK {
     | bcftools view -T "\$1" -Ob -o "tmp/calling_chunks/\$2.bcf"
     EOF
 
-    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
-        ::: tmp/bed_chunks/*.bed
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
 
     # Each chunk now contributes only its own interval, so the concatenated
     # records are disjoint and ordered. Sort only this caller as a guard for

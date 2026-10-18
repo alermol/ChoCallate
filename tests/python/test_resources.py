@@ -45,6 +45,11 @@ def _params(tmp_path, overrides=None):
         'outdir': str(tmp_path / 'results'),
         'resources': {
             'max_retries': 3,
+            'limits': {
+                'cpus': 64,
+                'memory_mb': 262144,
+                'time': '7d',
+            },
             'low': {'cpus': 1, 'memory_mb': 256, 'time': '5m'},
             'medium': {'cpus': 1, 'memory_mb': 256, 'time': '5m'},
             'high': {'cpus': 1, 'memory_mb': 256, 'time': '5m'},
@@ -79,8 +84,53 @@ def test_exit_137_is_retried_with_escalated_memory(tmp_path):
     assert result.returncode == 0, output
     assert 'error exit status (137)' in output
     assert 'retried' in output
-    # The label requests 256 MiB; attempt 2 multiplies it by two.
+    # The label requests 256 MiB and 5 minutes; attempt 2 doubles both.
     assert (tmp_path / 'results' / 'memory.txt').read_text().strip() == '512'
+    assert (tmp_path / 'results' / 'time.txt').read_text().strip() == '10'
+
+
+def test_retry_escalation_is_capped_by_resource_limits(tmp_path):
+    params = _params(
+        tmp_path,
+        {
+            'resources': {
+                'limits': {
+                    'cpus': 64,
+                    'memory_mb': 300,
+                    'time': '7m',
+                },
+            },
+        },
+    )
+    result = _run_fixture(FIXTURE, params, tmp_path)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    results = tmp_path / 'results'
+    assert (results / 'memory.txt').read_text().strip() == '300'
+    assert (results / 'time.txt').read_text().strip() == '7'
+
+
+def test_cpu_is_capped_by_resource_limits(tmp_path):
+    params = _params(
+        tmp_path,
+        {
+            'mapping': {'cpu': 99},
+            'resources': {
+                'limits': {
+                    'cpus': 4,
+                    'memory_mb': 256,
+                    'time': '7d',
+                },
+            },
+        },
+    )
+    result = _run_fixture(PRECEDENCE_FIXTURE, params, tmp_path)
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    resources = (tmp_path / 'results' / 'resources.txt').read_text()
+    assert 'cpus=4' in resources
 
 
 def test_stage_cpu_overrides_label_and_task_defaults(tmp_path):

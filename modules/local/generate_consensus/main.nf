@@ -49,8 +49,17 @@ process GENERATE_CONSENSUS {
     """
     mkdir -p tmp/bcf_chunks/
 
-    parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' \
-        ::: tmp/callers/*.bcf
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} 'bcftools index --threads 1 --csi {}' \
+        ::: tmp/callers/*.bcf || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
 
     cat > tmp/run_chunk.sh <<'EOF'
     set -euo pipefail
@@ -73,8 +82,17 @@ process GENERATE_CONSENSUS {
         ${variants_only_arg}
     EOF
 
-    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
-        ::: tmp/bed_chunks/*.bed
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
 
     # The interval chunks are consumed in BED order; ls -v preserves that order
     # through concat, so no full sort is needed afterwards.  The per-sample

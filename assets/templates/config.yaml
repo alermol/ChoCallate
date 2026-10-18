@@ -75,12 +75,20 @@ output:
   publish_mode: "copy"
 
 resources:
-  # Resource limits for the three process labels. Memory is multiplied by the
-  # task attempt number, so retries after an out-of-memory exit (137/140) run
-  # with more memory; JVM heap sizes are derived from the resulting task
-  # memory.
+  # Resource limits for the three process labels. Memory and time are
+  # multiplied by the task attempt number, so retries after an out-of-memory
+  # exit (137) or a walltime exit (140) run with more memory and time; JVM
+  # heap sizes are derived from the resulting task memory.
   # Maximum number of retries for exit status 137 or 140.
   max_retries: 3
+
+  # Hard ceilings applied to every task after the per-label values and the
+  # attempt multiplier. Set these to what the executor can provide so a
+  # late retry cannot request resources that will never become available.
+  limits:
+    cpus: 64
+    memory_mb: 262144
+    time: "7d"
 
   low:
     # Index creation, decompression and coverage tasks.

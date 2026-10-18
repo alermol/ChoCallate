@@ -107,6 +107,29 @@
                     "description": "Maximum number of retries after an exit status of 137 or 140.",
                     "minimum": 0
                 },
+                "limits": {
+                    "type": "object",
+                    "title": "Limits",
+                    "description": "Hard ceilings for every task after retry escalation.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "Maximum CPUs requested by one task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Maximum memory requested by one task in MiB.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 7d or 168h.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
                 "low": {
                     "type": "object",
                     "title": "Low",
@@ -177,7 +200,7 @@
                     "required": ["cpus", "memory_mb", "time"]
                 }
             },
-            "required": ["max_retries", "low", "medium", "high"]
+            "required": ["max_retries", "limits", "low", "medium", "high"]
         },
         "mapping": {
             "type": "object",

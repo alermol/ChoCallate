@@ -630,6 +630,58 @@ def test_genotype_key_abstains_on_inconsistent_split_copies():
     assert generate_consensus.consensus_calls([key, key], 2) == []
 
 
+def test_consensus_calls_abstains_when_alt_copies_exceed_ploidy():
+    """Two hom-ALT alleles at one diploid site are a no-call.
+
+    Each qualifying allele becomes a split record that is re-joined
+    downstream.  Two hom-ALT calls would contribute four ALT copies to a
+    diploid genotype, so no combined genotype can represent both.
+    """
+    import generate_consensus
+
+    t_key = generate_consensus.genotype_key(
+        [_caller_record('A', ('T',), (1, 1))], 'A')
+    g_key = generate_consensus.genotype_key(
+        [_caller_record('A', ('G',), (1, 1))], 'A')
+    assert generate_consensus.consensus_calls([t_key, g_key], 1) == []
+    assert generate_consensus.consensus_calls([g_key, t_key], 1) == []
+
+
+def test_consensus_calls_allows_two_heterozygous_alts():
+    """Two het-ALT alleles at one diploid site fit a ``1/2`` genotype."""
+    import generate_consensus
+
+    t_key = generate_consensus.genotype_key(
+        [_caller_record('A', ('T',), (0, 1))], 'A')
+    g_key = generate_consensus.genotype_key(
+        [_caller_record('A', ('G',), (0, 1))], 'A')
+    assert generate_consensus.consensus_calls([t_key, g_key], 1) == [
+        ('A', ('G',), (0, 1)),
+        ('A', ('T',), (0, 1)),
+    ]
+
+
+def test_conflicting_hom_alts_are_a_no_call(consensus_runner):
+    """Two hom-ALT alleles at one diploid site write no records.
+
+    Both alleles reach the site threshold, but their split records would
+    contribute four ALT copies to one diploid genotype.  The position is a
+    no-call; the next position is still written normally.
+    """
+    ref = ref_base(30)
+    first = alt_base(30)
+    second = ({'A', 'C', 'G', 'T'} - {ref, first}).pop()
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 2)],
+        caller_records=[
+            [(POS_30_0B, ref, [first], (1, 1))],
+            [(POS_30_0B, ref, [second], (1, 1))],
+        ],
+        threshold=1,
+    )
+    assert [pos for pos, _, _ in read_records(output)] == [31]
+
+
 def test_atomized_snp_and_deletion_with_different_refs(tmp_path, use_accel):
     """Both callers support A>G and AT>A at one POS; both reach consensus.
 

@@ -41,8 +41,17 @@ process CALLING_FREEBAYES {
         -o "tmp/calling_chunks/\$2.bcf"
     EOF
 
-    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
-        ::: tmp/bed_chunks/*.bed
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
 
     # The chunks are emitted in genomic order; ls -v keeps that order for
     # concat, so no full sort is needed afterwards.

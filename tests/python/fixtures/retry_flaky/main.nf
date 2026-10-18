@@ -5,6 +5,7 @@ process FLAKY {
     output:
     path 'ok.txt'
     path 'memory.txt'
+    path 'time.txt'
 
     script:
     """
@@ -12,6 +13,7 @@ process FLAKY {
         kill -9 \$\$
     fi
     printf '%s\\n' "${task.memory.toMega()}" > memory.txt
+    printf '%s\\n' "${task.time.toMinutes()}" > time.txt
     touch ok.txt
     """
 }

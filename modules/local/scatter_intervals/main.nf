@@ -41,8 +41,17 @@ process SCATTER_INTERVALS {
     rm -f "\$1" "\$dir/\$stem.bed.tmp"
     EOF
 
-    parallel -j ${task.cpus} bash tmp/run_chunk.sh {} \
-        ::: tmp/bed_chunks/*
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} bash tmp/run_chunk.sh {} \
+        ::: tmp/bed_chunks/* || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
 
     # A failed IntervalListToBed can still leave an empty file behind; fail
     # instead of emitting a region that no caller will process.
