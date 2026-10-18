@@ -113,7 +113,9 @@ first="${files[0]}"
 if [[ -n "$samples_dropped" ]]; then
     "$bcftools" view -h "$first" > "$tmpdir/first.hdr"
     awk -v dropped="$samples_dropped" \
-        '{ sub(/>$/, ",SamplesDropped=\"" dropped "\">") } 1' \
+        '/^##ChoCallate=</ {
+            sub(/>$/, ",SamplesDropped=\"" dropped "\">")
+        } 1' \
         "$tmpdir/first.hdr" > "$tmpdir/first.mod.hdr"
     "$bcftools" reheader -h "$tmpdir/first.mod.hdr" \
         -o "$tmpdir/first.bcf" "$first"

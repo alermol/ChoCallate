@@ -281,6 +281,30 @@ def test_single_file_merge_records_dropped_samples(tmp_path, use_accel):
     assert header.count('##ChoCallate=') == 1
 
 
+def test_dropped_samples_patches_only_chocallate_line(tmp_path, use_accel):
+    """Other structured header lines must not gain SamplesDropped."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel)
+    with pysam.VariantFile(
+            str(sample_files['sampleA']), index_filename=None) as source:
+        source_header = str(source.header).splitlines()
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False,
+                         samples_dropped='sampleC,sampleD')
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    merged_header = header.splitlines()
+    cho_callate = [line for line in merged_header
+                   if line.startswith('##ChoCallate=<')]
+    assert len(cho_callate) == 1
+    assert cho_callate[0].endswith(',SamplesDropped="sampleC,sampleD">')
+    for prefix in ('##INFO=<', '##FORMAT=<', '##ALT=<', '##contig=<'):
+        expected = [line for line in source_header
+                    if line.startswith(prefix)]
+        actual = [line for line in merged_header if line.startswith(prefix)]
+        assert expected, f'test fixture lacks {prefix} lines'
+        assert actual == expected
+
+
 def test_merged_vcf_output_is_readable(tmp_path, use_accel):
     """The production merge script writes a valid VCF.gz as well as BCF."""
     sample_files, reference = build_two_samples(tmp_path, use_accel)
