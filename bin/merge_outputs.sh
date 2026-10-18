@@ -151,8 +151,10 @@ else
         "$bcftools" index -f --csi "$bcf"
     done
 
+    # Only the structured metadata line belongs to the merge. The command
+    # line is attached to the final output by MERGE_OUTPUTS.
     "$bcftools" view -h "$first" \
-        | grep '^##ChoCallate' > "$tmpdir/cho_meta.hdr" || true
+        | grep '^##ChoCallate=' > "$tmpdir/cho_meta.hdr" || true
 
     "$python" "$script_dir/merge_bcf_tree.py" \
         --gvcf "$reference" \

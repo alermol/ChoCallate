@@ -13,6 +13,7 @@ include { CALLING_BCFTOOLS } from './modules/local/calling_bcftools'
 include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
+include { ANNOTATE_HEADER } from './modules/local/annotate_header'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
 include { EXPORT_OUTPUT } from './modules/local/export_output'
 include { validateParameters } from 'plugin/nf-schema'
@@ -192,8 +193,12 @@ workflow {
             ref_genome
         )
     } else {
+        // Per-sample output has no merge stage, so the command-line header is
+        // attached by a dedicated final step. Its script reads NXF_CLI at
+        // runtime and therefore stays cacheable across command-line changes.
+        annotated = ANNOTATE_HEADER(GENERATE_CONSENSUS.out.consensus_bcf)
         EXPORT_OUTPUT(
-            GENERATE_CONSENSUS.out.consensus_bcf,
+            annotated,
             ref_genome
         )
     }

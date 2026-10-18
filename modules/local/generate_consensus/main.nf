@@ -40,10 +40,6 @@ process GENERATE_CONSENSUS {
     """
     mkdir -p tmp/bcf_chunks/
 
-    cat > tmp/command_line.txt <<'CHO_CMD_EOF'
-${workflow.commandLine ?: 'unknown'}
-CHO_CMD_EOF
-
     parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' \
         ::: tmp/callers/*.bcf
 
@@ -62,7 +58,6 @@ CHO_CMD_EOF
         --tie_policy "${tie_policy}" \
         --min_coverage "${min_coverage}" \
         --version "${workflow.manifest.version}" \
-        --command_line_file tmp/command_line.txt \
         ${compress_blocks}' \
         ::: tmp/bed_chunks/*.bed
 

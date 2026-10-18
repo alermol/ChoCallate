@@ -171,7 +171,8 @@ Consensus outputs depend on `output.type` and `output.format`:
 - **Per-sample**: `<output.directory>/per_sample/<sample_id>.bcf` or `<sample_id>.vcf.gz`
 
 Pipeline internals are always BCF. `GENERATE_CONSENSUS` writes one internal
-per-sample BCF, `MERGE_OUTPUTS` writes an internal multi-sample BCF when
+per-sample BCF, `ANNOTATE_HEADER` attaches the command-line header for
+per-sample output, `MERGE_OUTPUTS` writes an internal multi-sample BCF when
 `output.type` is `"single"`, and `EXPORT_OUTPUT` is the only stage that applies
 `output.format`, `remove_invariant` and `split_multiallelic` and publishes the
 final file. A VCF output is bgzip-compressed (`.vcf.gz`).
@@ -195,7 +196,7 @@ Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (defau
 
 Mapping and BAM input share `bin/postprocess_bam.sh`: reads are coordinate-sorted, MAPQ-filtered after mate fixing and duplicate marking (`bam_filter.min_map_qual`, default 10), optionally deduplicated with `samtools markdup`, and indexed once. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
 
-Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,ReferenceBlocks=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`. The same header also records `##ChoCallateCommand="<full nextflow command>"`; the multi-sample merge re-attaches all `##ChoCallate` lines.
+Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,ReferenceBlocks=False>`. `CallersFailed="..."` is added in degraded mode, and `MinCoverage=...` when `absent_vote` is `abstain`. The final output also records `##ChoCallateCommand="<full nextflow command>"`. The command line is read from the `NXF_CLI` runtime variable, not embedded in a task script, so changing launch options such as adding `-resume` does not invalidate cached consensus or merge tasks.
 
 Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller is retried up to `resources.max_retries` times and a failure then terminates the run. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers.
 

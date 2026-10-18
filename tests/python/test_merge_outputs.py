@@ -73,7 +73,6 @@ def build_two_samples(tmp_path, use_accel, compress_reference_blocks=False):
             tmp_path, bam, bed_gz, calls, threshold=2, sample_name=sample,
             use_accel=use_accel, output_name=f'{sample}.bcf',
             reference=reference,
-            command_line='nextflow run main.nf -params-file run.yaml',
             compress_reference_blocks=compress_reference_blocks)
         subprocess.run([BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
                        check=True)
@@ -251,7 +250,6 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
         header = str(variant_file.header)
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
-    assert '##ChoCallateCommand="nextflow run main.nf' in header
 
 
 def test_merged_vcf_output_is_readable(tmp_path, use_accel):

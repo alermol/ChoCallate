@@ -33,5 +33,11 @@ process MERGE_OUTPUTS {
         --format bcf \
         --split-multiallelic \
         --cpus ${task.cpus}
+
+    write_command_header.py tmp/command_line.hdr
+    bcftools annotate --threads ${task.cpus} \
+        -h tmp/command_line.hdr \
+        -Ob -o tmp/consensus.bcf consensus.bcf
+    mv tmp/consensus.bcf consensus.bcf
     """
 }

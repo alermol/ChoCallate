@@ -74,6 +74,7 @@ nextflow_process {
             assert header.contains('Threshold=1')
             assert header.contains('Callers="bcftools"')
             assert header.contains('Rule=two-stage')
+            assert !header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
