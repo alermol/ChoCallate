@@ -259,6 +259,40 @@ def test_bam_samplesheet_uses_two_columns(tmp_path):
     assert "expected 2 tab-separated columns" not in output
 
 
+@pytest.mark.parametrize(
+    "caller, override, option",
+    [
+        (
+            "bcftools",
+            {"call": {"extra_args": "--ploidy 3"}},
+            "--ploidy",
+        ),
+        ("freebayes", {"extra_args": "-p 1"}, "-p"),
+        ("freebayes", {"extra_args": "--ploidy=4"}, "--ploidy"),
+        ("gatk", {"extra_args": "--sample-ploidy 1"}, "--sample-ploidy"),
+        ("gatk", {"extra_args": "--ploidy=1"}, "--ploidy"),
+    ],
+)
+def test_non_diploid_ploidy_is_rejected(tmp_path, caller, override, option):
+    _prepare_inputs(tmp_path)
+    params = _config(
+        tmp_path,
+        overrides={
+            "calling": {
+                "callers": caller,
+                caller: override,
+            },
+        },
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    assert option in output
+    assert "ploidy is not supported yet except diploid" in output
+
+
 @pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="uses a POSIX descriptor limit",

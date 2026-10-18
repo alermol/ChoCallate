@@ -36,6 +36,7 @@ workflow {
         params.input.reads_type,
         params.input.format
     )
+    CLIParamsValidation.ploidy_validation(params.calling)
 
     // Parse the samplesheet up front: unique shell-safe ids, exact row widths,
     // optional header/comment lines, and read paths relative to the sheet.

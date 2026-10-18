@@ -13,6 +13,28 @@ class CLIParamsValidation {
         ['bcftools', 'freebayes', 'gatk']
     static final String SAMPLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/
 
+    // Caller options that select ploidy or copy number.  A true value means
+    // that an explicit diploid setting (2) is accepted; a false value means
+    // the option is rejected because its contents are not inspected.
+    static final Map<String, Map<String, Boolean>> PLOIDY_OPTIONS = [
+        bcftools: [
+            '--ploidy': true,
+            '--ploidy-file': false
+        ],
+        freebayes: [
+            '--ploidy': true,
+            '-p': true,
+            '--cnv-map': false,
+            '-A': false
+        ],
+        gatk: [
+            '--sample-ploidy': true,
+            '--ploidy': true,
+            '-ploidy': true,
+            '--ploidy-regions': false
+        ]
+    ]
+
     private static void fail(String message) {
         throw new AbortOperationException("ERROR: ${message}")
     }
@@ -59,6 +81,90 @@ class CLIParamsValidation {
                 "mapping.mapper 'bowtie2' (got '${mapper}')"
             )
         }
+    }
+
+    /**
+     * Rejects caller arguments that request a non-diploid genotype.
+     *
+     * Consensus reference records are always diploid (0/0), while a caller
+     * that runs with another ploidy emits variants with a different GT arity.
+     * Only an explicit diploid setting is accepted.  Custom ploidy,
+     * copy-number and region files are rejected because their contents are
+     * not inspected.
+     */
+    static void ploidy_validation(Map calling) {
+        if (calling == null) {
+            return
+        }
+        def bcftools = calling['bcftools'] ?: [:]
+        validate_ploidy_args(
+            'calling.bcftools.call.extra_args',
+            bcftools['call']?.extra_args,
+            PLOIDY_OPTIONS['bcftools']
+        )
+        def freebayes = calling['freebayes'] ?: [:]
+        validate_ploidy_args(
+            'calling.freebayes.extra_args',
+            freebayes['extra_args'],
+            PLOIDY_OPTIONS['freebayes']
+        )
+        def gatk = calling['gatk'] ?: [:]
+        validate_ploidy_args(
+            'calling.gatk.extra_args',
+            gatk['extra_args'],
+            PLOIDY_OPTIONS['gatk']
+        )
+    }
+
+    private static void validate_ploidy_args(
+        String key,
+        String args,
+        Map<String, Boolean> options
+    ) {
+        if (args == null || args.trim().isEmpty()) {
+            return
+        }
+        options.each { option, diploid_allowed ->
+            def value = option_value(args, option)
+            if (value == null) {
+                return
+            }
+            if (diploid_allowed && unquote(value) == '2') {
+                return
+            }
+            def found = value ? "${option} ${value}" : option
+            fail(
+                "${key}: ploidy is not supported yet except diploid (2); " +
+                "remove '${found}'"
+            )
+        }
+    }
+
+    /**
+     * Returns the value of an option in a shell-like argument string.
+     * Returns an empty string when the option has no value and null when the
+     * option is absent.
+     */
+    private static String option_value(String args, String option) {
+        def with_value = args =~ (
+            /(?<!\S)/ + option +
+            /(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|[^\s"']+)/
+        )
+        if (with_value.find()) {
+            return with_value.group(1)
+        }
+        if (option.length() == 2 && option.startsWith('-')) {
+            def attached = args =~ /(?<!\S)/ + option + /(\S+)/
+            if (attached.find()) {
+                return attached.group(1)
+            }
+        }
+        def present = args =~ /(?<!\S)/ + option + /(?=\s|=|$)/
+        return present.find() ? '' : null
+    }
+
+    private static String unquote(String value) {
+        return value.replaceAll(/^['"]|['"]$/, '')
     }
 
     static void cons_threshold_validation(
