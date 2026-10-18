@@ -198,6 +198,16 @@ class ChoCallateTestUtils {
         return chrom.split('\t', -1).drop(9).collect { it.trim() }
     }
 
+    /** Returns CHROM, POS, REF and ALT for every record in the VCF/BCF. */
+    static List<String> vcfRecords(File vcf) {
+        String output = run(
+            vcf.absoluteFile.parentFile,
+            "bcftools query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' " +
+            "'${vcf.absolutePath}'"
+        )
+        return output.readLines()
+    }
+
     static List<String> statsLines(File vcf) {
         String output = run(
             vcf.absoluteFile.parentFile,
