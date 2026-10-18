@@ -89,7 +89,12 @@ else:
     try:
         # Optional Cython helpers built by bin/build_consensus_accel.py.
         from consensus_accel import BcfLineWriter, PileupTally
-    except ImportError:  # pragma: no cover - the pure-pysam fallback is equivalent
+    except Exception as error:
+        # A stale extension built against another pysam raises ValueError
+        # ("size changed, may indicate binary incompatibility"), not
+        # ImportError; any import failure just disables the accelerator.
+        print('[WARN] Cython accelerator unavailable, using pure pysam: '
+              '{}'.format(error), file=sys.stderr)
         BcfLineWriter = None
         PileupTally = None
 
@@ -625,6 +630,8 @@ def write_monomorphic_record(output_file, contig, start0, end0, ref_base,
     multi-base block, whose per-position depth cannot be represented by one AD
     value.
     """
+    # pysam keeps INFO/END for symbolic alleles even when stop == start + 1,
+    # matching BcfLineWriter, which sets it for every reference record.
     new_record = output_file.new_record(contig=contig, start=start0, stop=end0,
                                         alleles=(ref_base, '<*>'), qual=None)
     sample = new_record.samples[0]
@@ -689,7 +696,8 @@ def generate_minimal_header(sample_name,
                             absent_vote,
                             filtered_vote,
                             min_coverage,
-                            compress_reference_blocks=False):
+                            compress_reference_blocks=False,
+                            use_accel=False):
     """
     Generate a minimal VCF header for the consensus file.
 
@@ -705,6 +713,7 @@ def generate_minimal_header(sample_name,
         filtered_vote: Policy for caller records with a non-PASS FILTER.
         min_coverage: Coverage threshold used by ``absent_vote=abstain``.
         compress_reference_blocks: Whether reference blocks were requested.
+        use_accel: Whether the Cython accelerator wrote the records.
 
     Returns:
         A pysam.VariantHeader object.
@@ -721,6 +730,7 @@ def generate_minimal_header(sample_name,
         meta.append(f'MinCoverage={min_coverage}')
     meta.append(f'FilteredVote={filtered_vote}')
     meta.append(f'ReferenceBlocks={compress_reference_blocks}')
+    meta.append(f'Accel={str(bool(use_accel)).lower()}')
     if callers_failed:
         meta.append(f'CallersFailed="{",".join(callers_failed)}"')
     header.add_line('##ChoCallate=<' + ','.join(meta) + '>')
@@ -849,7 +859,8 @@ def main():
                                          absent_vote,
                                          filtered_vote,
                                          min_coverage,
-                                         compress_blocks)
+                                         compress_blocks,
+                                         use_accel)
         contig_ids = {name: header.contigs[name].id for name in header.contigs}
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]

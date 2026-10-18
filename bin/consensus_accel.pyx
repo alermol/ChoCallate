@@ -425,10 +425,13 @@ cdef class BcfLineWriter:
             free(heap)
 
     def close(self):
-        if self.fp is not NULL:
-            hts_close(self.fp)
-            self.fp = NULL
+        cdef htsFile *fp = self.fp
+        self.fp = NULL
         if self.rec is not NULL:
             bcf_destroy1(self.rec)
             self.rec = NULL
         self.closed = True
+        # hts_close flushes the final BGZF block; a failure (e.g. disk full)
+        # would otherwise leave a truncated BCF and a successful exit status.
+        if fp is not NULL and hts_close(fp) < 0:
+            raise OSError("error closing BCF output")

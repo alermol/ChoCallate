@@ -8,7 +8,9 @@ BED base is covered by an output record (reference blocks and the REF span of
 a called deletion included).
 """
 
+import os
 import subprocess
+import sys
 
 import pytest
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
@@ -829,6 +831,56 @@ def test_accel_and_pure_paths_agree(tmp_path):
     assert (54, (ref_base(54), alt_base(54)), (0, 1)) in records
 
 
+def test_accel_import_failure_falls_back(monkeypatch, capsys):
+    """A binary-incompatible extension warns and uses pure pysam."""
+    import builtins
+    import importlib
+
+    real_import = builtins.__import__
+
+    def broken_import(name, *args, **kwargs):
+        if name == 'consensus_accel':
+            raise ValueError(
+                'size changed, may indicate binary incompatibility')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delenv('CHOCALLATE_NO_ACCEL', raising=False)
+    monkeypatch.setattr(builtins, '__import__', broken_import)
+    original = sys.modules.pop('generate_consensus', None)
+    try:
+        module = importlib.import_module('generate_consensus')
+    finally:
+        sys.modules.pop('generate_consensus', None)
+        if original is not None:
+            sys.modules['generate_consensus'] = original
+    assert module.BcfLineWriter is None
+    assert module.PileupTally is None
+    assert 'Cython accelerator unavailable' in capsys.readouterr().err
+
+
+def test_accel_close_reports_flush_failure():
+    """A failed final flush raises instead of leaving a truncated BCF."""
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+    if not os.path.exists('/dev/full'):
+        pytest.skip('/dev/full is not available')
+
+    import consensus_accel
+    import pysam
+
+    header = pysam.VariantHeader()
+    header.add_sample('sample1')
+    header.add_line('##contig=<ID=chr1,length=100>')
+    header.add_line('##INFO=<ID=END,Number=1,Type=Integer,Description="Stop">')
+    header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,Description="GT">')
+    header.add_line('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="AD">')
+    header.add_line('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="DP">')
+    writer = consensus_accel.BcfLineWriter(header, '/dev/full')
+    writer.write_monomorphic(0, 0, b'A,<*>', 1, 0, 1)
+    with pytest.raises(OSError):
+        writer.close()
+
+
 class _LimitedTally:
     """PileupTally facade with a deliberately small scratch table."""
 
@@ -973,10 +1025,11 @@ def test_provenance_headers_list_used_and_missing_callers(tmp_path, use_accel):
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
         records = list(variant_file)
+    accel = 'true' if use_accel else 'false'
     expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
                 'Rule=two-stage,Tie=nocall,AbsentVote=ref,'
                 'FilteredVote=abstain,ReferenceBlocks=False,'
-                'CallersFailed="freebayes">')
+                f'Accel={accel},CallersFailed="freebayes">')
     assert expected in header
     assert [(record.pos, (record.ref,) + tuple(record.alts),
              tuple(record.samples[0]['GT']))
@@ -1245,11 +1298,12 @@ def test_header_describes_abstain_and_tie_policies(tmp_path, use_accel):
         use_accel=use_accel, reference=reference)
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
+    accel = 'true' if use_accel else 'false'
     expected = ('##ChoCallate=<Version=test,Threshold=2,'
                 'Callers="bcftools,gatk",Rule=two-stage,Tie=first,'
                 'AbsentVote=abstain,MinCoverage=3,'
                 'FilteredVote=abstain,ReferenceBlocks=False,'
-                'CallersFailed="freebayes">')
+                f'Accel={accel},CallersFailed="freebayes">')
     assert expected in header
 
 
