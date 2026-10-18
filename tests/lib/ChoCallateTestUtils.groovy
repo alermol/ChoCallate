@@ -67,12 +67,14 @@ class ChoCallateTestUtils {
     }
 
     static Map bowtie2Index(Object projectDir, File launchDir,
-                            String name = 'reference') {
+                            String name = 'reference',
+                            boolean large = false) {
         Map ref = referenceBundle(projectDir, launchDir, name)
+        String large_index = large ? '--large-index' : ''
         run(
             ref.dir,
-            "bowtie2-build --quiet --threads 2 '${ref.fasta}' " +
-            "'${ref.dir}/${ref.prefix}'"
+            "bowtie2-build --quiet ${large_index} --threads 2 " +
+            "'${ref.fasta}' '${ref.dir}/${ref.prefix}'"
         )
         return ref
     }

@@ -71,19 +71,51 @@ workflow {
 
     // Mapper indexes are staged as task inputs. The prefix is resolved here,
     // so the command never depends on a host path, and a missing index aborts
-    // before the first task starts.
+    // before the first task starts. Exact suffixes keep the FASTA, its
+    // .fai/.dict and indexes of other genomes that share the prefix out of
+    // the staged set. An index is usable only when every file of one set is
+    // present.
+    def index_suffix_sets = [
+        bowtie2: [
+            ['.1.bt2', '.2.bt2', '.3.bt2', '.4.bt2',
+             '.rev.1.bt2', '.rev.2.bt2'],
+            ['.1.bt2l', '.2.bt2l', '.3.bt2l', '.4.bt2l',
+             '.rev.1.bt2l', '.rev.2.bt2l']
+        ],
+        bwa: [
+            ['.amb', '.ann', '.bwt', '.pac', '.sa']
+        ],
+        minimap2: [
+            ['.mmi']
+        ]
+    ]
     if (params.input.format != 'bam') {
+        def mapper = params.mapping.mapper
+        def index_dir = params.input.reference_index_dir
         def index_prefix = params.input.reference_index_prefix ?:
             file(params.input.reference_genome).name
-        def index_pattern = params.mapping.mapper == 'minimap2'
-            ? "${params.input.reference_index_dir}/${index_prefix}.mmi"
-            : "${params.input.reference_index_dir}/${index_prefix}*"
-        def index_matches = files(index_pattern)
-        if (index_matches.isEmpty()) {
+        def suffix_sets = index_suffix_sets[mapper]
+        if (suffix_sets == null) {
+            error("Unknown mapper '${mapper}'")
+        }
+        def candidate_sets = suffix_sets.collect { suffixes ->
+            suffixes.collect { suffix ->
+                file("${index_dir}/${index_prefix}${suffix}")
+            }
+        }
+        def index_matches = candidate_sets.find { candidates ->
+            candidates.every { candidate -> candidate.exists() }
+        }
+        if (index_matches == null) {
+            def missing = candidate_sets.collect { candidates ->
+                candidates
+                    .findAll { candidate -> !candidate.exists() }
+                    .collect { candidate -> candidate.name }
+                    .join(', ')
+            }
             error(
-                "No ${params.mapping.mapper} index files found in " +
-                "'${params.input.reference_index_dir}' for prefix " +
-                "'${index_prefix}' (expected ${index_pattern})"
+                "No ${mapper} index files found in '${index_dir}' for " +
+                "prefix '${index_prefix}'; missing: ${missing.join('; ')}"
             )
         }
         index_files = channel.value(index_matches)

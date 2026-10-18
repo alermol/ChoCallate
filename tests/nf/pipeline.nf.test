@@ -195,6 +195,7 @@ nextflow_pipeline {
     }
 
     test("test_se_bwa_sample_vcf") {
+        tag "index"
         setup {
             ChoCallateTestUtils.bwaIndex(
                 projectDir, new File(launchDir)
@@ -264,6 +265,7 @@ nextflow_pipeline {
     }
 
     test("test_minimap2") {
+        tag "index"
         setup {
             ChoCallateTestUtils.minimap2Index(
                 projectDir, new File(launchDir)
@@ -548,6 +550,8 @@ nextflow_pipeline {
     }
 
     test("test_stage_copy_default_prefix") {
+        tag "index"
+        tag "stage_copy"
         config "./stage_copy.config"
         setup {
             ChoCallateTestUtils.bowtie2Index(
@@ -868,6 +872,7 @@ nextflow_pipeline {
     }
 
     test("test_missing_index_prefix_fails_early") {
+        tag "index"
         setup {
             ChoCallateTestUtils.samplesheet(
                 new File(launchDir),
@@ -914,6 +919,123 @@ nextflow_pipeline {
                           workflow.stdout + workflow.stderr).join('\n')
             assert output.contains("No bowtie2 index files found")
             assert output.contains("missing_index_prefix")
+        }
+    }
+
+    test("test_decoy_index_prefix_fails_early") {
+        tag "index"
+        setup {
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+            // A complete-looking index for a different prefix used to satisfy
+            // the '<prefix>*' glob and defer the failure to the mapper.
+            new File(
+                launchDir, 'decoy_prefix.other.1.bt2'
+            ).text = ''
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${projectDir}/test_run/" +
+                        "arth_chr1.fasta.gz"
+                    reference_index_dir = "${launchDir}"
+                    reference_index_prefix = "decoy_prefix"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.trace.tasks().isEmpty()
+            def output = ([workflow.errorMessage ?: ''] +
+                          workflow.stdout + workflow.stderr).join('\n')
+            assert output.contains("No bowtie2 index files found")
+            assert output.contains("decoy_prefix.2.bt2")
+            assert output.contains("decoy_prefix.rev.2.bt2")
+            assert !output.contains("decoy_prefix.other.1.bt2")
+        }
+    }
+
+    test("test_bowtie2_large_index") {
+        tag "index"
+        setup {
+            ChoCallateTestUtils.bowtie2Index(
+                projectDir, new File(launchDir), 'reference_large', true
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference_large/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference_large"
+                    reference_index_prefix = "genome.fasta"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert new File(
+                launchDir, 'reference_large/genome.fasta.1.bt2l'
+            ).isFile()
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample1']
         }
     }
 }
