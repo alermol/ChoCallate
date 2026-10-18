@@ -109,7 +109,9 @@ resources:
     time: "48h"
 
 mapping:
-  # Read mapper: "bowtie2", "bwa" or "minimap2".
+  # Read mapper: "bowtie2", "bwa" or "minimap2". A minimap2 index must be
+  # built with `minimap2 -x sr -d`; the k/w settings stored in the .mmi
+  # override -x sr at mapping time.
   mapper: "bowtie2"
 
   # Extra arguments passed verbatim to the mapper.

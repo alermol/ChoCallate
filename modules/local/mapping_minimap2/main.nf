@@ -37,6 +37,8 @@ process MAPPING_MINIMAP2 {
     def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
     def reads = params.input.reads_type == 'se' ? "tmp/read1" :
                 params.input.reads_type == 'pe' ? "tmp/read1 tmp/read2" : ''
+    // A .mmi stores its own k-mer size and window, which override -x sr at
+    // mapping time. The index must be built with `minimap2 -x sr -d`.
     """
     set -o pipefail
 
@@ -45,7 +47,7 @@ process MAPPING_MINIMAP2 {
         -ax sr \
         -t ${aligner_cpus} \
         -R "${rg_id}" \
-        -a "index/${index_prefix}.mmi" \
+        "index/${index_prefix}.mmi" \
         ${reads} | \
     samtools view -u | \
     postprocess_bam.sh \
