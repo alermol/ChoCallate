@@ -15,6 +15,7 @@ include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
 include { ANNOTATE_HEADER } from './modules/local/annotate_header'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
+include { REPORT_DROPPED_SAMPLES } from './modules/local/report_dropped_samples'
 include { EXPORT_OUTPUT } from './modules/local/export_output'
 include { validateParameters } from 'plugin/nf-schema'
 
@@ -137,6 +138,29 @@ workflow {
         : file(params.input.exclude_bed, checkIfExists: true)
     bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
 
+    // With coverage.on_empty="skip", an empty coverage BED removes the
+    // sample before scattering.  The default "fail" mode is handled inside
+    // GENERATE_COVERAGE, which aborts with the sample id and threshold.
+    if (params.coverage.on_empty == 'skip') {
+        coverage_branch = bed_coverage.branch { _sample_id, bed ->
+            empty: bed.size() == 0
+            covered: true
+        }
+        empty_coverage_samples = coverage_branch.empty
+            .map { sample_id, _bed ->
+                log.warn(
+                    "Sample ${sample_id}: no region at or above " +
+                    "coverage.min_coverage=" +
+                    "${params.coverage.min_coverage}; sample dropped"
+                )
+                sample_id
+            }
+            .toList()
+        bed_coverage = coverage_branch.covered
+    } else {
+        empty_coverage_samples = channel.value([])
+    }
+
     // Scatter the covered intervals once per sample. Every caller and the
     // consensus step consume the same chunk list instead of rebuilding it.
     intervals = SCATTER_INTERVALS(
@@ -178,6 +202,36 @@ workflow {
             [tuple[0], received.join(','), paths]
         }
 
+    // A sample whose every caller failed produces no joined tuple and would
+    // otherwise disappear from the output without a message.  Compare the ids
+    // that reached the join with the ids that passed the coverage filter.
+    coverage_ids = bed_coverage.map { item -> item[0] }.toList()
+    call_ids = all_calls.map { item -> item[0] }.toList()
+    dropped_samples = coverage_ids
+        .concat(empty_coverage_samples)
+        .concat(call_ids)
+        .toList()
+        .map { lists ->
+            def covered = lists[0]
+            def empty = lists[1]
+            def called = lists[2]
+            def failed = covered.findAll { id -> !(id in called) }
+            failed.each { id ->
+                def message = "Sample ${id}: no caller produced calls " +
+                    "(${selected_callers.join(',')} configured); " +
+                    "sample dropped from consensus"
+                if (params.calling.allow_caller_failure) {
+                    log.warn(message)
+                } else {
+                    error(message)
+                }
+            }
+            (empty + failed).unique().sort()
+        }
+
+    // Always publish the dropped list, even when it is empty.
+    REPORT_DROPPED_SAMPLES(dropped_samples)
+
     // Generate consensus.  The per-sample consensus is always an internal BCF
     // with gVCF-style reference records, so a later merge assigns the ALT
     // depths correctly regardless of the requested output format.
@@ -207,7 +261,10 @@ workflow {
                             def ids = items.collect { item -> item[0] }
                             [ids.join(','), items.collect { item -> item[1] }]
                         }
-        merged = MERGE_OUTPUTS(consensus, ref_genome, fai_index)
+                        .filter { item -> !item[1].isEmpty() }
+        merged = MERGE_OUTPUTS(
+            consensus, ref_genome, fai_index, dropped_samples
+        )
         EXPORT_OUTPUT(
             merged.map { bcf -> tuple('consensus', bcf) },
             ref_genome

@@ -604,6 +604,201 @@ nextflow_pipeline {
         }
     }
 
+    test("test_empty_coverage_fails_with_sample_name") {
+        tag "dropped_samples"
+        tag "empty_coverage"
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample_ok'
+            )
+            ChoCallateTestUtils.emptyBam(
+                new File(launchDir), 'sample_empty'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    ['sample_ok', "${launchDir}/sample_ok.bam"],
+                    ['sample_empty', "${launchDir}/sample_empty.bam"]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                left_align_indels {
+                    enabled = false
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.failed
+            def output = ([workflow.errorMessage ?: ''] +
+                          workflow.stdout + workflow.stderr).join('\n')
+            assert output.contains('sample_empty')
+            assert output.contains('coverage.min_coverage=1')
+        }
+    }
+
+    test("test_empty_coverage_can_be_skipped") {
+        tag "dropped_samples"
+        tag "empty_coverage"
+        tag "empty_coverage_skip"
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample_ok'
+            )
+            ChoCallateTestUtils.emptyBam(
+                new File(launchDir), 'sample_empty'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    ['sample_ok', "${launchDir}/sample_ok.bam"],
+                    ['sample_empty', "${launchDir}/sample_empty.bam"]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                left_align_indels {
+                    enabled = false
+                }
+                coverage {
+                    min_coverage = 1
+                    on_empty = "skip"
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert ChoCallateTestUtils.vcfSamples(consensus) == ['sample_ok']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains('SamplesDropped="sample_empty"')
+            def dropped = new File("${outputDir}/dropped_samples.txt")
+            assert dropped.isFile()
+            assert dropped.readLines().findAll { it.trim() } ==
+                ['sample_empty']
+            def log = new File(launchDir, 'meta/nextflow.log')
+            assert log.text.contains(
+                'Sample sample_empty: no region at or above'
+            )
+        }
+    }
+
+    test("test_all_callers_failed_warns_and_drops_sample") {
+        tag "dropped_samples"
+        tag "all_callers_failed"
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [['sample1', "${launchDir}/sample1.bam"]]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                left_align_indels {
+                    enabled = false
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                    allow_caller_failure = true
+                    bcftools {
+                        mpileup {
+                            extra_args = "--definitely-not-a-real-option"
+                        }
+                    }
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def log = new File(launchDir, 'meta/nextflow.log')
+            assert log.isFile()
+            assert log.text.contains(
+                'Sample sample1: no caller produced calls'
+            )
+            def dropped = new File("${outputDir}/dropped_samples.txt")
+            assert dropped.isFile()
+            assert dropped.readLines().findAll { it.trim() } == ['sample1']
+        }
+    }
+
     test("test_missing_index_prefix_fails_early") {
         setup {
             ChoCallateTestUtils.samplesheet(

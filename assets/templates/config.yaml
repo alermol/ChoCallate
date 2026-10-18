@@ -132,6 +132,11 @@ coverage:
   # Minimum depth for a base to enter the coverage BED and consensus.
   min_coverage: 5
 
+  # Action when no base of a sample reaches min_coverage (empty coverage BED):
+  # "fail" aborts with the sample id and threshold; "skip" drops the sample,
+  # logs a warning and records it in dropped_samples.txt.
+  on_empty: "fail"
+
 calling:
   # Comma-separated non-empty subset of bcftools, freebayes and gatk.
   callers: "bcftools,gatk,freebayes"

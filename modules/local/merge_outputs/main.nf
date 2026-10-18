@@ -12,6 +12,7 @@ process MERGE_OUTPUTS {
     tuple val(sample_ids), path('tmp/bcfs/*', arity: '1..*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
+    val dropped_samples
 
     output:
     // Internal merged representation.  Filtering, re-joining and the final
@@ -21,6 +22,10 @@ process MERGE_OUTPUTS {
     script:
     def sample_id_list = sample_ids.split(',').collect { id -> id.trim() }
     def merge_paths = sample_id_list.collect { id -> "tmp/bcfs/${id}.bcf" }.join(' ')
+    def dropped = dropped_samples ? dropped_samples.join(',') : ''
+    def dropped_arg = dropped
+        ? "--samples-dropped '${dropped}'"
+        : ''
     """
     printf '%s\n' ${merge_paths} > tmp/merge_list.txt
 
@@ -31,8 +36,9 @@ process MERGE_OUTPUTS {
         --reference tmp/ref_genome.fasta \
         --output consensus.bcf \
         --format bcf \
-        --split-multiallelic \
-        --cpus ${task.cpus}
+        --split-multiallelic \\
+        --cpus ${task.cpus} \\
+        ${dropped_arg}
 
     write_command_header.py tmp/command_line.hdr
     bcftools annotate --threads ${task.cpus} \

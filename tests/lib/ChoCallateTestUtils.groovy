@@ -118,6 +118,19 @@ class ChoCallateTestUtils {
         return bam
     }
 
+    /** Writes a coordinate-sorted, indexed BAM with no alignments. */
+    static File emptyBam(File launchDir, String sampleId = 'empty') {
+        File bam = new File(launchDir, "${sampleId}.bam")
+        run(
+            launchDir,
+            "printf '@HD\\tVN:1.6\\tSO:coordinate\\n" +
+            "@SQ\\tSN:${CONTIG}\\tLN:${CONTIG_LENGTH}\\n' | " +
+            "samtools view -b -o '${bam}' - && " +
+            "samtools index --csi '${bam}'"
+        )
+        return bam
+    }
+
     static File samplesheet(File dir, List<List<String>> rows) {
         File sheet = new File(dir, 'samples.tsv')
         sheet.text = rows.collect { row -> row.join('\t') }.join('\n') + '\n'

@@ -80,7 +80,8 @@ def build_two_samples(tmp_path, use_accel, compress_reference_blocks=False):
 
 
 def merge_chain(tmp_path, sample_files, reference, remove_invariant,
-                split_multiallelic=False, output_format='bcf', cpus=1):
+                split_multiallelic=False, output_format='bcf', cpus=1,
+                samples_dropped=None):
     """Run bin/merge_outputs.sh and return the merged output path."""
     list_file = tmp_path / 'merge_list.txt'
     list_file.write_text('\n'.join(str(path) for path in sample_files.values()) + '\n')
@@ -100,6 +101,8 @@ def merge_chain(tmp_path, sample_files, reference, remove_invariant,
         cmd.append('--remove-invariant')
     if split_multiallelic:
         cmd.append('--split-multiallelic')
+    if samples_dropped:
+        cmd += ['--samples-dropped', samples_dropped]
     env = os.environ.copy()
     env['TMPDIR'] = str(tmp_path)
     subprocess.run(cmd, check=True, cwd=str(REPO_ROOT), env=env)
@@ -250,6 +253,31 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
         header = str(variant_file.header)
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
+
+
+def test_merged_header_records_dropped_samples(tmp_path, use_accel):
+    """Dropped sample ids are appended to the merged ##ChoCallate line."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False,
+                         samples_dropped='sampleC,sampleD')
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    assert 'SamplesDropped="sampleC,sampleD"' in header
+    assert header.count('##ChoCallate=') == 1
+
+
+def test_single_file_merge_records_dropped_samples(tmp_path, use_accel):
+    """The single-input merge path patches the header as well."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel)
+    one_sample = {'sampleA': sample_files['sampleA']}
+    merged = merge_chain(tmp_path, one_sample, reference,
+                         remove_invariant=False,
+                         samples_dropped='sampleB')
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    assert 'SamplesDropped="sampleB"' in header
+    assert header.count('##ChoCallate=') == 1
 
 
 def test_merged_vcf_output_is_readable(tmp_path, use_accel):

@@ -251,6 +251,14 @@
                     "type": "integer",
                     "description": "Minimum depth for a base to be included in the consensus.",
                     "minimum": 0
+                },
+                "on_empty": {
+                    "type": "string",
+                    "description": "Action for a sample whose coverage BED is empty: fail or skip.",
+                    "enum": [
+                        "fail",
+                        "skip"
+                    ]
                 }
             }
         },
