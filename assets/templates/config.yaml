@@ -43,23 +43,29 @@ output:
   # Directory for published results and Nextflow reports.
   directory: "ChoCallate_output"
 
-  # "single": one merged consensus file; "sample": one file per sample.
+  # "single": one merged multi-sample file; "sample": one file per sample.
+  # The pipeline always builds internal per-sample BCFs (and a merged BCF for
+  # "single") before this layout is applied to the final export.
   type: "single"
 
-  # Consensus file format: "bcf" or "vcf" (VCF is bgzip-compressed).
+  # Final published format: "bcf" or "vcf" (VCF is bgzip-compressed).
+  # Internals are always BCF; this option only affects EXPORT_OUTPUT.
   format: "bcf"
 
-  # Drop monomorphic/reference-only records from the published output.
+  # Drop monomorphic/reference-only records when exporting the final output.
   remove_invariant: true
 
-  # Keep one record per ALT allele instead of re-joining multi-allelic
-  # sites.
+  # Keep one record per ALT allele in the final output instead of re-joining
+  # multi-allelic sites.
   split_multiallelic: false
 
   # Compress consecutive hom-reference positions into multi-base gVCF
-  # blocks with INFO/END, in both per-sample and merged output. Multi-base
-  # blocks carry the minimum DP and omit AD, so merged ALT depth for a
-  # hom-reference sample is missing rather than a fabricated zero.
+  # blocks with INFO/END in the final output. Reference records are always
+  # gVCF-style internally (ALT="<*>") so that a multi-sample merge assigns
+  # the ALT depth of hom-reference samples correctly; this option only
+  # controls whether runs of them are additionally collapsed into blocks.
+  # Multi-base blocks carry the minimum DP and omit AD, so merged ALT depth
+  # for a hom-reference sample is missing rather than a fabricated zero.
   compress_reference_blocks: false
 
   # Publishing mode for result files: "copy" writes independent copies,
@@ -176,5 +182,5 @@ consensus:
   # requires at least coverage.min_coverage reads at the position.
   absent_vote: "ref"
 
-  # Zygosity tie-breaker: "nocall", "first" or "qual".
+  # Zygosity tie-breaker: "nocall" or "first".
   tie_policy: "nocall"

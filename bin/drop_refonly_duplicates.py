@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Drop reference-only records that duplicate a real variant at the same position.
+"""Drop reference-only records that duplicate a real variant at the same
+position.
 
 Per-sample consensus files contain a gVCF-style reference record (ALT="<*>",
 GT 0/0) at every covered position.  When `bcftools merge --gvcf` finds a real
@@ -15,8 +16,8 @@ records at positions without any real allele are monomorphic sites and are
 kept: the consensus output contains all sites, monomorphic ones included.
 
 Used by ``MERGE_OUTPUTS`` between ``bcftools norm -m -any`` and the invariant
-filter.  Records are buffered one position at a time, so the memory use is
-constant.
+filter.  Records are buffered one chromosome position at a time, so the memory
+use is constant.
 """
 
 import pysam
@@ -50,15 +51,17 @@ def keep_records(records):
 def main():
     try:
         with pysam.VariantFile('/dev/stdin') as inp, \
-                pysam.VariantFile('/dev/stdout', 'wb0', header=inp.header) as out:
-            position = None
+                pysam.VariantFile(
+                    '/dev/stdout', 'wb0', header=inp.header) as out:
+            locus = None
             pending = []
             for record in inp:
-                if position is not None and record.pos != position:
+                record_locus = (record.chrom, record.pos)
+                if locus is not None and record_locus != locus:
                     for kept in keep_records(pending):
                         out.write(kept)
                     pending = []
-                position = record.pos
+                locus = record_locus
                 pending.append(record.copy())
             for kept in keep_records(pending):
                 out.write(kept)

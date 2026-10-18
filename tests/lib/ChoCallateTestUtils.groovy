@@ -124,13 +124,16 @@ class ChoCallateTestUtils {
         return sheet
     }
 
-    /** Writes a minimal single-sample BCF against the test contig. */
-    static File writeBcf(File dir, String name, String sample,
-                         List<List<String>> records) {
+    private static File writeVcfText(File dir, String name, String sample,
+                                     List<List<String>> records) {
         dir.mkdirs()
         def header = [
             '##fileformat=VCFv4.2',
             '##contig=<ID=CP002684.1,length=200001>',
+            '##ALT=<ID=*,Description="Represents allele(s) other than ' +
+                'observed.">',
+            '##INFO=<ID=END,Number=1,Type=Integer,' +
+                'Description="Stop position of the interval">',
             '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
             '##FORMAT=<ID=AD,Number=R,Type=Integer,' +
                 'Description="Allelic depths">',
@@ -145,9 +148,25 @@ class ChoCallateTestUtils {
         File vcf = new File(dir, "${name}.vcf")
         vcf.text = (header + records.collect { it.join('\t') })
             .join('\n') + '\n'
+        return vcf
+    }
+
+    /** Writes a minimal single-sample BCF against the test contig. */
+    static File writeBcf(File dir, String name, String sample,
+                         List<List<String>> records) {
+        File vcf = writeVcfText(dir, name, sample, records)
         File bcf = new File(dir, "${name}.bcf")
         run(dir, "bcftools view -Ob -o '${bcf}' '${vcf}'")
         return bcf
+    }
+
+    /** Writes a minimal bgzipped single-sample VCF against the test contig. */
+    static File writeVcfGz(File dir, String name, String sample,
+                           List<List<String>> records) {
+        File vcf = writeVcfText(dir, name, sample, records)
+        File gz = new File(dir, "${name}.vcf.gz")
+        run(dir, "bgzip -c '${vcf}' > '${gz}'")
+        return gz
     }
 
     static String bamHeader(File bam) {

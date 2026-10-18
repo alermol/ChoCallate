@@ -266,6 +266,40 @@ def test_merged_vcf_output_is_readable(tmp_path, use_accel):
     assert [record.pos for record in records] == list(range(20, 33))
 
 
+def test_drop_refonly_duplicates_does_not_cross_contigs(tmp_path):
+    """Equal positions on different contigs are separate loci."""
+    header = pysam.VariantHeader()
+    header.add_line('##contig=<ID=chr1,length=100>')
+    header.add_line('##contig=<ID=chr2,length=100>')
+    header.add_line('##ALT=<ID=*,Description="Represents allele(s) other ' +
+                    'than observed.">')
+    header.add_line('##INFO=<ID=END,Number=1,Type=Integer,' +
+                    'Description="Stop position of the interval">')
+    header.add_line('##FORMAT=<ID=GT,Number=1,Type=String,' +
+                    'Description="Genotype">')
+    header.add_sample('sample1')
+    source = tmp_path / 'in.bcf'
+    with pysam.VariantFile(str(source), 'wb', header=header) as out:
+        record = out.new_record(contig='chr1', start=9, stop=10,
+                                alleles=('A', '<*>'))
+        record.samples[0]['GT'] = (0, 0)
+        out.write(record)
+        record = out.new_record(contig='chr2', start=9, stop=10,
+                                alleles=('C', 'T'))
+        record.samples[0]['GT'] = (0, 1)
+        out.write(record)
+
+    result = subprocess.run(
+        [sys.executable, str(BIN_DIR / 'drop_refonly_duplicates.py')],
+        check=True, input=source.read_bytes(), capture_output=True)
+    out_path = tmp_path / 'out.bcf'
+    out_path.write_bytes(result.stdout)
+    with pysam.VariantFile(str(out_path), index_filename=None) as variant_file:
+        assert [(record.chrom, record.pos, tuple(record.alts))
+                for record in variant_file] == [
+            ('chr1', 10, ('<*>',)), ('chr2', 10, ('T',))]
+
+
 def test_drop_refonly_duplicates_keeps_monomorphic_positions(tmp_path):
     """The dedup helper drops '.'/'<*>' duplicates but keeps monomorphic sites."""
     header = pysam.VariantHeader()

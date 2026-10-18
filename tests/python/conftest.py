@@ -225,7 +225,7 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
             ``callers``); extra names count as failed callers.
         check: Raise on a non-zero exit status when true.
         absent_vote: ``ref`` or ``abstain`` voting for absent callers.
-        tie_policy: ``nocall``, ``first`` or ``qual`` tie-breaking.
+        tie_policy: ``nocall`` or ``first`` tie-breaking.
         min_coverage: Coverage required by ``absent_vote=abstain``.
         command_line: Pipeline command line recorded in the header.
         compress_reference_blocks: Compress hom-reference runs into blocks.

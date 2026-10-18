@@ -14,6 +14,7 @@ include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
+include { EXPORT_OUTPUT } from './modules/local/export_output'
 include { validateParameters } from 'plugin/nf-schema'
 
 workflow {
@@ -155,9 +156,9 @@ workflow {
             [tuple[0], received.join(','), paths]
         }
 
-    // Generate consensus.  The configured caller list is passed separately so
-    // the module can record the structured consensus header and warn about
-    // degrades.
+    // Generate consensus.  The per-sample consensus is always an internal BCF
+    // with gVCF-style reference records, so a later merge assigns the ALT
+    // depths correctly regardless of the requested output format.
     GENERATE_CONSENSUS(
         all_calls.join(bam_intervals),
         selected_callers.join(','),
@@ -165,11 +166,10 @@ workflow {
         fai_index
     )
 
-    // Merge consensuses from different samples into single VCF of BCF
+    // A single output is one multi-sample file: merge the internal BCFs first.
+    // Both paths end in EXPORT_OUTPUT, which applies output.format, output.type
+    // and the final record transformations.
     if (params.output.type == 'single') {
-        consensus_ch = params.output.format == 'vcf' ?
-                       GENERATE_CONSENSUS.out.consensus_vcf :
-                       GENERATE_CONSENSUS.out.consensus_bcf
         sample_rank = sample_run_ch
                         .map { item -> item[0] }
                         .collect()
@@ -178,14 +178,23 @@ workflow {
                                 tuple(id, i)
                             }
                         }
-        consensus = consensus_ch
+        consensus = GENERATE_CONSENSUS.out.consensus_bcf
                         .join(sample_rank)
                         .toSortedList { item -> item[2] }
                         .map { items ->
                             def ids = items.collect { item -> item[0] }
                             [ids.join(','), items.collect { item -> item[1] }]
                         }
-        MERGE_OUTPUTS(consensus, ref_genome, fai_index)
+        merged = MERGE_OUTPUTS(consensus, ref_genome, fai_index)
+        EXPORT_OUTPUT(
+            merged.map { bcf -> tuple('consensus', bcf) },
+            ref_genome
+        )
+    } else {
+        EXPORT_OUTPUT(
+            GENERATE_CONSENSUS.out.consensus_bcf,
+            ref_genome
+        )
     }
 }
 

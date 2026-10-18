@@ -7,9 +7,9 @@ position the callers vote with their genotype in two stages: an ALT allele must
 first be supported by at least ``--consensus_threshold`` callers, then the
 majority zygosity among the supporters of the winning ALT decides between
 heterozygous and homozygous ALT.  Ties are resolved by ``--tie_policy``:
-``nocall`` (default, independent of caller order), ``first`` (the earliest
-supporter in configured caller order) or ``qual`` (largest summed QUAL).  A
-position without ALT support is hom-reference when at least
+``nocall`` (default, independent of caller order) or ``first`` (the earliest
+supporter in configured caller order).  A position without ALT support is
+hom-reference when at least
 ``--consensus_threshold`` callers vote reference, otherwise it is a no-call.
 
 A caller without a record votes reference by default (``--absent_vote ref``).
@@ -224,15 +224,22 @@ def genotype_key(records, ref_base):
     return (variant_ref, alts, tuple(gt))
 
 
-def _zygosity(key, alt):
-    """Classify a vote supporting ``alt`` as ``het`` or ``hom`` ALT.
+def _zygosity(key, allele):
+    """Classify a vote supporting ``allele`` as ``het`` or ``hom`` ALT.
 
-    Haploid ALT calls count as homozygous (one ALT copy out of one).  A
-    multi-allelic or split genotype is reduced to the winning ALT allele.
+    ``allele`` is a ``(ref, alt)`` pair and both parts must match the vote:
+    after normalisation a deletion ALT is only its anchor base, so the same
+    ALT string can describe deletions of different lengths.  Haploid ALT calls
+    count as homozygous (one ALT copy out of one).  A multi-allelic or split
+    genotype is reduced to the winning ALT allele.
     """
-    _, alts, gt = key
-    indices = {index + 1 for index, allele in enumerate(alts) if allele == alt}
-    copies = sum(1 for allele in gt if allele in indices)
+    key_ref, alts, gt = key
+    ref, alt = allele
+    if key_ref != ref:
+        return None
+    indices = {index + 1 for index, candidate in enumerate(alts)
+               if candidate == alt}
+    copies = sum(1 for copy in gt if copy in indices)
     if copies == 0:
         return None
     if copies == len(gt):
@@ -247,8 +254,7 @@ def _genotype_for(zygosity, ploidy):
     return (0,) * (ploidy - 1) + (1,)
 
 
-def consensus_calls(keys, consensus_threshold, qualities=None,
-                    tie_policy='nocall'):
+def consensus_calls(keys, consensus_threshold, tie_policy='nocall'):
     """Consensus records for one position.
 
     Stage 1 (site): every ALT allele supported by at least
@@ -261,8 +267,6 @@ def consensus_calls(keys, consensus_threshold, qualities=None,
         Skip that ALT (default; independent of caller order).
     ``first``
         Use the earliest supporter in the configured caller order.
-    ``qual``
-        Use the largest summed QUAL; a remaining tie skips that ALT.
 
     Every qualifying ALT produces its own split consensus record; the output
     stage re-joins them unless split output was requested.  When no ALT reaches
@@ -271,18 +275,17 @@ def consensus_calls(keys, consensus_threshold, qualities=None,
 
     Args:
         keys: List of (ref, alt tuple, gt tuple) keys and ``None`` for
-            abstentions, one entry per caller.
+            abstentions, one entry per caller.  An ALT is identified by its
+            ``(ref, alt)`` pair, not by the ALT string alone, so deletions of
+            different lengths are distinct alleles.
         consensus_threshold: Minimum number of callers supporting an ALT (or
             the reference) at the site stage.
-        qualities: Per-caller QUAL values used by the ``qual`` tie policy.
-        tie_policy: ``nocall``, ``first`` or ``qual``.
+        tie_policy: ``nocall`` or ``first``.
 
     Returns:
         A list of (ref, alt tuple, gt tuple) records; normally zero, one or one
-        split record per qualifying ALT.
+        split record per qualifying ALT, ordered by ``(ref, alt)``.
     """
-    if qualities is None:
-        qualities = [0.0] * len(keys)
     reference_key = None
     reference_count = 0
     alt_support = {}
@@ -297,11 +300,11 @@ def consensus_calls(keys, consensus_threshold, qualities=None,
             continue
         for allele_index in sorted({allele for allele in gt if allele > 0}):
             if allele_index <= len(alts):
-                alt_support.setdefault(alts[allele_index - 1], []).append(
-                    (index, key))
+                allele = (ref, alts[allele_index - 1])
+                alt_support.setdefault(allele, []).append((index, key))
 
     candidates = sorted(
-        (alt, supporters) for alt, supporters in alt_support.items()
+        (allele, supporters) for allele, supporters in alt_support.items()
         if len(supporters) >= consensus_threshold)
     if not candidates:
         if reference_count >= consensus_threshold:
@@ -309,10 +312,10 @@ def consensus_calls(keys, consensus_threshold, qualities=None,
         return []
 
     calls = []
-    for alt, supporters in candidates:
+    for allele, supporters in candidates:
         classes = {}
         for index, key in supporters:
-            zygosity = _zygosity(key, alt)
+            zygosity = _zygosity(key, allele)
             if zygosity is not None:
                 classes.setdefault(zygosity, []).append((index, key))
         if not classes:
@@ -324,20 +327,14 @@ def consensus_calls(keys, consensus_threshold, qualities=None,
             if tie_policy == 'first':
                 winners = [min(winners,
                                key=lambda item: min(i for i, _ in item[1]))]
-            elif tie_policy == 'qual':
-                scored = [(sum(qualities[i] for i, _ in members), zygosity, members)
-                          for zygosity, members in winners]
-                best = max(score for score, _, _ in scored)
-                winners = [(zygosity, members)
-                           for score, zygosity, members in scored
-                           if score == best]
             if len(winners) > 1:
                 # unresolved genotype tie: this ALT gets no consensus record
                 continue
         zygosity, members = winners[0]
         ploidy = max(len(key[2]) for _, key in members)
-        ref = members[0][1][0]
-        calls.append((ref, (alt,), _genotype_for(zygosity, ploidy)))
+        allele_ref, allele_alt = allele
+        calls.append((allele_ref, (allele_alt,),
+                      _genotype_for(zygosity, ploidy)))
     return calls
 
 
@@ -773,7 +770,7 @@ def main():
     parser.add_argument('--version', required=True, type=str, help='Version of ChoCallate pipeline')
     parser.add_argument('--absent_vote', choices=('ref', 'abstain'), default='ref',
                         help='Vote of a caller without a record at a position')
-    parser.add_argument('--tie_policy', choices=('nocall', 'first', 'qual'),
+    parser.add_argument('--tie_policy', choices=('nocall', 'first'),
                         default='nocall', help='How to break voting ties')
     parser.add_argument('--min_coverage', type=int, default=0,
                         help='Coverage required for an absent caller to vote '
@@ -871,8 +868,9 @@ def main():
                         has_column = sync(vcf_start)
 
                         if min_next < vcf_start:
-                            # a multi-base consensus shift or the start of the
-                            # next interval moved past some caller records
+                            # the start of the next interval, or a record that
+                            # overlaps the span start, moved past some caller
+                            # records
                             min_next = _NO_RECORD
                             for cursor in cursors:
                                 cursor.skip_before(vcf_start)
@@ -943,19 +941,12 @@ def main():
                         # normalisation) and build one vote per caller
                         ref_base = ref_seq[rel]
                         keys = [None] * n_files
-                        qualities = [0.0] * n_files
                         present = [False] * n_files
                         for fi, cursor in enumerate(cursors):
                             caller_records = cursor.take_at(vcf_start)
                             if caller_records:
                                 key = genotype_key(caller_records, ref_base)
                                 keys[fi] = key
-                                if key is not None:
-                                    qualities[fi] = max(
-                                        (float(record.qual)
-                                         for record in caller_records
-                                         if record.qual is not None),
-                                        default=0.0)
                                 present[fi] = True
                         min_next = _NO_RECORD
                         for cursor in cursors:
@@ -981,8 +972,7 @@ def main():
                             if not present[fi]:
                                 keys[fi] = absent_key
 
-                        calls = consensus_calls(keys, threshold, qualities,
-                                                tie_policy)
+                        calls = consensus_calls(keys, threshold, tie_policy)
                         if not calls:
                             vcf_start += 1
                             rel += 1
@@ -1007,9 +997,11 @@ def main():
                             rel += 1
                             continue
 
-                        # one split record per qualifying ALT
+                        # one split record per qualifying ALT; every BED
+                        # position is evaluated, including positions covered
+                        # by a deletion, so caller records inside the deletion
+                        # span are not discarded
                         site = site_of() if has_column else None
-                        shift = max(len(call[0]) for call in calls)
                         for ref, alts, gt in calls:
                             alleles = [ref] + list(alts)
                             ad, dp = recover_ad_dp(site, alleles)
@@ -1021,8 +1013,8 @@ def main():
                                                        vcf_start - 1,
                                                        vcf_start, alleles, gt,
                                                        ad, dp)
-                        vcf_start += shift
-                        rel += shift
+                        vcf_start += 1
+                        rel += 1
 
                 flush_reference_block(pending_block, output_file, writer,
                                       use_accel)

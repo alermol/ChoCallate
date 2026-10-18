@@ -6,21 +6,6 @@ process GENERATE_CONSENSUS {
 
     tag "${sample_id}"
 
-    publishDir(
-        "${params.output.directory}/per_sample",
-        mode: params.output.publish_mode,
-        pattern: '*.bcf',
-        enabled: params.output.type == 'sample' &&
-                 params.output.format == 'bcf'
-    )
-    publishDir(
-        "${params.output.directory}/per_sample",
-        mode: params.output.publish_mode,
-        pattern: '*.vcf.gz',
-        enabled: params.output.type == 'sample' &&
-                 params.output.format == 'vcf'
-    )
-
     input:
     // The `dir/*` staging pattern preserves the caller file names (bcftools.bcf,
     // freebayes.bcf, gatk.bcf), so the consensus step knows which caller each
@@ -31,8 +16,9 @@ process GENERATE_CONSENSUS {
     path("tmp/ref_genome.fasta.fai")
 
     output:
-    tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf, optional: true
-    tuple val(sample_id), path("${sample_id}.vcf.gz"), emit: consensus_vcf, optional: true
+    // Internal representation only. The requested output format is applied by
+    // EXPORT_OUTPUT after the optional multi-sample merge.
+    tuple val(sample_id), path("${sample_id}.bcf"), emit: consensus_bcf
 
 
     script:
@@ -43,20 +29,16 @@ process GENERATE_CONSENSUS {
         error "Sample ${sample_id}: consensus.threshold (${params.consensus.threshold}) exceeds the ${received.size()} surviving caller(s) [${received.join(',')}] after failure(s) of ${failed.join(',')}"
     }
     def input_args = received.collect { caller -> "--input ${caller}=tmp/callers/${caller}.bcf" }.join(' ')
-    def output_format = params.output.format == 'vcf' ? "-Oz -o ${sample_id}.vcf.gz" : "-Ob -o ${sample_id}.bcf"
-    def filter_invariant = params.output.remove_invariant && params.output.type == 'sample' ? "| bcftools filter --threads ${task.cpus} -e 'COUNT(GT=\"RR\")=N_SAMPLES' -Ou" : ""
     def compress_blocks = params.output.compress_reference_blocks
         ? "--compress_reference_blocks"
         : ""
-    def join_multiallelic = params.output.type == 'sample' && !params.output.split_multiallelic ? "| bcftools norm --threads ${task.cpus} -m +any -Ou" : ""
     def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
     def tie_policy = params.consensus.tie_policy != null ? params.consensus.tie_policy : 'nocall'
     def min_coverage = params.coverage.min_coverage != null
         ? params.coverage.min_coverage
         : 5
-    def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
     """
-    mkdir -p tmp/vcf_chunks/
+    mkdir -p tmp/bcf_chunks/
 
     cat > tmp/command_line.txt <<'CHO_CMD_EOF'
 ${workflow.commandLine ?: 'unknown'}
@@ -72,7 +54,7 @@ CHO_CMD_EOF
         --callers "${configured_callers}" \
         --bed {}.gz \
         --bam tmp/input.bam \
-        --output tmp/vcf_chunks/{#}.bcf \
+        --output tmp/bcf_chunks/{#}.bcf \
         --sample_name "${sample_id}" \
         --reference tmp/ref_genome.fasta \
         --consensus_threshold "${params.consensus.threshold}" \
@@ -85,9 +67,10 @@ CHO_CMD_EOF
         ::: tmp/bed_chunks/*.bed
 
     # The interval chunks are consumed in BED order; ls -v preserves that order
-    # through concat, so no full sort is needed afterwards.
-    bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/vcf_chunks/*.bcf) ${filter_invariant} ${join_multiallelic} \
-    | bcftools +fill-tags -Ou -- -t ${fill_tags} \
-    | bcftools view ${output_format}
+    # through concat, so no full sort is needed afterwards.  The per-sample
+    # consensus stays split by ALT and includes every covered site; output
+    # filtering and re-joining happen once in EXPORT_OUTPUT.
+    bcftools concat --naive --threads ${task.cpus} -Ob \
+        -o ${sample_id}.bcf \$(ls -v tmp/bcf_chunks/*.bcf)
     """
 }

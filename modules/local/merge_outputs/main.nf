@@ -4,20 +4,7 @@ process MERGE_OUTPUTS {
     beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
     afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
-    publishDir(
-        "${params.output.directory}",
-        mode: params.output.publish_mode,
-        pattern: 'consensus.bcf',
-        enabled: params.output.type == 'single' &&
-                 params.output.format == 'bcf'
-    )
-    publishDir(
-        "${params.output.directory}",
-        mode: params.output.publish_mode,
-        pattern: 'consensus.vcf.gz',
-        enabled: params.output.type == 'single' &&
-                 params.output.format == 'vcf'
-    )
+    tag "consensus"
 
     input:
     // The sample ids are carried explicitly so the merge order follows
@@ -27,25 +14,24 @@ process MERGE_OUTPUTS {
     path("tmp/ref_genome.fasta.fai")
 
     output:
-    path("consensus.bcf"), optional: true
-    path("consensus.vcf.gz"), optional: true
+    // Internal merged representation.  Filtering, re-joining and the final
+    // BCF/VCF conversion are done by EXPORT_OUTPUT.
+    path("consensus.bcf"), emit: consensus
 
     script:
     def sample_id_list = sample_ids.split(',').collect { id -> id.trim() }
     def merge_paths = sample_id_list.collect { id -> "tmp/bcfs/${id}.bcf" }.join(' ')
-    def output_name = params.output.format == 'vcf' ? 'consensus.vcf.gz' : 'consensus.bcf'
-    def remove_invariant = params.output.remove_invariant ? '--remove-invariant' : ''
-    def split_multiallelic = params.output.split_multiallelic ? '--split-multiallelic' : ''
     """
     printf '%s\n' ${merge_paths} > tmp/merge_list.txt
 
+    # Keep one record per ALT in the internal merge.  EXPORT_OUTPUT re-joins
+    # multi-allelic records when output.split_multiallelic is false.
     merge_outputs.sh \
         --file-list tmp/merge_list.txt \
         --reference tmp/ref_genome.fasta \
-        --output ${output_name} \
-        --format ${params.output.format} \
-        --cpus ${task.cpus} \
-        ${remove_invariant} \
-        ${split_multiallelic}
+        --output consensus.bcf \
+        --format bcf \
+        --split-multiallelic \
+        --cpus ${task.cpus}
     """
 }

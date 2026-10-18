@@ -367,9 +367,9 @@ def test_monomorphic_record_carries_other_allele_depth(tmp_path, use_accel):
 def test_concordant_callers_are_merged(consensus_runner):
     """Two matching ALT calls win over one placeholder vote.
 
-    The genotype classes (0/1 and 1/1) tie, so the explicit ``qual`` policy
-    picks the class with the larger summed QUAL instead of relying on caller
-    order.
+    The genotype classes (0/1 and 1/1) tie, so the explicit ``first`` policy
+    picks the class of the earliest caller instead of relying on the default
+    no-call policy.
     """
     output = consensus_runner(
         bed_intervals=[('chr1', POS_30_0B, 31), ('chr1', 40, 42)],
@@ -378,14 +378,144 @@ def test_concordant_callers_are_merged(consensus_runner):
             [(POS_30_0B, ref_base(30), [alt_base(30)], (1, 1), 20)],
         ],
         threshold=1,
-        tie_policy='qual',
+        tie_policy='first',
     )
     records = read_records(output)
     # The two callers agree on the ALT allele, so the site passes the site
-    # stage; the 0/1 class has the higher summed QUAL.  Placeholder votes must
-    # not win, and the interval ends are written.
+    # stage; the first caller's 0/1 class breaks the zygosity tie.  Placeholder
+    # votes must not win, and the interval ends are written.
     assert records[0] == (30, (ref_base(30), alt_base(30)), (0, 1))
     assert [pos for pos, _, _ in records] == [30, 31, 41, 42]
+
+
+@pytest.mark.parametrize('order', [(0, 1), (1, 0)])
+@pytest.mark.parametrize('threshold,expected_count', [(2, 0), (1, 2)])
+def test_deletions_of_different_lengths_are_distinct_alleles(
+        consensus_runner, order, threshold, expected_count):
+    """Normalised deletion ALTs with the same anchor base do not pool.
+
+    ``REF=CG ALT=C`` (1-bp deletion) and ``REF=CGT ALT=C`` (2-bp deletion)
+    share the ALT string but are different alleles.  With threshold 2 neither
+    has enough supporters and no variant is written; with threshold 1 both
+    are written and the order is independent of the caller order.
+    """
+    anchor = REF_SEQ[POS_30_0B].upper()
+    short = (POS_30_0B, REF_SEQ[POS_30_0B:POS_30_0B + 2].upper(),
+             [anchor], (0, 1))
+    long = (POS_30_0B, REF_SEQ[POS_30_0B:POS_30_0B + 3].upper(),
+            [anchor], (0, 1))
+    records = [short, long]
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_30_0B, POS_30_0B + 1)],
+        caller_records=[[records[index]] for index in order],
+        threshold=threshold,
+    )
+    output_records = read_records(output)
+    assert len(output_records) == expected_count
+    if expected_count:
+        assert output_records == [
+            (30, (short[1], short[2][0]), (0, 1)),
+            (30, (long[1], long[2][0]), (0, 1)),
+        ]
+
+
+def test_deletion_does_not_skip_caller_records_inside_span(tmp_path,
+                                                           use_accel):
+    """A het deletion at POS 100 must not hide a SNP at POS 102.
+
+    Two callers support the heterozygous deletion and two callers (one of them
+    also carries the deletion) support the SNP on the other copy.  The old
+    jump by the deletion REF length skipped POS 102 and discarded its caller
+    records, so the SNP never reached the vote.
+    """
+    seq = REF_SEQ * 2
+    reference = write_reference(tmp_path / 'ref.fa', seq=seq)
+    reads = [(f'read{i}', i, seq[i:i + 6]) for i in range(99, 109)]
+    bam = write_bam(tmp_path / 'sample.bam', reads, length=len(seq))
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 99, 110)])
+    deletion_ref = seq[99:103].upper()
+    deletion_alt = seq[99].upper()
+    snp_ref = seq[101].upper()
+    snp_alt = {'A': 'G', 'C': 'T', 'G': 'C', 'T': 'A'}[snp_ref]
+    caller_bcfs = [
+        write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [
+            (99, deletion_ref, [deletion_alt], (0, 1))],
+            length=len(seq)),
+        write_caller_bcf(tmp_path / 'c1.bcf', 'sample1', [
+            (99, deletion_ref, [deletion_alt], (0, 1)),
+            (101, snp_ref, [snp_alt], (0, 1))], length=len(seq)),
+        write_caller_bcf(tmp_path / 'c2.bcf', 'sample1', [
+            (101, snp_ref, [snp_alt], (0, 1))], length=len(seq)),
+    ]
+    output = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
+        use_accel=use_accel, reference=reference)
+    records = read_records(output)
+    assert (100, (deletion_ref, deletion_alt), (0, 1)) in records
+    assert (102, (snp_ref, snp_alt), (0, 1)) in records
+
+
+def test_deletion_keeps_all_sites(consensus_runner):
+    """Every BED position is present, including those covered by a deletion."""
+    deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
+    deletion_alt = REF_SEQ[POS_20_0B].upper()
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_20_0B, 30)],
+        caller_records=[[
+            (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))]],
+        threshold=1,
+    )
+    spans = read_spans(output)
+    assert spans[0][:3] == (20, 23, (deletion_ref, deletion_alt))
+    # POS 21..23 are evaluated individually after the deletion record, so the
+    # output has one record per BED position and POS..END covers every base.
+    assert [start for start, *_ in spans] == list(range(20, 31))
+    assert set(span_positions(spans)) == set(range(20, 31))
+
+
+def test_deletion_does_not_duplicate_or_skip_interval_boundaries(
+        consensus_runner):
+    """A deletion spanning two BED intervals writes each position once."""
+    deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
+    deletion_alt = REF_SEQ[POS_20_0B].upper()
+    output = consensus_runner(
+        bed_intervals=[('chr1', POS_20_0B, POS_20_0B + 2),
+                       ('chr1', POS_20_0B + 2, 24)],
+        caller_records=[[
+            (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))]],
+        threshold=1,
+    )
+    assert [pos for pos, _, _ in read_records(output)] == [20, 21, 22, 23, 24]
+
+
+def test_consensus_calls_keys_alleles_by_ref_and_alt():
+    """The documented reproduction: same anchor ALT, different REF."""
+    from types import SimpleNamespace
+
+    import generate_consensus
+
+    def record(ref, alts, gt):
+        return SimpleNamespace(ref=ref, alts=alts, samples=[{'GT': gt}])
+
+    short = generate_consensus.genotype_key(
+        [record('AT', ('A',), (0, 1))], 'A')
+    long = generate_consensus.genotype_key(
+        [record('ATT', ('A',), (0, 1))], 'A')
+    reference = ('A', ('.',), (0, 0))
+    # Each deletion has one supporter, so threshold 2 leaves only one
+    # reference vote: below the threshold, no consensus call at all.
+    assert generate_consensus.consensus_calls(
+        [short, long, reference], 2) == []
+    assert generate_consensus.consensus_calls(
+        [long, short, reference], 2) == []
+    expected_variants = [
+        ('AT', ('A',), (0, 1)),
+        ('ATT', ('A',), (0, 1)),
+    ]
+    assert generate_consensus.consensus_calls(
+        [short, long, reference], 1) == expected_variants
+    assert generate_consensus.consensus_calls(
+        [long, short, reference], 1) == expected_variants
 
 
 # Reference for the pileup edge-case dataset: upper-case bases, then a
@@ -453,8 +583,14 @@ def write_edge_dataset(tmp_path):
             (38, EDGE_REF_SEQ[38:41].upper(),
              [EDGE_REF_SEQ[38].upper()], (0, 1)),
             (44, 'N', ['A'], (0, 1)),
+            # two deletions with the same anchor ALT but different REF lengths,
+            # plus a SNP inside the longer deletion span
+            (51, _bases(51, 54), [_bases(51, 52)], (0, 1)),
+            (53, ref_base(54), [alt_base(54)], (0, 1)),
         ]),
-        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', []),
+        write_caller_bcf(tmp_path / 'caller1.bcf', 'sample1', [
+            (51, _bases(51, 53), [_bases(51, 52)], (0, 1)),
+        ]),
     ]
     return {'reference': reference, 'bam': bam, 'bed': bed_gz,
             'callers': callers}
@@ -464,8 +600,9 @@ def test_accel_and_pure_paths_agree(tmp_path):
     """The Cython and pure-pysam implementations produce identical text.
 
     The dataset exercises 255 base qualities, reference skips, deletions and
-    insertions after their anchor, and a reference that mixes lower-case and
-    N bases.
+    insertions after their anchor, deletions of different lengths with the
+    same anchor ALT, a SNP inside a deletion span, and a reference that mixes
+    lower-case and N bases.
     """
     if not ACCEL_AVAILABLE:
         pytest.skip('consensus_accel is not built for this interpreter')
@@ -492,6 +629,11 @@ def test_accel_and_pure_paths_agree(tmp_path):
     assert (39, (EDGE_REF_SEQ[38:41].upper(),
                  EDGE_REF_SEQ[38].upper()), (0, 1)) in records
     assert (45, ('N', 'A'), (0, 1)) in records
+    # The 1-bp and 2-bp deletions are distinct alleles at POS 52, and the SNP
+    # inside the longer deletion span at POS 54 is still written.
+    assert (52, (_bases(51, 53), _bases(51, 52)), (0, 1)) in records
+    assert (52, (_bases(51, 54), _bases(51, 52)), (0, 1)) in records
+    assert (54, (ref_base(54), alt_base(54)), (0, 1)) in records
 
 
 class _LimitedTally:
@@ -825,39 +967,6 @@ def test_genotype_tie_with_first_policy(consensus_runner, placement):
     assert read_records(output) == [(30, (ref_base(30), alt), (0, 1))]
 
 
-def test_tie_policy_qual_uses_summed_quality(consensus_runner):
-    """``qual`` picks the genotype class with the larger summed QUAL."""
-    alt = alt_base(30)
-    bed = [('chr1', POS_30_0B, POS_30_0B + 1)]
-
-    het_wins = consensus_runner(
-        bed_intervals=bed,
-        caller_records=[
-            [(POS_30_0B, ref_base(30), [alt], (0, 1), 90)],
-            [(POS_30_0B, ref_base(30), [alt], (1, 1), 20)],
-        ],
-        threshold=1, tie_policy='qual')
-    assert read_records(het_wins) == [(30, (ref_base(30), alt), (0, 1))]
-
-    hom_wins = consensus_runner(
-        bed_intervals=bed,
-        caller_records=[
-            [(POS_30_0B, ref_base(30), [alt], (0, 1), 20)],
-            [(POS_30_0B, ref_base(30), [alt], (1, 1), 90)],
-        ],
-        threshold=1, tie_policy='qual', output_name='hom_wins.bcf')
-    assert read_records(hom_wins) == [(30, (ref_base(30), alt), (1, 1))]
-
-    tied = consensus_runner(
-        bed_intervals=bed,
-        caller_records=[
-            [(POS_30_0B, ref_base(30), [alt], (0, 1), 50)],
-            [(POS_30_0B, ref_base(30), [alt], (1, 1), 50)],
-        ],
-        threshold=1, tie_policy='qual', output_name='tied.bcf')
-    assert read_records(tied) == []
-
-
 def test_absent_vote_abstain_requires_coverage(consensus_runner):
     """An absent caller only votes ref when the position is covered."""
     alt = alt_base(24)
@@ -905,7 +1014,7 @@ def test_absent_vote_abstain_requires_coverage(consensus_runner):
         (30, (ref_base(30), '<*>'), (0, 0))]
 
 
-def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
+def test_header_describes_abstain_and_tie_policies(tmp_path, use_accel):
     """The single header line records the applied voting rule."""
     import pysam
 
@@ -924,12 +1033,13 @@ def test_header_describes_abstain_and_qual_policies(tmp_path, use_accel):
         tmp_path, bam, bed_gz, caller_bcfs, threshold=2,
         callers=['bcftools', 'gatk'],
         configured_callers=['bcftools', 'freebayes', 'gatk'],
-        absent_vote='abstain', tie_policy='qual', min_coverage=3,
+        absent_vote='abstain', tie_policy='first', min_coverage=3,
         use_accel=use_accel, reference=reference)
     with pysam.VariantFile(str(output), index_filename=None) as variant_file:
         header = str(variant_file.header)
-    expected = ('##ChoCallate=<Version=test,Threshold=2,Callers="bcftools,gatk",'
-                'Rule=two-stage,Tie=qual,AbsentVote=abstain,MinCoverage=3,'
+    expected = ('##ChoCallate=<Version=test,Threshold=2,'
+                'Callers="bcftools,gatk",Rule=two-stage,Tie=first,'
+                'AbsentVote=abstain,MinCoverage=3,'
                 'ReferenceBlocks=False,CallersFailed="freebayes">')
     assert expected in header
 

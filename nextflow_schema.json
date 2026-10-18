@@ -69,25 +69,25 @@
                 },
                 "type": {
                     "type": "string",
-                    "description": "Publish one merged consensus ('single') or one file per sample ('sample').",
+                    "description": "Publish one merged multi-sample consensus ('single') or one file per sample ('sample').",
                     "enum": ["single", "sample"]
                 },
                 "format": {
                     "type": "string",
-                    "description": "Consensus file format.",
+                    "description": "Final published format. Internal consensus and merge files are always BCF.",
                     "enum": ["bcf", "vcf"]
                 },
                 "remove_invariant": {
                     "type": "boolean",
-                    "description": "Drop monomorphic records from the published consensus."
+                    "description": "Drop monomorphic records when exporting the final consensus."
                 },
                 "split_multiallelic": {
                     "type": "boolean",
-                    "description": "Keep one record per ALT allele instead of re-joining multi-allelic sites."
+                    "description": "Keep one record per ALT allele in the final output instead of re-joining multi-allelic sites."
                 },
                 "compress_reference_blocks": {
                     "type": "boolean",
-                    "description": "Compress runs of hom-reference positions into gVCF blocks with INFO/END. FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
+                    "description": "Collapse runs of hom-reference positions into gVCF blocks with INFO/END in the final output. Reference records are always gVCF-style internally; FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
                 },
                 "publish_mode": {
                     "type": "string",
@@ -386,7 +386,7 @@
                 "tie_policy": {
                     "type": "string",
                     "description": "Zygosity tie-breaker among supporters of the winning ALT.",
-                    "enum": ["nocall", "first", "qual"]
+                    "enum": ["nocall", "first"]
                 }
             },
             "required": ["threshold", "cpu"]
