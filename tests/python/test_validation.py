@@ -116,6 +116,7 @@ def test_pipeline_defaults_for_depth_and_mapq(tmp_path):
     assert "min_map_qual = 10" in output
     assert "min_coverage = 5" in output
     assert "compress_reference_blocks = true" in output
+    assert "mode = 'mark'" in output
 
 
 def test_missing_required_parameter_is_named(tmp_path):
@@ -143,6 +144,18 @@ def test_enum_reports_key_and_accepted_values(tmp_path):
     output = _output(result)
     assert "--input.format" in output
     assert "Expected any of [fastq, bam]" in output
+
+
+def test_removed_rmdup_enabled_is_rejected(tmp_path):
+    _prepare_inputs(tmp_path)
+    params = _config(
+        tmp_path, overrides={"rmdup": {"enabled": True}}
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    assert "--rmdup.enabled" in _output(result)
 
 
 def test_negative_integer_is_rejected(tmp_path):

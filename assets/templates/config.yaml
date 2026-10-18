@@ -122,8 +122,13 @@ bam_filter:
   min_map_qual: 10
 
 rmdup:
-  # Mark and remove duplicate reads with samtools markdup.
-  enabled: false
+  # Duplicate handling with samtools markdup:
+  #   "none"   leave duplicate reads unflagged
+  #   "mark"   flag duplicates without removing them (default)
+  #   "remove" flag and remove duplicate reads from the BAM
+  # Callers, mosdepth coverage and the consensus pileup skip reads flagged
+  # as duplicates, so "mark" is enough for calling while keeping the BAM.
+  mode: "mark"
 
 left_align_indels:
   # Run GATK LeftAlignIndels on the final BAM.

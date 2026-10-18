@@ -223,12 +223,14 @@
         },
         "rmdup": {
             "type": "object",
-            "title": "Duplicate removal",
-            "description": "Optical/PCR duplicate marking.",
+            "title": "Duplicate handling",
+            "description": "Optical/PCR duplicate marking with samtools markdup.",
             "properties": {
-                "enabled": {
-                    "type": "boolean",
-                    "description": "Mark and remove duplicate reads with samtools markdup."
+                "mode": {
+                    "type": "string",
+                    "description": "Duplicate handling: none (no marking), mark (flag duplicates, do not remove) or remove (flag and remove). Callers and the consensus pileup skip duplicate-flagged reads.",
+                    "enum": ["none", "mark", "remove"],
+                    "default": "mark"
                 }
             }
         },

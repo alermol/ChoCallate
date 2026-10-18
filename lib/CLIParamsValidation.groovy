@@ -50,6 +50,20 @@ class CLIParamsValidation {
             .unique()
     }
 
+    /**
+     * Resolves the effective duplicate-handling mode.
+     */
+    static String rmdup_mode(Map rmdup) {
+        def mode = rmdup?.mode ?: 'mark'
+        if (!(mode in ['none', 'mark', 'remove'])) {
+            fail(
+                "rmdup.mode: unknown mode '${mode}'. Accepted values are: " +
+                'none, mark, remove'
+            )
+        }
+        return mode
+    }
+
     static void effective_callers_validation(String callers) {
         def callersList = parse_callers(callers)
         if (!callersList) {

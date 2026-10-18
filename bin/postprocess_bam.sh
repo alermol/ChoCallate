@@ -12,7 +12,9 @@ Usage: postprocess_bam.sh --input BAM|-
   --threads INT          Worker threads (default: 1)
   --memory-mb INT        Task memory in MiB (sort uses half)
   --java-options OPTS    JVM options for GATK LeftAlignIndels
-  --rmdup                Remove duplicates with samtools markdup
+  --rmdup-mode MODE      Duplicate handling: none, mark or remove
+                         (default: none)
+  --rmdup                Alias for --rmdup-mode remove
   --left-align           Left-align indels with GATK LeftAlignIndels
 EOF
 }
@@ -25,7 +27,7 @@ mapq=0
 threads=1
 memory_mb=0
 java_options=""
-rmdup=false
+rmdup_mode="none"
 left_align=false
 
 while [[ $# -gt 0 ]]; do
@@ -62,8 +64,12 @@ while [[ $# -gt 0 ]]; do
             java_options="$2"
             shift 2
             ;;
+        --rmdup-mode)
+            rmdup_mode="$2"
+            shift 2
+            ;;
         --rmdup)
-            rmdup=true
+            rmdup_mode="remove"
             shift
             ;;
         --left-align)
@@ -94,6 +100,13 @@ if [[ "$left_align" == true && ( -z "$reference" || -z "$dict" ) ]]; then
     echo "--reference and --dict are required with --left-align" >&2
     exit 2
 fi
+case "$rmdup_mode" in
+    none|mark|remove) ;;
+    *)
+        echo "--rmdup-mode must be one of none, mark or remove" >&2
+        exit 2
+        ;;
+esac
 if [[ "$threads" -lt 1 ]]; then
     echo "--threads must be >= 1" >&2
     exit 2
@@ -119,13 +132,17 @@ if [[ "$memory_mb" -gt 0 ]]; then
     fi
 fi
 
-if [[ "$rmdup" == true ]]; then
+if [[ "$rmdup_mode" != none ]]; then
+    markdup_flags=()
+    if [[ "$rmdup_mode" == remove ]]; then
+        markdup_flags=(-r)
+    fi
     samtools collate --threads "$threads" -O -u -T "$tmpdir/collate" \
             "$input" \
         | samtools fixmate --threads "$threads" -m -u - - \
         | samtools sort --threads "$threads" -m "${sort_memory_mb}M" -u \
             -T "$tmpdir/sort" - \
-        | samtools markdup --threads "$threads" -r \
+        | samtools markdup --threads "$threads" "${markdup_flags[@]}" \
             -T "$tmpdir/markdup" - "$tmpdir/dedup.bam"
     filtered_source="$tmpdir/dedup.bam"
 else

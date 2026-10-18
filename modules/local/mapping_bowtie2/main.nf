@@ -18,7 +18,8 @@ process MAPPING_BOWTIE2 {
         path("mapping.bam.csi"), emit: bam
 
     script:
-    def rmdup = params.rmdup.enabled ? '--rmdup' : ''
+    def rmdup_mode = CLIParamsValidation.rmdup_mode(params.rmdup)
+    def rmdup = rmdup_mode == 'none' ? '' : "--rmdup-mode ${rmdup_mode}"
     def left_align = params.left_align_indels.enabled ? '--left-align' : ''
     def platform = params.mapping.platform ?: 'ILLUMINA'
     def library = params.mapping.library ?: sample_id

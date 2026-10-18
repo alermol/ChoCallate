@@ -1,8 +1,8 @@
 """Tests for the shared BAM post-processing helper.
 
 The helper normalises aligner output before calling: it sorts, optionally
-removes duplicates, filters MAPQ after duplicate marking, optionally left-aligns
-indels, and writes the BAM index exactly once.
+marks or removes duplicates, filters MAPQ after duplicate marking, optionally
+left-aligns indels, and writes the BAM index exactly once.
 """
 
 import os
@@ -130,6 +130,7 @@ def read_names(path):
 
 def test_postprocess_removes_duplicates_filters_mapq_and_indexes(tmp_path):
     write_paired_bam(tmp_path / 'in.bam')
+    # --rmdup is the backwards-compatible alias for --rmdup-mode remove.
     output = run_helper(tmp_path, '--rmdup')
     assert sorted(read_names(output)) == ['dup1', 'dup1', 'uniq', 'uniq']
     assert (tmp_path / 'mapping.bam.csi').is_file()
@@ -138,17 +139,46 @@ def test_postprocess_removes_duplicates_filters_mapq_and_indexes(tmp_path):
         assert bam.header.to_dict()['HD']['SO'] == 'coordinate'
 
 
-def test_postprocess_without_rmdup_keeps_duplicates(tmp_path):
+def test_postprocess_marks_duplicates_without_removing_them(tmp_path):
     write_paired_bam(tmp_path / 'in.bam')
-    output = run_helper(tmp_path)
+    output = run_helper(tmp_path, '--rmdup-mode', 'mark')
     assert sorted(read_names(output)) == [
         'dup1', 'dup1', 'dup2', 'dup2', 'uniq', 'uniq']
     assert (tmp_path / 'mapping.bam.csi').is_file()
     subprocess.run([SAMTOOLS, 'quickcheck', str(output)], check=True)
+    with pysam.AlignmentFile(str(output), 'rb') as bam:
+        flags = {}
+        for read in bam:
+            flags.setdefault(read.query_name, set()).add(read.is_duplicate)
+    assert flags['uniq'] == {False}
+    # Exactly one of the two identical pairs is flagged, both mates included.
+    assert len([name for name in ('dup1', 'dup2')
+                if flags[name] == {True}]) == 1
 
 
-@pytest.mark.parametrize('extra_args', [[], ['--rmdup']],
-                         ids=['sort', 'markdup'])
+@pytest.mark.parametrize('extra_args', [[], ['--rmdup-mode', 'none']],
+                         ids=['default', 'none'])
+def test_postprocess_without_rmdup_keeps_duplicates(tmp_path, extra_args):
+    write_paired_bam(tmp_path / 'in.bam')
+    output = run_helper(tmp_path, *extra_args)
+    assert sorted(read_names(output)) == [
+        'dup1', 'dup1', 'dup2', 'dup2', 'uniq', 'uniq']
+    assert (tmp_path / 'mapping.bam.csi').is_file()
+    subprocess.run([SAMTOOLS, 'quickcheck', str(output)], check=True)
+    with pysam.AlignmentFile(str(output), 'rb') as bam:
+        assert not any(read.is_duplicate for read in bam)
+
+
+def test_postprocess_rejects_unknown_rmdup_mode(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    with pytest.raises(subprocess.CalledProcessError):
+        run_helper(tmp_path, '--rmdup-mode', 'dedup')
+
+
+@pytest.mark.parametrize('extra_args',
+                         [[], ['--rmdup-mode', 'mark'],
+                          ['--rmdup-mode', 'remove']],
+                         ids=['sort', 'mark', 'remove'])
 def test_sort_memory_comes_from_task_memory(tmp_path, extra_args):
     write_paired_bam(tmp_path / 'in.bam')
     env, log = write_stub_samtools(tmp_path)

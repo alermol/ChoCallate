@@ -34,7 +34,7 @@ bam_filter:
   min_map_qual: 10
 
 rmdup:
-  enabled: false
+  mode: "none"
 
 left_align_indels:
   enabled: false
