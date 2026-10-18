@@ -8,7 +8,7 @@ process MAPPING_BOWTIE2 {
 
     input:
     tuple val(sample_id), path("tmp/read1"), path("tmp/read2"), path("tmp/read3")
-    path("tmp/ref_genome_real.fasta")
+    path(index_files, stageAs: 'index/*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.dict")
     path("tmp/ref_genome.fasta.fai")
@@ -22,7 +22,8 @@ process MAPPING_BOWTIE2 {
     def left_align = params.left_align_indels.enabled ? '--left-align' : ''
     def platform = params.mapping.platform ?: 'ILLUMINA'
     def library = params.mapping.library ?: sample_id
-    def index_prefix = params.input.reference_index_prefix
+    def index_prefix = params.input.reference_index_prefix ?:
+        file(params.input.reference_genome).name
     def java_options = "-Djava.io.tmpdir=\$TMPDIR " +
         ResourceUtils.javaHeapOption(task.memory)
     def reads = params.input.reads_type == 'se' ? "-U tmp/read1" :
@@ -31,12 +32,6 @@ process MAPPING_BOWTIE2 {
     """
     set -o pipefail
 
-    if [ -n "${index_prefix ?: ''}" ]; then
-        INDEX_PREFIX="${index_prefix}"
-    else
-        INDEX_PREFIX="\$(basename \$(realpath tmp/ref_genome_real.fasta))"
-    fi
-
     bowtie2 \
         ${params.mapping.extra_args} \
         --threads ${task.cpus} \
@@ -44,7 +39,7 @@ process MAPPING_BOWTIE2 {
         --rg "SM:${sample_id}" \
         --rg "PL:${platform}" \
         --rg "LB:${library}" \
-        -x "${params.input.reference_index_dir}/\$INDEX_PREFIX" \
+        -x "index/${index_prefix}" \
         ${reads} | \
     samtools view --threads ${task.cpus} -b | \
     postprocess_bam.sh \

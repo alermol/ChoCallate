@@ -56,6 +56,26 @@ workflow {
         )
     }
 
+    // Mapper indexes are staged as task inputs. The prefix is resolved here,
+    // so the command never depends on a host path, and a missing index aborts
+    // before the first task starts.
+    if (params.input.format != 'bam') {
+        def index_prefix = params.input.reference_index_prefix ?:
+            file(params.input.reference_genome).name
+        def index_pattern = params.mapping.mapper == 'minimap2'
+            ? "${params.input.reference_index_dir}/${index_prefix}.mmi"
+            : "${params.input.reference_index_dir}/${index_prefix}*"
+        def index_matches = files(index_pattern)
+        if (index_matches.isEmpty()) {
+            error(
+                "No ${params.mapping.mapper} index files found in " +
+                "'${params.input.reference_index_dir}' for prefix " +
+                "'${index_prefix}' (expected ${index_pattern})"
+            )
+        }
+        index_files = channel.value(index_matches)
+    }
+
     // Create the sample channel.  Absent read slots stage the empty NO_FILE
     // instead of /dev/null so every input is a real, portable file.
     def no_file = file("${projectDir}/assets/NO_FILE", checkIfExists: true)
@@ -81,21 +101,21 @@ workflow {
     // Prepare BAM files
     if (params.mapping.mapper == 'bowtie2' && params.input.format != 'bam') {
         bam_file = MAPPING_BOWTIE2(sample_run_ch,
-                              file(params.input.reference_genome),
+                              index_files,
                               ref_genome,
                               gen_dict,
                               fai_index)
     } else if (params.mapping.mapper == 'bwa' &&
                params.input.format != 'bam') {
         bam_file = MAPPING_BWA(sample_run_ch,
-                          file(params.input.reference_genome),
+                          index_files,
                           ref_genome,
                           gen_dict,
                           fai_index)
     } else if (params.mapping.mapper == 'minimap2' &&
                params.input.format != 'bam') {
         bam_file = MAPPING_MINIMAP2(sample_run_ch,
-                               file(params.input.reference_genome),
+                               index_files,
                                ref_genome,
                                gen_dict,
                                fai_index)

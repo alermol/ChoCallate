@@ -27,7 +27,7 @@ nextflow_process {
                     file("${projectDir}/test_run/test_reads_R2.fq.gz"),
                     file("${projectDir}/assets/NO_FILE")
                 )
-                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[1] = files("${launchDir}/reference/genome.fasta*")
                 input[2] = file("${launchDir}/reference/genome.fasta")
                 input[3] = file("${launchDir}/reference/genome.dict")
                 input[4] = file("${launchDir}/reference/genome.fasta.fai")

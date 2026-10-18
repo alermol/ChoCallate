@@ -22,8 +22,8 @@ input:
   # Directory containing the mapper and caller indexes.
   reference_index_dir: null
 
-  # Index prefix inside reference_index_dir. null uses
-  # basename(realpath(reference_genome)).
+  # Index prefix inside reference_index_dir. null uses the file name of
+  # reference_genome.
   reference_index_prefix: null
 
   # Optional BED of regions to call. null calls every covered region.

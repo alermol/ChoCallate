@@ -8,7 +8,8 @@ if [ "${exit_status}" -ne 0 ]; then
     exit 0
 fi
 
-rm -rf -- tmp/
+# Staged inputs that are no longer needed after a successful task.
+rm -rf -- tmp/ index/
 
 # Only remove a temporary directory created inside this work directory.
 if [ -n "${TMPDIR:-}" ] && [ "${TMPDIR}" != "/" ]; then

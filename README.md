@@ -139,7 +139,7 @@ Ordinary caller failures use the same limit.
 
 - **Reads**: FASTQs (`format: "fastq"`) or a pre-aligned BAM (`format: "bam"`). If you provide a BAM, mapping is skipped.
 - **Reference genome**: Plain or bgzipped FASTA file. BGZF is detected from the file header; `ref_genome.bgzip` was removed in 4.0.0. Contigs longer than 2,147,483,647 bp (2^31-1) are rejected from the generated `.fai` before mapping starts, because BAM/BCF positions and GATK use 32-bit coordinates.
-- **Indexes of reference genome**: All indexes required by the selected mapper/callers. By default the index prefix is `basename(realpath(reference_genome))`, including a `.gz` suffix; set `input.reference_index_prefix` when the indexes use a different prefix (for example, when the reference is a symlink).
+- **Indexes of reference genome**: All indexes required by the selected mapper/callers. By default the index prefix is the file name of `reference_genome`, including a `.gz` suffix; set `input.reference_index_prefix` when the indexes use a different prefix (for example, when the reference is a symlink). The matching index files are staged as task inputs, so they work with container, cloud and `scratch` execution.
 - **Paths**: Read paths in the samplesheet may be absolute or relative to the samplesheet. Reference, index and BED paths are resolved relative to the launch directory; absolute paths are recommended for those.
 
 `samples_tsv` formats:

@@ -24,13 +24,13 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t307",
+                "SN\t0\tnumber of records:\t308",
                 "SN\t0\tnumber of no-ALTs:\t0",
                 "SN\t0\tnumber of SNPs:\t289",
                 "SN\t0\tnumber of MNPs:\t0",
-                "SN\t0\tnumber of indels:\t18",
+                "SN\t0\tnumber of indels:\t19",
                 "SN\t0\tnumber of others:\t0",
-                "SN\t0\tnumber of multiallelic sites:\t2",
+                "SN\t0\tnumber of multiallelic sites:\t3",
                 "SN\t0\tnumber of multiallelic SNP sites:\t2",
                 "TSTV\t0\t168\t123\t1.37\t168\t121\t1.39"
             ]

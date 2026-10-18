@@ -256,7 +256,7 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
-            assert ChoCallateTestUtils.recordCount(vcf) == 307
+            assert ChoCallateTestUtils.recordCount(vcf) == 308
             assert snapshot(
                 ChoCallateTestUtils.statsLines(vcf)
             ).match()
@@ -544,6 +544,113 @@ nextflow_pipeline {
                 '##contig=<ID=CP002684.1,length=200001>'
             )
             assert ChoCallateTestUtils.recordCount(consensus) == 260
+        }
+    }
+
+    test("test_stage_copy_default_prefix") {
+        config "./stage_copy.config"
+        setup {
+            ChoCallateTestUtils.bowtie2Index(
+                projectDir, new File(launchDir)
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def consensus = new File("${outputDir}/consensus.bcf")
+            assert consensus.isFile()
+            assert consensus.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample1']
+            assert ChoCallateTestUtils.recordCount(consensus) == 260
+        }
+    }
+
+    test("test_missing_index_prefix_fails_early") {
+        setup {
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [
+                    [
+                        'sample1',
+                        "${projectDir}/test_run/test_reads_R1.fq.gz",
+                        "${projectDir}/test_run/test_reads_R2.fq.gz"
+                    ]
+                ]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${projectDir}/test_run/" +
+                        "arth_chr1.fasta.gz"
+                    reference_index_dir = "${launchDir}"
+                    reference_index_prefix = "missing_index_prefix"
+                    format = "fastq"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "single"
+                    format = "bcf"
+                    remove_invariant = true
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.failed
+            assert workflow.trace.tasks().isEmpty()
+            def output = ([workflow.errorMessage ?: ''] +
+                          workflow.stdout + workflow.stderr).join('\n')
+            assert output.contains("No bowtie2 index files found")
+            assert output.contains("missing_index_prefix")
         }
     }
 }

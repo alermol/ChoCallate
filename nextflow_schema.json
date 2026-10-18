@@ -30,7 +30,7 @@
                 },
                 "reference_index_prefix": {
                     "type": ["string", "null"],
-                    "description": "Index prefix inside reference_index_dir. Defaults to basename(realpath(reference_genome))."
+                    "description": "Index prefix inside reference_index_dir. Defaults to the file name of reference_genome."
                 },
                 "include_bed": {
                     "type": ["string", "null"],
