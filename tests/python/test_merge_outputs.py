@@ -265,7 +265,11 @@ def test_merged_vcf_output_is_readable(tmp_path, use_accel):
 
 
 def test_drop_refonly_duplicates_does_not_cross_contigs(tmp_path):
-    """Equal positions on different contigs are separate loci."""
+    """Equal positions on different contigs are separate loci.
+
+    The last record of chr1 (``chr1:5 <*>``) and the first record of chr2
+    (``chr2:5 A>T``) share POS 5 and must both reach the output.
+    """
     header = pysam.VariantHeader()
     header.add_line('##contig=<ID=chr1,length=100>')
     header.add_line('##contig=<ID=chr2,length=100>')
@@ -278,12 +282,12 @@ def test_drop_refonly_duplicates_does_not_cross_contigs(tmp_path):
     header.add_sample('sample1')
     source = tmp_path / 'in.bcf'
     with pysam.VariantFile(str(source), 'wb', header=header) as out:
-        record = out.new_record(contig='chr1', start=9, stop=10,
+        record = out.new_record(contig='chr1', start=4, stop=5,
                                 alleles=('A', '<*>'))
         record.samples[0]['GT'] = (0, 0)
         out.write(record)
-        record = out.new_record(contig='chr2', start=9, stop=10,
-                                alleles=('C', 'T'))
+        record = out.new_record(contig='chr2', start=4, stop=5,
+                                alleles=('A', 'T'))
         record.samples[0]['GT'] = (0, 1)
         out.write(record)
 
@@ -295,7 +299,7 @@ def test_drop_refonly_duplicates_does_not_cross_contigs(tmp_path):
     with pysam.VariantFile(str(out_path), index_filename=None) as variant_file:
         assert [(record.chrom, record.pos, tuple(record.alts))
                 for record in variant_file] == [
-            ('chr1', 10, ('<*>',)), ('chr2', 10, ('T',))]
+            ('chr1', 5, ('<*>',)), ('chr2', 5, ('T',))]
 
 
 def test_drop_refonly_duplicates_keeps_monomorphic_positions(tmp_path):
