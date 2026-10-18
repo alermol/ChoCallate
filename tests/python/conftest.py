@@ -222,7 +222,8 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
                   use_accel=False, output_name='out.bcf', reference=None,
                   callers=None, configured_callers=None, check=True,
                   absent_vote='ref', tie_policy='nocall', min_coverage=0,
-                  filtered_vote='abstain', compress_reference_blocks=False):
+                  filtered_vote='abstain', compress_reference_blocks=False,
+                  variants_only=False):
     """Run bin/generate_consensus.py as a subprocess and return its output path.
 
     Args:
@@ -237,6 +238,8 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
         min_coverage: Coverage required by ``absent_vote=abstain``.
         filtered_vote: ``abstain`` or ``ref`` voting for filtered records.
         compress_reference_blocks: Compress hom-reference runs into blocks.
+        variants_only: Write only consensus variant records, omitting reference
+            records.
     """
     output = tmp_path / output_name
     if reference is None:
@@ -269,6 +272,8 @@ def run_consensus(tmp_path, bam, bed_gz, caller_bcfs, threshold, sample_name='sa
     ]
     if compress_reference_blocks:
         cmd.append('--compress_reference_blocks')
+    if variants_only:
+        cmd.append('--variants_only')
     subprocess.run(cmd, check=check, env=env, cwd=str(tmp_path),
                    capture_output=True, text=True)
     return output

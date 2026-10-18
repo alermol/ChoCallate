@@ -142,6 +142,30 @@ def test_reference_blocks_are_optional(tmp_path, use_accel):
             == [20]
 
 
+def test_variants_only_skips_reference_records(tmp_path, use_accel):
+    """Only consensus variant records are written, with no reference blocks."""
+    import pysam
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (21, ref_base(22), [alt_base(22)], (0, 1))])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True, variants_only=True)
+    spans = read_spans(output)
+    assert [(start, end, alleles[:2]) for start, end, alleles, *_ in spans] == [
+        (22, 22, (ref_base(22), alt_base(22)))]
+    with pysam.VariantFile(str(output), index_filename=None) as variant_file:
+        header = str(variant_file.header)
+    # Reference blocks are not written, so the header does not claim them.
+    assert 'ReferenceBlocks=False' in header
+
+
 def test_reference_blocks_split_at_variant(tmp_path, use_accel):
     """A caller record ends the current block and is written separately."""
     reference = write_reference(tmp_path / 'ref.fa')

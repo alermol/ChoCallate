@@ -66,7 +66,7 @@ output:
   # controls whether runs of them are additionally collapsed into blocks.
   # Multi-base blocks carry the minimum DP and omit AD, so merged ALT depth
   # for a hom-reference sample is missing rather than a fabricated zero.
-  compress_reference_blocks: false
+  compress_reference_blocks: true
 
   # Publishing mode for result files: "copy" writes independent copies,
   # "link" creates symbolic links into the Nextflow work directory. Linked

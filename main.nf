@@ -232,9 +232,9 @@ workflow {
     // Always publish the dropped list, even when it is empty.
     REPORT_DROPPED_SAMPLES(dropped_samples)
 
-    // Generate consensus.  The per-sample consensus is always an internal BCF
-    // with gVCF-style reference records, so a later merge assigns the ALT
-    // depths correctly regardless of the requested output format.
+    // Generate consensus.  The per-sample consensus is always an internal BCF.
+    // Reference records are written whenever a later merge may need them;
+    // per-sample output that discards them sets --variants_only instead.
     GENERATE_CONSENSUS(
         all_calls.join(bam_intervals),
         selected_callers.join(','),

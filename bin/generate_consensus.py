@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate the consensus BCF of one sample from its caller BCFs.
 
-Every position of the (bgzipped, tabixed) coverage BED is written to the output,
-so the consensus contains all sites, monomorphic ones included.  At each
+By default every position of the (bgzipped, tabixed) coverage BED is written
+to the output, so the consensus contains all sites, monomorphic ones included;
+``--variants_only`` omits the reference records instead.  At each
 position the callers vote with their genotype in two stages: an ALT allele must
 first be supported by at least ``--consensus_threshold`` callers, then the
 majority zygosity among the supporters of the winning ALT decides between
@@ -35,6 +36,11 @@ other samples instead of a fabricated zero.  Single-base reference records keep
 their per-position AD.  Blocks are split at caller records, at positions that
 cross ``--min_coverage`` and wherever the BED coverage is not contiguous.
 
+With ``--variants_only``, reference records are not written at all: only
+positions with a consensus ALT allele are emitted.  The pipeline sets this flag
+when per-sample output would discard reference records during export anyway;
+the merged output still needs them for ``bcftools merge --gvcf``.
+
 FORMAT/AD and FORMAT/DP are recovered from the sample BAM: overlapping mate
 pairs count once (the observation with the highest base quality), and DP counts
 every covering read except reference skips, matching ``samtools depth -J`` used
@@ -42,8 +48,8 @@ for the coverage BED.
 
 Performance notes
 -----------------
-The output has one record per BED position, so the per-position cost decides the
-runtime:
+The default output has one record per BED position (one per reference run with
+``--compress_reference_blocks``), so the per-position cost decides the runtime:
 
 * Genotypes, pileups and records are only touched where they are needed.
   Positions without a caller record (the vast majority) take a fast path that
@@ -778,6 +784,9 @@ def main():
                         dest='compress_reference_blocks',
                         help='Compress runs of hom-reference positions into '
                              'multi-base gVCF blocks')
+    parser.add_argument('--variants_only', action='store_true',
+                        help='Write only consensus variant records, omitting '
+                             'reference records')
     args = parser.parse_args()
 
     threshold = args.consensus_threshold
@@ -786,7 +795,8 @@ def main():
     tie_policy = args.tie_policy
     min_coverage = args.min_coverage
     use_accel = BcfLineWriter is not None
-    compress_blocks = args.compress_reference_blocks
+    variants_only = args.variants_only
+    compress_blocks = args.compress_reference_blocks and not variants_only
     received, failed, input_paths = resolve_inputs(args.input, args.callers)
     if not received:
         sys.exit('ERROR: no caller BCF available for the configured callers')
@@ -872,7 +882,13 @@ def main():
                                     min_next = position
 
                         if min_next != vcf_start:
-                            # fast path: no caller record here
+                            # fast path: no caller record here.  With
+                            # variants_only such positions are not written and
+                            # need no reference support count.
+                            if variants_only:
+                                vcf_start += 1
+                                rel += 1
+                                continue
                             ref_base = ref_seq[rel]
                             if has_column:
                                 dp, ad_ref, observations = reference_support_of(ref_base)
@@ -976,17 +992,19 @@ def main():
                                 and all(allele == 0 for allele in calls[0][2]):
                             # hom-reference consensus: write the same gVCF-style
                             # record as the fast path, with honest <*> depth
-                            if reference_detail is None:
-                                if has_column:
-                                    reference_detail = reference_support_of(ref_base)
-                                else:
-                                    reference_detail = (0, 0, 0)
-                            dp, ad_ref, observations = reference_detail
-                            ad_other = observations - ad_ref
-                            write_reference_record(
-                                output_file, writer, use_accel, rid, contig,
-                                vcf_start - 1, vcf_start, ref_base,
-                                (ad_ref, ad_other), dp)
+                            if not variants_only:
+                                if reference_detail is None:
+                                    if has_column:
+                                        reference_detail = \
+                                            reference_support_of(ref_base)
+                                    else:
+                                        reference_detail = (0, 0, 0)
+                                dp, ad_ref, observations = reference_detail
+                                ad_other = observations - ad_ref
+                                write_reference_record(
+                                    output_file, writer, use_accel, rid,
+                                    contig, vcf_start - 1, vcf_start, ref_base,
+                                    (ad_ref, ad_other), dp)
                             vcf_start += 1
                             rel += 1
                             continue

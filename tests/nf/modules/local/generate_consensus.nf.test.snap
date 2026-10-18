@@ -3,8 +3,8 @@
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",
-                "SN\t0\tnumber of records:\t200004",
-                "SN\t0\tnumber of no-ALTs:\t199692",
+                "SN\t0\tnumber of records:\t615",
+                "SN\t0\tnumber of no-ALTs:\t303",
                 "SN\t0\tnumber of SNPs:\t283",
                 "SN\t0\tnumber of MNPs:\t0",
                 "SN\t0\tnumber of indels:\t29",
@@ -14,7 +14,7 @@
                 "TSTV\t0\t151\t132\t1.14\t151\t132\t1.14"
             ]
         ],
-        "timestamp": "2026-10-17T23:54:07.802920032",
+        "timestamp": "2026-10-18T19:52:00.028447631",
         "meta": {
             "nf-test": "0.9.5",
             "nextflow": "26.04.7"

@@ -114,7 +114,7 @@ def test_pipeline_defaults_for_depth_and_mapq(tmp_path):
     output = _output(result)
     assert "min_map_qual = 10" in output
     assert "min_coverage = 5" in output
-    assert "compress_reference_blocks = false" in output
+    assert "compress_reference_blocks = true" in output
 
 
 def test_missing_required_parameter_is_named(tmp_path):

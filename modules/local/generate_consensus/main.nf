@@ -32,6 +32,12 @@ process GENERATE_CONSENSUS {
     def compress_blocks = params.output.compress_reference_blocks
         ? "--compress_reference_blocks"
         : ""
+    // Per-sample export discards reference records when remove_invariant is
+    // true, so skip writing them at all.  A merged output still needs them for
+    // bcftools merge --gvcf to assign ALT depths across samples.
+    def variants_only = params.output.type == 'sample'
+        && params.output.remove_invariant
+    def variants_only_arg = variants_only ? "--variants_only" : ""
     def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
     def filtered_vote = params.consensus.filtered_vote != null
         ? params.consensus.filtered_vote
@@ -62,13 +68,15 @@ process GENERATE_CONSENSUS {
         --tie_policy "${tie_policy}" \
         --min_coverage "${min_coverage}" \
         --version "${workflow.manifest.version}" \
-        ${compress_blocks}' \
+        ${compress_blocks} \
+        ${variants_only_arg}' \
         ::: tmp/bed_chunks/*.bed
 
     # The interval chunks are consumed in BED order; ls -v preserves that order
     # through concat, so no full sort is needed afterwards.  The per-sample
-    # consensus stays split by ALT and includes every covered site; output
-    # filtering and re-joining happen once in EXPORT_OUTPUT.
+    # consensus stays split by ALT; reference records are written unless the
+    # per-sample export would drop them.  Output filtering and re-joining happen
+    # once in EXPORT_OUTPUT.
     bcftools concat --naive --threads ${task.cpus} -Ob \
         -o ${sample_id}.bcf \$(ls -v tmp/bcf_chunks/*.bcf)
     """

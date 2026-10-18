@@ -393,7 +393,7 @@ nextflow_pipeline {
             )
             // Soft-filtered caller records abstain, so positions where the
             // only caller record is LowQual are not written as reference.
-            assert ChoCallateTestUtils.recordCount(consensus) == 199748
+            assert ChoCallateTestUtils.recordCount(consensus) == 560
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()

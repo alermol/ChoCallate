@@ -87,6 +87,7 @@
                 },
                 "compress_reference_blocks": {
                     "type": "boolean",
+                    "default": true,
                     "description": "Collapse runs of hom-reference positions into gVCF blocks with INFO/END in the final output. Reference records are always gVCF-style internally; FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
                 },
                 "publish_mode": {
