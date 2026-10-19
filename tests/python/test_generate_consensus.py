@@ -4,8 +4,9 @@ Covers interval-end handling, missing genotypes, haploid calls, the voting
 model, provenance headers, multi-allelic output and the pure/Cython equivalence
 paths.  Every test runs twice, on the pure-pysam path and (when built) on the
 Cython path, and asserts the documented all-sites behaviour: every evaluated
-BED base is covered by an output record (reference blocks and the REF span of
-a called deletion included).
+BED base with an unambiguous reference base is covered by an output record
+(reference blocks and the REF span of a called deletion included), while
+IUPAC-ambiguous positions are omitted.
 """
 
 import os
@@ -106,6 +107,60 @@ def test_all_sites_written_once(consensus_runner):
     for pos, alleles, gt in records:
         assert alleles == (ref_base(pos), '<*>')
         assert gt == (0, 0)
+
+
+def test_iupac_reference_positions_are_omitted(tmp_path, use_accel):
+    """Positions with an IUPAC reference base are not written."""
+    seq = REF_SEQ[:19] + 'R' + REF_SEQ[20:23] + 'Y' + REF_SEQ[24:]
+    reference = write_reference(tmp_path / 'ref.fa', seq=seq)
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+
+    # Positions 20 and 24 are IUPAC codes; the blocks around them are split.
+    spans = read_spans(output)
+    assert [(start, end, alleles) for start, end, alleles, *_ in spans] == [
+        (21, 23, ('A', '<*>')),
+        (25, 25, ('A', '<*>')),
+    ]
+
+
+def test_iupac_caller_ref_record_is_omitted(tmp_path, use_accel):
+    """A caller REF with an IUPAC code is not written."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 21)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (19, 'R', ['A'], (0, 1))])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference)
+
+    assert read_records(output) == [(21, (ref_base(21), '<*>'), (0, 0))]
+
+
+def test_iupac_alt_record_is_omitted(tmp_path, use_accel):
+    """A caller ALT with an IUPAC code is not written."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 21)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [
+        (19, ref_base(20), ['N'], (0, 1))])
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, [caller], threshold=1,
+        use_accel=use_accel, reference=reference)
+
+    assert read_records(output) == [(21, (ref_base(21), '<*>'), (0, 0))]
 
 
 def test_reference_blocks_are_optional(tmp_path, use_accel):
@@ -821,9 +876,17 @@ def test_accel_and_pure_paths_agree(tmp_path):
     records = read_records(pure)
     assert (30, (ref_base(30), alt_base(30)), (0, 1)) in records
     assert (34, (ref_base(34), ref_base(34) + 'AA'), (0, 1)) in records
+    # The deletion at POS 39 has an N in its REF span, so it is omitted.
     assert (39, (EDGE_REF_SEQ[38:41].upper(),
-                 EDGE_REF_SEQ[38].upper()), (0, 1)) in records
-    assert (45, ('N', 'A'), (0, 1)) in records
+                 EDGE_REF_SEQ[38].upper()), (0, 1)) not in records
+    # The N run in the reference cannot be written; its caller record is
+    # omitted along with the surrounding reference positions.
+    assert (45, ('N', 'A'), (0, 1)) not in records
+    for _, alleles, _ in records:
+        for allele in alleles:
+            if allele in ('.', '*') or allele.startswith('<'):
+                continue
+            assert set(allele) <= set('ACGT')
     # The 1-bp and 2-bp deletions are distinct alleles at POS 52, and the SNP
     # inside the longer deletion span at POS 54 is still written.
     assert (52, (_bases(51, 53), _bases(51, 52)), (0, 1)) in records

@@ -3,18 +3,22 @@
 
 By default every position of the (bgzipped, tabixed) coverage BED is
 represented in the output, so the consensus contains all sites, monomorphic
-ones included; a called deletion's REF span represents the positions it
-covers, and ``--variants_only`` omits reference records instead.  At each
-position the callers vote with their genotype in two stages: an ALT allele must
-first be supported by at least ``--consensus_threshold`` callers, then the
-majority zygosity among the supporters of the winning ALT decides between
-heterozygous and homozygous ALT.  Ties are resolved by ``--tie_policy``:
-``nocall`` (default, independent of caller order) or ``first`` (the earliest
-supporter in configured caller order).  When several ALT alleles qualify, each
-becomes a split consensus record, but their combined ALT copies must fit the
-site ploidy; otherwise the position is a no-call.  A position without ALT
-support is hom-reference when at least ``--consensus_threshold`` callers vote
-reference, otherwise it is a no-call.
+ones included, except positions whose reference base is an IUPAC ambiguity
+code (N included).  Those positions cannot be written without an ambiguity
+code and are omitted; caller alleles carrying one are omitted as well, so
+output sequence alleles contain only A, C, G and T.  A called deletion's REF
+span represents the positions it covers, and ``--variants_only`` omits
+reference records instead.  At each position the callers vote with their
+genotype in two stages: an ALT allele must first be supported by at least
+``--consensus_threshold`` callers, then the majority zygosity among the
+supporters of the winning ALT decides between heterozygous and homozygous
+ALT.  Ties are resolved by ``--tie_policy``: ``nocall`` (default, independent
+of caller order) or ``first`` (the earliest supporter in configured caller
+order).  When several ALT alleles qualify, each becomes a split consensus
+record, but their combined ALT copies must fit the site ploidy; otherwise the
+position is a no-call.  A position without ALT support is hom-reference when
+at least ``--consensus_threshold`` callers vote reference, otherwise it is a
+no-call.
 
 A caller without a record votes reference by default (``--absent_vote ref``).
 With ``--absent_vote abstain`` it only votes reference when the sample pileup
@@ -37,7 +41,8 @@ because one value cannot honestly describe every position of the block and
 ``bcftools merge --gvcf`` then reports a missing depth at variant positions of
 other samples instead of a fabricated zero.  Single-base reference records keep
 their per-position AD.  Blocks are split at caller records, at positions that
-cross ``--min_coverage`` and wherever the BED coverage is not contiguous.
+cross ``--min_coverage``, at IUPAC-ambiguous reference positions and wherever
+the BED coverage is not contiguous.
 
 With ``--variants_only``, reference records are not written at all: only
 positions with a consensus ALT allele are emitted.  The pipeline sets this flag
@@ -113,8 +118,34 @@ _NO_RECORD = 1 << 60
 # ALT placeholder of a reference call (no ALT allele).
 _REFERENCE_ALTS = ('.',)
 
+# VCF allows only A, C, G, T and N in REF; IUPAC ambiguity codes from the
+# reference FASTA (R, Y, ...) or caller records become N.  N is itself an
+# ambiguity code, so records carrying one are not written at all.
+_VCF_REF_BASES = frozenset('ACGTN')
+
+# Output sequence alleles may not contain IUPAC ambiguity codes, N included.
+_UNAMBIGUOUS_BASES = frozenset('ACGT')
+
 # Pre-encoded alleles for the monomorphic fast path (REF + ALT='<*>').
-_MONOMORPHIC_ALLELES = {base: (base + ',<*>').encode('ascii') for base in 'ACGTN'}
+_MONOMORPHIC_ALLELES = {
+    base: (base + ',<*>').encode('ascii') for base in 'ACGT'}
+
+
+def to_vcf_ref(ref):
+    """Map every character of a REF allele to the VCF REF alphabet."""
+    return ''.join(base if base in _VCF_REF_BASES else 'N'
+                   for base in ref.upper())
+
+
+def has_ambiguous_bases(allele):
+    """True when a sequence allele contains an IUPAC ambiguity code.
+
+    Symbolic alleles (``<...>``), the spanning-deletion placeholder ``*`` and
+    the no-ALT placeholder ``.`` carry no sequence and are not flagged.
+    """
+    if allele in ('.', '*') or allele.startswith('<'):
+        return False
+    return any(base not in _UNAMBIGUOUS_BASES for base in allele.upper())
 
 
 def batched_intervals(bed_file, max_gap):
@@ -229,7 +260,7 @@ def genotype_key(records, ref_base, filtered_vote='abstain'):
         alts = tuple(allele.upper() for allele in (record.alts or ()))
         if not alts or alts == _REFERENCE_ALTS:
             continue
-        ref = record.ref.upper()
+        ref = to_vcf_ref(record.ref)
         for allele_index, alt in enumerate(alts, 1):
             copies = sum(1 for allele in gt if allele == allele_index)
             if copies:
@@ -632,6 +663,8 @@ def write_monomorphic_record(output_file, contig, start0, end0, ref_base,
     """
     # pysam keeps INFO/END for symbolic alleles even when stop == start + 1,
     # matching BcfLineWriter, which sets it for every reference record.
+    if has_ambiguous_bases(ref_base):
+        return
     new_record = output_file.new_record(contig=contig, start=start0, stop=end0,
                                         alleles=(ref_base, '<*>'), qual=None)
     sample = new_record.samples[0]
@@ -644,6 +677,8 @@ def write_monomorphic_record(output_file, contig, start0, end0, ref_base,
 
 def write_consensus_record(output_file, contig, start0, stop0, alleles, gt, ad, dp):
     """Write a consensus record from winning caller genotypes."""
+    if any(has_ambiguous_bases(allele) for allele in alleles):
+        return
     new_record = output_file.new_record(contig=contig, start=start0, stop=stop0,
                                         alleles=alleles, qual=None)
     sample = new_record.samples[0]
@@ -660,6 +695,8 @@ def write_reference_record(output_file, writer, use_accel, rid, contig,
     ``end0`` is the 1-based inclusive end.  ``ad`` is ``None`` for multi-base
     blocks, whose FORMAT/AD is deliberately omitted.
     """
+    if has_ambiguous_bases(ref_base):
+        return
     if use_accel:
         alleles = _MONOMORPHIC_ALLELES.get(ref_base)
         if alleles is None:
@@ -905,7 +942,8 @@ def main():
                 site_of = walker.site
 
                 for start0, end0 in intervals:
-                    ref_seq = reference_file.fetch(contig, start0, end0).upper()
+                    ref_seq = to_vcf_ref(
+                        reference_file.fetch(contig, start0, end0))
                     rel = 0
                     # BED 0-based half-open [start0, end0) covers 1-based positions
                     # start0+1 .. end0, so the walk stops after end0.
@@ -946,6 +984,17 @@ def main():
                                 rel += 1
                                 continue
                             ref_base = ref_seq[rel]
+                            if has_ambiguous_bases(ref_base):
+                                # An IUPAC code (N included) cannot be
+                                # represented in the output; end the block and
+                                # omit the position.
+                                flush_reference_block(
+                                    pending_block, output_file, writer,
+                                    use_accel)
+                                pending_block = None
+                                vcf_start += 1
+                                rel += 1
+                                continue
                             if has_column:
                                 dp, ad_ref, observations = reference_support_of(ref_base)
                             else:
@@ -1049,7 +1098,8 @@ def main():
                             # hom-reference consensus: write the same gVCF-style
                             # record as the fast path, with honest <*> depth
                             if (not variants_only
-                                    and vcf_start > deletion_end):
+                                    and vcf_start > deletion_end
+                                    and not has_ambiguous_bases(ref_base)):
                                 if reference_detail is None:
                                     if has_column:
                                         reference_detail = \
@@ -1074,6 +1124,10 @@ def main():
                         site = site_of() if has_column else None
                         for ref, alts, gt in calls:
                             alleles = [ref] + list(alts)
+                            if any(has_ambiguous_bases(allele)
+                                   for allele in alleles):
+                                # IUPAC codes cannot be written to the output.
+                                continue
                             ad, dp = recover_ad_dp(site, alleles)
                             if use_accel:
                                 writer.write_record(rid, vcf_start - 1, alleles,
