@@ -89,6 +89,12 @@ from contextlib import ExitStack
 
 import pysam
 
+
+def _warn_accel_unavailable(error):
+    print('[WARN] Cython accelerator unavailable, using pure pysam: '
+          '{}'.format(error), file=sys.stderr)
+
+
 if os.environ.get('CHOCALLATE_NO_ACCEL'):
     BcfLineWriter = None
     PileupTally = None
@@ -96,12 +102,22 @@ else:
     try:
         # Optional Cython helpers built by bin/build_consensus_accel.py.
         from consensus_accel import BcfLineWriter, PileupTally
+    except ModuleNotFoundError as error:
+        # A checkout without the optional extension is the documented
+        # normal state, so stay silent: this module is imported once per
+        # consensus chunk and a warning would repeat for every chunk.  A
+        # missing module other than the extension itself means the
+        # extension exists but its dependency does not, which is reported.
+        if error.name != 'consensus_accel':
+            _warn_accel_unavailable(error)
+        BcfLineWriter = None
+        PileupTally = None
     except Exception as error:
         # A stale extension built against another pysam raises ValueError
         # ("size changed, may indicate binary incompatibility"), not
-        # ImportError; any import failure just disables the accelerator.
-        print('[WARN] Cython accelerator unavailable, using pure pysam: '
-              '{}'.format(error), file=sys.stderr)
+        # ImportError; an extension that exists but fails to load is
+        # reported.
+        _warn_accel_unavailable(error)
         BcfLineWriter = None
         PileupTally = None
 

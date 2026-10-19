@@ -1052,6 +1052,33 @@ def test_accel_import_failure_falls_back(monkeypatch, capsys):
     assert 'Cython accelerator unavailable' in capsys.readouterr().err
 
 
+def test_missing_accel_falls_back_silently(monkeypatch, capsys):
+    """A checkout without the optional extension falls back silently."""
+    import builtins
+    import importlib
+
+    real_import = builtins.__import__
+
+    def missing_import(name, *args, **kwargs):
+        if name == 'consensus_accel':
+            raise ModuleNotFoundError(
+                "No module named 'consensus_accel'", name='consensus_accel')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delenv('CHOCALLATE_NO_ACCEL', raising=False)
+    monkeypatch.setattr(builtins, '__import__', missing_import)
+    original = sys.modules.pop('generate_consensus', None)
+    try:
+        module = importlib.import_module('generate_consensus')
+    finally:
+        sys.modules.pop('generate_consensus', None)
+        if original is not None:
+            sys.modules['generate_consensus'] = original
+    assert module.BcfLineWriter is None
+    assert module.PileupTally is None
+    assert capsys.readouterr().err == ''
+
+
 def test_accel_close_reports_flush_failure():
     """A failed final flush raises instead of leaving a truncated BCF."""
     if not ACCEL_AVAILABLE:
