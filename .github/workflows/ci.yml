@@ -99,7 +99,14 @@ jobs:
         run: >-
           docker run --rm --entrypoint micromamba chocallate:ci
           run -n ChoCallate python -c
-          "import sys; sys.path.insert(0, '/tmp/bin'); import consensus_accel"
+          "import sys; sys.path.insert(0, '/opt/chocallate/bin');
+          import consensus_accel"
+
+      - name: Verify offline plugins with arbitrary UID
+        run: >-
+          docker run --rm --network none -u 12345:12345 -w /tmp
+          --entrypoint micromamba chocallate:ci
+          run -n ChoCallate nextflow inspect /opt/chocallate/main.nf
 
   nf-test:
     name: nf-test
