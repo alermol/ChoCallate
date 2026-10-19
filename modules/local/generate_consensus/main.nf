@@ -1,6 +1,5 @@
 process GENERATE_CONSENSUS {
     label 'process_medium'
-    cpus params.consensus.cpu
     beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
     afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 

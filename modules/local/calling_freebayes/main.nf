@@ -1,6 +1,5 @@
 process CALLING_FREEBAYES {
     label 'process_medium'
-    cpus params.calling.cpu
     beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
     afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 

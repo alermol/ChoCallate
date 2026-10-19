@@ -1,6 +1,5 @@
 process MAPPING_BOWTIE2 {
     label 'process_medium'
-    cpus params.mapping.cpu
     beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
     afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
