@@ -23,8 +23,8 @@ input:
   # format: fastq; unused for format: bam.
   reference_index_dir: null
 
-  # Index prefix inside reference_index_dir. null uses the file name of
-  # reference_genome.
+  # Index prefix inside reference_index_dir. Must be a plain file name
+  # without path separators. null uses the file name of reference_genome.
   reference_index_prefix: null
 
   # Optional BED of regions to call. null calls every covered region.

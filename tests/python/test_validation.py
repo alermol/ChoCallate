@@ -246,6 +246,23 @@ def test_missing_read_file_is_rejected(tmp_path):
     assert "file not found" in output
 
 
+@pytest.mark.parametrize("prefix", ["subdir/genome", "subdir\\genome"])
+def test_index_prefix_with_path_separator_is_rejected(tmp_path, prefix):
+    _prepare_inputs(tmp_path)
+    params = _config(
+        tmp_path,
+        overrides={"input": {"reference_index_prefix": prefix}},
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    assert "input.reference_index_prefix" in output
+    assert "must not contain a path separator" in output
+    assert "No bowtie2 index files found" not in output
+
+
 def test_plain_gzip_reference_is_rejected(tmp_path):
     _prepare_inputs(tmp_path)
     reference = tmp_path / "ref.fa.gz"

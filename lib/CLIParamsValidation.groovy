@@ -98,6 +98,26 @@ class CLIParamsValidation {
     }
 
     /**
+     * Rejects an index prefix that selects a subdirectory.
+     *
+     * Index files are resolved from reference_index_dir before staging but
+     * staged under a flat `index/` directory.  A prefix containing a path
+     * separator would therefore point at the files during validation and at
+     * a non-existent nested path in the mapping command.
+     */
+    static void reference_index_prefix_validation(String prefix) {
+        if (prefix == null) {
+            return
+        }
+        if (prefix.contains('/') || prefix.contains('\\')) {
+            fail(
+                "input.reference_index_prefix: '${prefix}' must not " +
+                'contain a path separator'
+            )
+        }
+    }
+
+    /**
      * Rejects caller arguments that request a non-diploid genotype.
      *
      * Consensus reference records are always diploid (0/0), while a caller

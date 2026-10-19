@@ -95,6 +95,9 @@ workflow {
     if (params.input.format != 'bam') {
         def mapper = params.mapping.mapper
         def index_dir = params.input.reference_index_dir
+        CLIParamsValidation.reference_index_prefix_validation(
+            params.input.reference_index_prefix
+        )
         def index_prefix = params.input.reference_index_prefix ?:
             file(params.input.reference_genome).name
         def suffix_sets = index_suffix_sets[mapper]
