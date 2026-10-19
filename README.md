@@ -105,7 +105,7 @@ Minimum set of parameters in `my_run.yaml`:
 
 - `samples_tsv`: input samples TSV (formats below)
 - `reference_genome`: reference FASTA (plain or bgzip-compressed)
-- `reference_index_dir`: path to directory with index files for reference genome
+- `reference_index_dir`: path to directory with index files for reference genome (required for `format: fastq`, unused for `format: bam`)
 
 After configuration is complete you can run the ChoCallate
 

@@ -19,7 +19,8 @@ input:
   # automatically. Contigs longer than 2^31-1 bp are rejected.
   reference_genome: null
 
-  # Directory containing the mapper and caller indexes.
+  # Directory containing the mapper and caller indexes. Required for
+  # format: fastq; unused for format: bam.
   reference_index_dir: null
 
   # Index prefix inside reference_index_dir. null uses the file name of

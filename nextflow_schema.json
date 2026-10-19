@@ -24,7 +24,7 @@
                 },
                 "reference_index_dir": {
                     "type": "string",
-                    "description": "Directory containing the mapper and caller reference indexes.",
+                    "description": "Directory containing the mapper and caller reference indexes. Required when input.format is 'fastq'.",
                     "format": "directory-path",
                     "exists": true
                 },
@@ -55,7 +55,17 @@
                     "enum": ["se", "pe", "mx"]
                 }
             },
-            "required": ["samples_tsv", "reference_genome", "reference_index_dir"]
+            "required": ["samples_tsv", "reference_genome"],
+            "if": {
+                "properties": {
+                    "format": {
+                        "const": "fastq"
+                    }
+                }
+            },
+            "then": {
+                "required": ["reference_index_dir"]
+            }
         },
         "output": {
             "type": "object",
