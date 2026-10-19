@@ -23,8 +23,17 @@ process GENERATE_COVERAGE {
     def on_empty = params.coverage.on_empty ?: 'fail'
     def empty_message = "Sample ${sample_id}: coverage.bed is empty: " +
         "no region reaches coverage.min_coverage=${min_coverage}"
-    def sort_include = include_bed.name != "N1_FILE" ? "sort-bed \"${include_bed}\" > tmp/include.sorted.bed" : ""
-    def sort_exclude = exclude_bed.name != "NO_FILE" ? "sort-bed \"${exclude_bed}\" > tmp/exclude.sorted.bed" : ""
+    // UCSC track/browser header lines are not BED records and sort-bed
+    // rejects them when they follow a data line, so drop them first.
+    def strip_headers = 'awk \'!/^(track|browser)([[:space:]]|$)/\''
+    def sort_include = include_bed.name != "N1_FILE"
+        ? "${strip_headers} \"${include_bed}\" | " +
+            "sort-bed - > tmp/include.sorted.bed"
+        : ""
+    def sort_exclude = exclude_bed.name != "NO_FILE"
+        ? "${strip_headers} \"${exclude_bed}\" | " +
+            "sort-bed - > tmp/exclude.sorted.bed"
+        : ""
     """
     set -o pipefail
     mkdir -p tmp
