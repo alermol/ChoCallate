@@ -9,7 +9,8 @@ Usage: postprocess_bam.sh --input BAM|-
   --reference FASTA      Reference FASTA (required with --left-align)
   --dict DICT            Sequence dictionary (required with --left-align)
   --mapq INT             Minimum mapping quality (default: 0)
-  --threads INT          Worker threads (default: 1)
+  --threads INT          Worker threads, split across pipeline stages
+                         (default: 1)
   --memory-mb INT        Task memory in MiB (sort uses half)
   --java-options OPTS    JVM options for GATK LeftAlignIndels
   --rmdup-mode MODE      Duplicate handling: none, mark or remove
@@ -122,37 +123,58 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The stages of each pipeline below run concurrently, so divide the requested
+# threads between them instead of giving every stage the full count.  The
+# streaming stages get one thread (or none when the budget is smaller than the
+# stage count) and sort, the CPU-heavy stage, receives the remainder.
+if [[ "$rmdup_mode" != none ]]; then
+    streaming_stages=4    # collate, fixmate, markdup and view
+else
+    streaming_stages=1    # view
+fi
+if [[ "$threads" -gt "$streaming_stages" ]]; then
+    stage_threads=1
+    sort_threads=$(( threads - streaming_stages ))
+else
+    stage_threads=0
+    sort_threads="$threads"
+fi
+
 # Half of the task memory is shared by the sorting threads; the rest is left
 # for the aligner or for the other BAM-processing stages.
 sort_memory_mb=768
 if [[ "$memory_mb" -gt 0 ]]; then
-    sort_memory_mb=$(( memory_mb / 2 / threads ))
+    sort_memory_mb=$(( memory_mb / 2 / sort_threads ))
     if [[ "$sort_memory_mb" -lt 1 ]]; then
         sort_memory_mb=1
     fi
 fi
 
+filtered_bam="$tmpdir/filtered.bam"
 if [[ "$rmdup_mode" != none ]]; then
     markdup_flags=()
     if [[ "$rmdup_mode" == remove ]]; then
         markdup_flags=(-r)
     fi
-    samtools collate --threads "$threads" -O -u -T "$tmpdir/collate" \
-            "$input" \
-        | samtools fixmate --threads "$threads" -m -u - - \
-        | samtools sort --threads "$threads" -m "${sort_memory_mb}M" -u \
-            -T "$tmpdir/sort" - \
-        | samtools markdup --threads "$threads" "${markdup_flags[@]}" \
-            -T "$tmpdir/markdup" - "$tmpdir/dedup.bam"
-    filtered_source="$tmpdir/dedup.bam"
+    # Stream markdup into the MAPQ filter instead of writing dedup.bam.
+    samtools collate --threads "$stage_threads" -O -u \
+            -T "$tmpdir/collate" "$input" \
+        | samtools fixmate --threads "$stage_threads" -m -u - - \
+        | samtools sort --threads "$sort_threads" \
+            -m "${sort_memory_mb}M" -u -T "$tmpdir/sort" - \
+        | samtools markdup --threads "$stage_threads" -u \
+            "${markdup_flags[@]}" -T "$tmpdir/markdup" - - \
+        | samtools view --threads "$stage_threads" -F 4 -q "$mapq" \
+            -b -o "$filtered_bam" -
 else
-    samtools sort --threads "$threads" -m "${sort_memory_mb}M" \
-        -o "$tmpdir/sorted.bam" "$input"
-    filtered_source="$tmpdir/sorted.bam"
+    # Filtering before sorting reduces the number of records sort has to
+    # order; no duplicate information is needed in this path.
+    samtools view --threads "$stage_threads" -F 4 -q "$mapq" -u \
+            "$input" \
+        | samtools sort --threads "$sort_threads" \
+            -m "${sort_memory_mb}M" -T "$tmpdir/sort" \
+            -o "$filtered_bam" -
 fi
-
-samtools view --threads "$threads" -F 4 -q "$mapq" -b \
-    -o "$tmpdir/filtered.bam" "$filtered_source"
 
 if [[ "$left_align" == true ]]; then
     rm -f "$output"
@@ -161,13 +183,13 @@ if [[ "$left_align" == true ]]; then
         gatk_opts=(--java-options "$java_options")
     fi
     gatk LeftAlignIndels "${gatk_opts[@]}" \
-        -I "$tmpdir/filtered.bam" \
+        -I "$filtered_bam" \
         -O "$output" \
         -R "$reference" \
         --sequence-dictionary "$dict" \
         -OBI false
 else
-    mv "$tmpdir/filtered.bam" "$output"
+    mv "$filtered_bam" "$output"
 fi
 
 samtools index --threads "$threads" --csi "$output"

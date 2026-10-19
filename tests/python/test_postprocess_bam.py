@@ -175,23 +175,85 @@ def test_postprocess_rejects_unknown_rmdup_mode(tmp_path):
         run_helper(tmp_path, '--rmdup-mode', 'dedup')
 
 
-@pytest.mark.parametrize('extra_args',
-                         [[], ['--rmdup-mode', 'mark'],
-                          ['--rmdup-mode', 'remove']],
-                         ids=['sort', 'mark', 'remove'])
-def test_sort_memory_comes_from_task_memory(tmp_path, extra_args):
+@pytest.mark.parametrize(
+    'extra_args,expected',
+    [([], '292M'),
+     (['--rmdup-mode', 'mark'], '512M'),
+     (['--rmdup-mode', 'remove'], '512M')],
+    ids=['sort', 'mark', 'remove'])
+def test_sort_memory_comes_from_task_memory(tmp_path, extra_args, expected):
     write_paired_bam(tmp_path / 'in.bam')
     env, log = write_stub_samtools(tmp_path)
 
     run_helper(
-        tmp_path, *extra_args, threads=2, memory_mb=4096, env=env)
+        tmp_path, *extra_args, threads=8, memory_mb=4096, env=env)
 
     sort_calls = [
         line for line in log.read_text().splitlines()
         if line.startswith('sort ')
     ]
     assert sort_calls
-    assert all('-m 1024M' in line for line in sort_calls)
+    assert all(f'-m {expected}' in line for line in sort_calls)
+
+
+@pytest.mark.parametrize(
+    'extra_args,stages',
+    [([], 2), (['--rmdup-mode', 'mark'], 5),
+     (['--rmdup-mode', 'remove'], 5)],
+    ids=['sort', 'mark', 'remove'])
+def test_threads_are_split_across_concurrent_stages(
+        tmp_path, extra_args, stages):
+    write_paired_bam(tmp_path / 'in.bam')
+    env, log = write_stub_samtools(tmp_path)
+
+    run_helper(
+        tmp_path, *extra_args, threads=8, memory_mb=8192, env=env)
+
+    subcommands = {'collate', 'fixmate', 'sort', 'markdup', 'view'}
+    calls = [
+        line.split() for line in log.read_text().splitlines()
+        if line.split() and line.split()[0] in subcommands
+    ]
+    assert len(calls) == stages
+    allocations = [int(call[call.index('--threads') + 1]) for call in calls]
+    assert sum(allocations) == 8
+    # Sort is the only stage that receives more than one thread.
+    sort_call = next(call for call in calls if call[0] == 'sort')
+    assert int(sort_call[sort_call.index('--threads') + 1]) == 8 - stages + 1
+    assert sorted(allocations) == [1] * (stages - 1) + [8 - stages + 1]
+
+
+def test_markdup_is_streamed_into_mapq_filter(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    env, log = write_stub_samtools(tmp_path)
+
+    run_helper(tmp_path, '--rmdup-mode', 'mark', env=env)
+
+    text = log.read_text()
+    assert 'dedup.bam' not in text
+    calls = [line.split() for line in text.splitlines()]
+    markdup = next(call for call in calls if call[0] == 'markdup')
+    view = next(call for call in calls if call[0] == 'view')
+    # markdup reads and writes the stream; view filters that stream.
+    assert markdup[-2:] == ['-', '-']
+    assert view[-1] == '-'
+
+
+def test_filter_runs_before_sort_without_rmdup(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    env, log = write_stub_samtools(tmp_path)
+
+    run_helper(tmp_path, env=env)
+
+    text = log.read_text()
+    assert 'sorted.bam' not in text
+    calls = [line.split() for line in text.splitlines()]
+    view = next(call for call in calls if call[0] == 'view')
+    sort = next(call for call in calls if call[0] == 'sort')
+    # The filter emits uncompressed BAM and sort consumes it from stdin.
+    assert '-u' in view
+    assert sort[-1] == '-'
+    assert '-o' in sort
 
 
 def test_left_align_receives_task_java_options(tmp_path):

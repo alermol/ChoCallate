@@ -118,7 +118,8 @@ mapping:
   extra_args: ""
 
   # CPUs requested per mapping task. The mapper and BAM post-processing run
-  # concurrently, so this is split between them.
+  # concurrently, so this is split between them. Post-processing further
+  # divides its share between its concurrent samtools stages.
   cpu: 10
 
   # Read-group PL value.
