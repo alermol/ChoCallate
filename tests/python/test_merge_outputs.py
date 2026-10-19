@@ -5,8 +5,9 @@ Covers:
 * all sites are kept when ``remove_invariant`` is false, including monomorphic
   records;
 * a hom-reference sample's non-reference read depth reaches the merged ALT AD;
-* the merge path for N >= 2 samples as a whole: sample order, genotypes at the
-  variant position, and the invariant filter when enabled.
+* the merge path for N >= 2 samples as a whole: sample order, genotypes at
+  the variant position, the invariant filter when enabled, and multi-allelic
+  sites joined into one record or split per ALT.
 
 The command chain is exercised through `bin/merge_outputs.sh`, the same script
 used by `MERGE_OUTPUTS`; changes to the production merge path are therefore
@@ -19,6 +20,7 @@ import sys
 import time
 
 import pysam
+import pytest
 from conftest import (  # noqa: I100,I202  (tests run from this directory)
     BCFTOOLS,
     BIN_DIR,
@@ -78,6 +80,47 @@ def build_two_samples(tmp_path, use_accel, compress_reference_blocks=False):
         subprocess.run([BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
                        check=True)
     return sample_files, reference
+
+
+def build_multiallelic_samples(tmp_path, use_accel):
+    """Per-sample BCFs: sampleA carries two ALT alleles at one site.
+
+    Both callers report the heterozygous genotype 1/2, so the consensus
+    stage writes one split record per ALT and the output stage either joins
+    them into a multiallelic record or keeps them split.
+    """
+    reference = write_reference(tmp_path / 'ref.fa')
+    ref = ref_base(VARIANT_POS)
+    alts = [base for base in 'ACGT' if base != ref][:2]
+    reads = [(f'ref{start}', start, REF_SEQ[start:start + 10])
+             for start in range(19, 30)]
+    for alt_index, alt in enumerate(alts):
+        for copy in range(ALT_DEPTH + alt_index):
+            seq = list(REF_SEQ[VARIANT_0B:VARIANT_0B + 10])
+            seq[0] = alt
+            reads.append((f'alt{alt_index}_{copy}', VARIANT_0B, ''.join(seq)))
+    reads.sort(key=lambda item: item[1])
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 32)])
+
+    variant_calls = [
+        write_caller_bcf(tmp_path / f'sampleA_caller{i}.bcf', 'sampleA',
+                         [(VARIANT_0B, ref, alts, (1, 2))])
+        for i in range(2)]
+    reference_calls = [
+        write_caller_bcf(tmp_path / f'sampleB_caller{i}.bcf', 'sampleB', [])
+        for i in range(2)]
+
+    sample_files = {}
+    for sample, calls in (('sampleA', variant_calls),
+                          ('sampleB', reference_calls)):
+        sample_files[sample] = run_consensus(
+            tmp_path, bam, bed_gz, calls, threshold=2, sample_name=sample,
+            use_accel=use_accel, output_name=f'{sample}.bcf',
+            reference=reference)
+        subprocess.run([BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
+                       check=True)
+    return sample_files, reference, alts
 
 
 def build_degraded_samples(tmp_path, use_accel):
@@ -207,6 +250,50 @@ def test_all_sites_kept_without_remove_invariant_split(tmp_path, use_accel):
     merged = merge_chain(tmp_path, sample_files, reference,
                          remove_invariant=False, split_multiallelic=True)
     assert [pos for pos, _, _, _ in read_merged(merged)] == list(range(20, 33))
+
+
+@pytest.mark.parametrize('split_multiallelic', [False, True],
+                         ids=['join', 'split'])
+def test_multiallelic_site_split_and_join(tmp_path, use_accel,
+                                          split_multiallelic):
+    """Both ALTs reach the output, joined as 1/2 or split by ALT."""
+    sample_files, reference, alts = build_multiallelic_samples(
+        tmp_path, use_accel)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False,
+                         split_multiallelic=split_multiallelic)
+    records = read_merged(merged)
+    positions = [pos for pos, _, _, _ in records]
+    if split_multiallelic:
+        expected = (list(range(20, 30))
+                    + [VARIANT_POS] * len(alts) + [31, 32])
+    else:
+        expected = list(range(20, 33))
+    assert positions == expected
+
+    site = [record for record in records if record[0] == VARIANT_POS]
+    if split_multiallelic:
+        assert len(site) == len(alts)
+        assert [alleles for _, alleles, _, _ in site] == [
+            (ref_base(VARIANT_POS), alt) for alt in alts]
+        for _, _, gt_a, gt_b in site:
+            assert sorted(gt_a) == [0, 1]
+            assert gt_b == (0, 0)
+    else:
+        assert len(site) == 1
+        _, alleles, gt_a, gt_b = site[0]
+        assert alleles == (ref_base(VARIANT_POS), *alts)
+        assert sorted(gt_a) == [1, 2]
+        assert gt_b == (0, 0)
+
+    depths = [ALT_DEPTH + index for index in range(len(alts))]
+    site_ad = [entry for entry in read_merged_ad(merged)
+               if entry[0] == VARIANT_POS]
+    if split_multiallelic:
+        assert [ad_a for _, ad_a, _ in site_ad] == [
+            (REF_DEPTH, depth) for depth in depths]
+    else:
+        assert site_ad[0][1] == (REF_DEPTH,) + tuple(depths)
 
 
 def test_remove_invariant_drops_monomorphic_sites(tmp_path, use_accel):
