@@ -17,12 +17,14 @@ process SCATTER_INTERVALS {
 
     script:
     def scatter_count = Math.max(params.calling.cpu ?: 1, params.consensus.cpu ?: 1)
-    def heap_option = ResourceUtils.javaHeapOption(task.memory, task.cpus)
+    def split_heap_option = ResourceUtils.javaHeapOption(task.memory)
+    def parallel_heap_option =
+        ResourceUtils.javaHeapOption(task.memory, task.cpus)
     """
     mkdir -p tmp/bed_chunks chunks
 
     gatk SplitIntervals \
-        --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
+        --java-options "-Djava.io.tmpdir=\$TMPDIR ${split_heap_option}" \
         --tmp-dir "\$TMPDIR" \
         -R tmp/ref_genome.fasta \
         -L tmp/coverage.bed \
@@ -34,7 +36,7 @@ process SCATTER_INTERVALS {
     dir=\${1%/*}
     stem=\${1##*/}
     stem=\${stem%.*}
-    gatk IntervalListToBed --java-options "${heap_option}" \
+    gatk IntervalListToBed --java-options "${parallel_heap_option}" \
         -I "\$1" -O "\$dir/\$stem.bed.tmp"
     cut -f 1-3 "\$dir/\$stem.bed.tmp" > "chunks/\$stem.bed"
     rm -f "\$1" "\$dir/\$stem.bed.tmp"
