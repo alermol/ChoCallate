@@ -60,6 +60,59 @@ nextflow_process {
         }
     }
 
+    test("stages include and exclude BEDs with the same file name") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            new File(launchDir, 'include').mkdirs()
+            new File(launchDir, 'exclude').mkdirs()
+            new File(launchDir, 'include/regions.bed').text =
+                'CP002684.1\t0\t200000\n'
+            new File(launchDir, 'exclude/regions.bed').text =
+                'CP002684.1\t0\t100\n'
+        }
+
+        when {
+            params {
+                coverage {
+                    min_coverage = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi")
+                )
+                input[1] = file("${launchDir}/include/regions.bed")
+                input[2] = file("${launchDir}/exclude/regions.bed")
+                input[3] = file(
+                    "${launchDir}/reference/genome.fasta.fai"
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bed = ChoCallateTestUtils.outputFile(
+                process.out.coverage[0][1]
+            )
+            def intervals = bed.readLines()
+                .findAll { it.trim() }
+                .collect { line ->
+                    def fields = line.split('\t', -1)
+                    [fields[0], fields[1] as int, fields[2] as int]
+                }
+            assert intervals.size() > 0
+            assert intervals.every { it[0] == 'CP002684.1' }
+            assert intervals.every { it[1] >= 100 }
+            assert intervals.every { it[2] <= 200000 }
+        }
+    }
+
     test("strips track, browser and comment lines from BED inputs") {
         setup {
             ChoCallateTestUtils.bowtie2Bam(

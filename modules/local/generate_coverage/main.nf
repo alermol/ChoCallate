@@ -8,8 +8,8 @@ process GENERATE_COVERAGE {
 
     input:
     tuple val(sample_id), path("tmp/input.bam"), path("tmp/input.bam.csi")
-    path(include_bed)
-    path(exclude_bed)
+    path(include_bed, stageAs: 'include/*')
+    path(exclude_bed, stageAs: 'exclude/*')
     path("tmp/ref_genome.fasta.fai")
 
     output:
@@ -28,11 +28,15 @@ process GENERATE_COVERAGE {
     // drops them and rejects contigs that are not present in the reference
     // .fai with an actionable error.
     def filter_bed = 'filter_bed.py tmp/ref_genome.fasta.fai'
-    def sort_include = include_bed.name != "N1_FILE"
+    // stageAs prefixes the path with the staging directory, so sentinel
+    // inputs are detected from the last path component.
+    def include_name = include_bed.toString().tokenize('/')[-1]
+    def exclude_name = exclude_bed.toString().tokenize('/')[-1]
+    def sort_include = include_name != "N1_FILE"
         ? "${filter_bed} \"${include_bed}\" | " +
             "sort-bed - > tmp/include.sorted.bed"
         : ""
-    def sort_exclude = exclude_bed.name != "NO_FILE"
+    def sort_exclude = exclude_name != "NO_FILE"
         ? "${filter_bed} \"${exclude_bed}\" | " +
             "sort-bed - > tmp/exclude.sorted.bed"
         : ""
