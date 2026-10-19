@@ -4,6 +4,7 @@
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 
 import nextflow.exception.AbortOperationException
 
@@ -267,10 +268,11 @@ class CLIParamsValidation {
     /**
      * Reads and validates the samplesheet before any task runs.
      *
-     * Blank lines and lines starting with '#' are ignored.  A header line whose
-     * first column is sample, sample_id, sampleid or id is skipped.  The row
-     * width depends on input.format and input.reads_type.  Relative read paths
-     * are resolved from the samplesheet directory and must exist.
+     * Blank lines and lines starting with '#' are ignored.  Only the first
+     * data line is treated as a possible header: if its first column is
+     * sample, sample_id, sampleid or id it is skipped.  The row width depends
+     * on input.format and input.reads_type.  Relative read paths are resolved
+     * from the samplesheet directory and must exist.
      *
      * @return list of maps with sample id and resolved read paths
      */
@@ -279,18 +281,18 @@ class CLIParamsValidation {
         String format,
         String reads_type
     ) {
-        File sheet = samplesheet.toFile()
-        if (!sheet.isFile()) {
-            fail("input.samples_tsv: file not found: ${sheet}")
+        if (!Files.isRegularFile(samplesheet)) {
+            fail("input.samples_tsv: file not found: ${samplesheet}")
         }
         int expected = expected_columns(format, reads_type)
-        File base_dir = sheet.absoluteFile.parentFile
+        Path base_dir = samplesheet.toAbsolutePath().normalize().getParent()
 
         def samples = []
         def seen = new LinkedHashMap<String, Integer>()
         int line_number = 0
+        boolean first_data_line = true
 
-        Files.newBufferedReader(sheet.toPath(), StandardCharsets.UTF_8)
+        Files.newBufferedReader(samplesheet, StandardCharsets.UTF_8)
             .withCloseable { reader ->
                 String line
                 while ((line = reader.readLine()) != null) {
@@ -304,8 +306,11 @@ class CLIParamsValidation {
                     }
                     def columns = line.split('\t', -1)
                         .collect { it.replaceAll(/\r$/, '') }
-                    if (is_header_row(columns)) {
-                        continue
+                    if (first_data_line) {
+                        first_data_line = false
+                        if (is_header_row(columns)) {
+                            continue
+                        }
                     }
                     if (columns.size() != expected) {
                         fail(
@@ -354,7 +359,7 @@ class CLIParamsValidation {
             }
 
         if (samples.isEmpty()) {
-            fail("input.samples_tsv: no samples found in ${sheet}")
+            fail("input.samples_tsv: no samples found in ${samplesheet}")
         }
         return samples
     }
@@ -384,7 +389,7 @@ class CLIParamsValidation {
     }
 
     private static String resolve_read_path(
-        File base_dir,
+        Path base_dir,
         String value,
         int line_number,
         int column_number
@@ -400,18 +405,20 @@ class CLIParamsValidation {
         if (raw ==~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\/.*/) {
             return raw
         }
-        def candidate = new File(raw)
-        if (!candidate.isAbsolute()) {
-            candidate = new File(base_dir, raw)
+        Path candidate = new File(raw).isAbsolute()
+            ? Paths.get(raw)
+            : base_dir.resolve(raw)
+        Path resolved = candidate.toAbsolutePath().normalize()
+        if (resolved.toUri().scheme != 'file') {
+            return resolved.toUri().toString()
         }
-        def resolved = candidate.canonicalFile
-        if (!resolved.isFile()) {
+        if (!Files.isRegularFile(resolved)) {
             fail(
                 "input.samples_tsv line ${line_number}: " +
                 "column ${column_number} file not found: ${resolved}"
             )
         }
-        return resolved.absolutePath
+        return resolved.toRealPath().toString()
     }
 
     /**

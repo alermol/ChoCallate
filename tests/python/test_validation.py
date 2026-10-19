@@ -341,6 +341,26 @@ def test_header_and_comment_lines_are_skipped(tmp_path):
     assert "duplicate sample id 'sample1'" in _output(result)
 
 
+def test_header_keyword_after_first_data_line_is_data(tmp_path):
+    samplesheet = _prepare_inputs(
+        tmp_path,
+        rows=(
+            "sample1\tr1.fq\tr2.fq",
+            "id\tr1.fq",
+        ),
+    )
+    params = _config(tmp_path, samplesheet=samplesheet)
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    # Only the first data line may be a header.  The second row starts with
+    # 'id' but must be parsed, so its missing column is a width error.
+    assert "expected 3 tab-separated columns" in output
+    assert "found 2" in output
+
+
 def test_bam_samplesheet_uses_two_columns(tmp_path):
     samplesheet = _prepare_inputs(
         tmp_path,
