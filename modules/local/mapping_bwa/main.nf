@@ -80,6 +80,7 @@ process MAPPING_BWA {
         --output mapping.bam \
         --reference tmp/ref_genome.fasta \
         --dict tmp/ref_genome.dict \
+        --fai tmp/ref_genome.fasta.fai \
         --mapq ${params.bam_filter.min_map_qual} \
         --threads ${postprocess_cpus} \
         ${memory_option} \

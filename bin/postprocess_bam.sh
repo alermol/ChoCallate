@@ -8,6 +8,9 @@ Usage: postprocess_bam.sh --input BAM|-
   --output PATH          Final BAM (default: mapping.bam)
   --reference FASTA      Reference FASTA (required with --left-align)
   --dict DICT            Sequence dictionary (required with --left-align)
+  --fai PATH             Reference .fai index. Verify the output BAM
+                         @SQ entries against it; with --dict, compare
+                         M5 checksums too.
   --mapq INT             Minimum mapping quality (default: 0)
   --threads INT          Worker threads, split across pipeline stages
                          (default: 1)
@@ -28,6 +31,7 @@ input=""
 output="mapping.bam"
 reference=""
 dict=""
+fai=""
 mapq=0
 threads=1
 memory_mb=0
@@ -52,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dict)
             dict="$2"
+            shift 2
+            ;;
+        --fai)
+            fai="$2"
             shift 2
             ;;
         --mapq)
@@ -110,6 +118,10 @@ if [[ "$left_align" == true && ( -z "$reference" || -z "$dict" ) ]]; then
     echo "--reference and --dict are required with --left-align" >&2
     exit 2
 fi
+if [[ -n "$fai" && ! -f "$fai" ]]; then
+    echo "Reference index not found: $fai" >&2
+    exit 2
+fi
 case "$rmdup_mode" in
     none|mark|remove) ;;
     *)
@@ -135,6 +147,7 @@ if [[ "$memory_mb" -gt 0 && "$reserve_mb" -ge "$memory_mb" ]]; then
     exit 2
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmpdir="$(mktemp -d -p "$PWD" .postprocess.XXXXXX)"
 cleanup() {
     rm -rf "$tmpdir"
@@ -195,6 +208,16 @@ else
         | samtools sort --threads "$sort_threads" \
             -m "${sort_memory_mb}M" -T "$tmpdir/sort" \
             -o "$filtered_bam" -
+fi
+
+# Fail before left-alignment and indexing when the aligner used an index
+# built for another assembly.
+if [[ -n "$fai" ]]; then
+    check_args=("$filtered_bam" "$fai")
+    if [[ -n "$dict" ]]; then
+        check_args+=(--dict "$dict")
+    fi
+    "$script_dir/check_bam_reference.py" "${check_args[@]}"
 fi
 
 if [[ "$left_align" == true ]]; then

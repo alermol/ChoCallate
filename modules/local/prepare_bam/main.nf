@@ -34,7 +34,8 @@ process PREPARE_BAM {
     samtools flagstat --threads ${task.cpus} \
         tmp/read1 > mapping.raw.flagstat
 
-    check_bam_reference.py tmp/read1 tmp/ref_genome.fasta.fai
+    check_bam_reference.py tmp/read1 tmp/ref_genome.fasta.fai \
+        --dict tmp/ref_genome.dict
 
     samtools addreplacerg \
         -w \

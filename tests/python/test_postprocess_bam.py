@@ -17,11 +17,14 @@ SAMTOOLS = shutil.which('samtools')
 pytestmark = pytest.mark.skipif(SAMTOOLS is None, reason='samtools is not available')
 
 
-def write_paired_bam(path):
+def write_paired_bam(path, m5=None):
     """Two duplicate pairs, one low-MAPQ pair and one unique pair."""
+    sq = {'SN': 'chr1', 'LN': 1000}
+    if m5:
+        sq['M5'] = m5
     header = {
         'HD': {'VN': '1.6', 'SO': 'coordinate'},
-        'SQ': [{'SN': 'chr1', 'LN': 1000}],
+        'SQ': [sq],
         'RG': [{'ID': 's1', 'SM': 's1'}],
     }
     reads = []
@@ -170,6 +173,40 @@ def test_postprocess_without_rmdup_keeps_duplicates(tmp_path, extra_args):
     subprocess.run([SAMTOOLS, 'quickcheck', str(output)], check=True)
     with pysam.AlignmentFile(str(output), 'rb') as bam:
         assert not any(read.is_duplicate for read in bam)
+
+
+def write_fai(path, length=1000):
+    path.write_text('chr1\t{}\t6\t60\t61\n'.format(length))
+    return path
+
+
+def test_postprocess_accepts_a_matching_reference_index(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    fai = write_fai(tmp_path / 'ref.fa.fai')
+
+    output = run_helper(tmp_path, '--fai', str(fai))
+
+    assert output.is_file()
+
+
+def test_postprocess_rejects_a_bam_from_another_reference(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    fai = write_fai(tmp_path / 'ref.fa.fai', length=999)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        run_helper(tmp_path, '--fai', str(fai))
+
+
+def test_postprocess_rejects_mismatched_m5_checksums(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam', m5='aaaa')
+    fai = write_fai(tmp_path / 'ref.fa.fai')
+    dictionary = tmp_path / 'ref.dict'
+    dictionary.write_text(
+        '@HD\tVN:1.6\n@SQ\tSN:chr1\tLN:1000\tM5:bbbb\n')
+
+    with pytest.raises(subprocess.CalledProcessError):
+        run_helper(tmp_path, '--fai', str(fai),
+                   '--dict', str(dictionary))
 
 
 def test_postprocess_rejects_unknown_rmdup_mode(tmp_path):
