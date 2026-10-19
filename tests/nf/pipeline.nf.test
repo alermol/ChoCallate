@@ -4,6 +4,7 @@ nextflow_pipeline {
     script "main.nf"
 
     test("test_pe_bowtie2_single") {
+        tag "mapping_stats"
         setup {
             ChoCallateTestUtils.bowtie2Index(
                 projectDir, new File(launchDir)
@@ -66,6 +67,17 @@ nextflow_pipeline {
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)
             ).match()
+            def mapping_dir = new File("${outputDir}/mapping_stats")
+            ['sample1.raw.flagstat', 'sample1.final.flagstat',
+             'sample1.stats', 'sample1.idxstats',
+             'mapping_summary.tsv'].each { name ->
+                assert new File(mapping_dir, name).isFile()
+            }
+            def summary = new File(mapping_dir, 'mapping_summary.tsv')
+            def lines = summary.readLines()
+            assert lines.size() == 2
+            assert lines[0].contains('raw_mapped_pct')
+            assert lines[1].startsWith('sample1\t')
         }
     }
 

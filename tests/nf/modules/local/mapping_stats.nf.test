@@ -1,0 +1,71 @@
+nextflow_process {
+
+    name "Test process MAPPING_STATS"
+    script "../../../../modules/local/mapping_stats/main.nf"
+    process "MAPPING_STATS"
+
+    test("reports raw and final BAM statistics") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            ChoCallateTestUtils.run(
+                new File(launchDir),
+                "samtools flagstat '${launchDir}/sample1.bam' " +
+                "> '${launchDir}/raw.flagstat'"
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi"),
+                    file("${launchDir}/raw.flagstat")
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def raw = ChoCallateTestUtils.outputFile(
+                process.out.stats[0][1]
+            )
+            def flagstat = ChoCallateTestUtils.outputFile(
+                process.out.stats[0][2]
+            )
+            def stats = ChoCallateTestUtils.outputFile(
+                process.out.stats[0][3]
+            )
+            def idxstats = ChoCallateTestUtils.outputFile(
+                process.out.stats[0][4]
+            )
+            assert raw.name == 'sample1.raw.flagstat'
+            assert flagstat.name == 'sample1.final.flagstat'
+            assert stats.name == 'sample1.stats'
+            assert idxstats.name == 'sample1.idxstats'
+            assert raw.readLines().any { it.contains('mapped') }
+            assert flagstat.readLines().any { it.contains('mapped') }
+            assert stats.readLines().any {
+                it.startsWith('SN\traw total sequences:')
+            }
+            assert idxstats.readLines().any {
+                it.startsWith('CP002684.1\t')
+            }
+            assert new File(
+                "${launchDir}/output/mapping_stats/sample1.raw.flagstat"
+            ).isFile()
+            assert new File(
+                "${launchDir}/output/mapping_stats/sample1.stats"
+            ).isFile()
+        }
+    }
+}

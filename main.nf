@@ -6,6 +6,8 @@ include { CREATE_SEQ_DICT } from './modules/local/create_seq_dict'
 include { MAPPING_BOWTIE2 } from './modules/local/mapping_bowtie2'
 include { MAPPING_BWA } from './modules/local/mapping_bwa'
 include { MAPPING_MINIMAP2 } from './modules/local/mapping_minimap2'
+include { MAPPING_STATS } from './modules/local/mapping_stats'
+include { MAPPING_SUMMARY } from './modules/local/mapping_summary'
 include { PREPARE_BAM } from './modules/local/prepare_bam'
 include { GENERATE_COVERAGE } from './modules/local/generate_coverage'
 include { SCATTER_INTERVALS } from './modules/local/scatter_intervals'
@@ -47,6 +49,7 @@ workflow {
         params.input.format,
         params.input.reads_type
     )
+    def sample_ids = samples.collect { sample -> sample.id }
 
     // A merge opens every sample BCF plus the named pipes; fail before the
     // first task when the process descriptor limit cannot support that.
@@ -169,6 +172,34 @@ workflow {
         error("Unknown input format or mapper")
     }
 
+    // The raw flagstat is captured by the mapping stage before MAPQ filtering
+    // and duplicate handling; the other reports describe the final BAM.
+    mapping_stats = MAPPING_STATS(bam_file)
+    raw_flagstat_files = mapping_stats
+        .map { _sample_id, raw, _flagstat, _stats, _idxstats -> raw }
+        .collect()
+    final_flagstat_files = mapping_stats
+        .map { _sample_id, _raw, flagstat, _stats, _idxstats -> flagstat }
+        .collect()
+    mapping_stats_files = mapping_stats
+        .map { _sample_id, _raw, _flagstat, stats, _idxstats -> stats }
+        .collect()
+    mapping_idxstats_files = mapping_stats
+        .map { _sample_id, _raw, _flagstat, _stats, idxstats -> idxstats }
+        .collect()
+    mapping_summary = MAPPING_SUMMARY(
+        channel.value(sample_ids),
+        raw_flagstat_files,
+        final_flagstat_files,
+        mapping_stats_files,
+        mapping_idxstats_files
+    )
+
+    // Coverage, calling and consensus only need the BAM and its index.
+    bam_for_analysis = bam_file.map { sample_id, bam, csi, _raw ->
+        tuple(sample_id, bam, csi)
+    }
+
     // Generate BED coverage
     include_bed = params.input.include_bed == null
         ? file("${projectDir}/assets/N1_FILE", checkIfExists: true)
@@ -176,7 +207,7 @@ workflow {
     exclude_bed = params.input.exclude_bed == null
         ? file("${projectDir}/assets/NO_FILE", checkIfExists: true)
         : file(params.input.exclude_bed, checkIfExists: true)
-    bed_coverage = GENERATE_COVERAGE(bam_file, include_bed, exclude_bed)
+    bed_coverage = GENERATE_COVERAGE(bam_for_analysis, include_bed, exclude_bed)
 
     // With coverage.on_empty="skip", an empty coverage BED removes the
     // sample before scattering.  The default "fail" mode is handled inside
@@ -209,7 +240,7 @@ workflow {
 
     // Join each sample's BAM, BAM index and interval chunks by sample_id. This
     // keeps all per-sample inputs coupled and avoids positional mixing.
-    bam_intervals = bam_file.join(intervals)
+    bam_intervals = bam_for_analysis.join(intervals)
 
     // Perform variant calling
     bcftools = selected_callers.contains('bcftools')

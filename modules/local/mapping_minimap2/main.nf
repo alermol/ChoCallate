@@ -15,7 +15,8 @@ process MAPPING_MINIMAP2 {
 
     output:
     tuple val(sample_id), path("mapping.bam"),
-        path("mapping.bam.csi"), emit: bam
+        path("mapping.bam.csi"),
+        path("mapping.raw.flagstat"), emit: bam
 
     script:
     def rmdup_mode = CLIParamsValidation.rmdup_mode(params.rmdup)
@@ -42,6 +43,21 @@ process MAPPING_MINIMAP2 {
     """
     set -o pipefail
 
+    # flagstat reads a copy of the aligner output before the post-processing
+    # filters, so the report keeps the true mapping rate. The trap stops the
+    # reader if the pipeline fails before tee opens the FIFO; otherwise the
+    # blocked reader could keep the task from finishing.
+    mkfifo tmp/raw.flagstat.fifo
+    samtools flagstat - > mapping.raw.flagstat < tmp/raw.flagstat.fifo &
+    raw_flagstat_pid=\$!
+    cleanup_flagstat() {
+        if [ -n "\$raw_flagstat_pid" ]; then
+            kill "\$raw_flagstat_pid" 2>/dev/null || true
+            wait "\$raw_flagstat_pid" 2>/dev/null || true
+        fi
+    }
+    trap cleanup_flagstat EXIT
+
     minimap2 \
         ${params.mapping.extra_args} \
         -ax sr \
@@ -50,6 +66,7 @@ process MAPPING_MINIMAP2 {
         "index/${index_prefix}.mmi" \
         ${reads} | \
     samtools view -u | \
+    tee tmp/raw.flagstat.fifo | \
     postprocess_bam.sh \
         --input - \
         --output mapping.bam \
@@ -61,5 +78,8 @@ process MAPPING_MINIMAP2 {
         --java-options "${java_options}" \
         ${rmdup} \
         ${left_align}
+
+    wait "\${raw_flagstat_pid}"
+    raw_flagstat_pid=''
     """
 }

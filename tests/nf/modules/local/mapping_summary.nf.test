@@ -1,0 +1,105 @@
+nextflow_process {
+
+    name "Test process MAPPING_SUMMARY"
+    script "../../../../modules/local/mapping_summary/main.nf"
+    process "MAPPING_SUMMARY"
+
+    test("collects raw and final statistics in sample order") {
+        setup {
+            def write = { String name, String text ->
+                def target = new File(launchDir, name)
+                target.parentFile.mkdirs()
+                target.text = text
+            }
+            ['sample1', 'sample2'].each { sample ->
+                write("input/raw/${sample}.raw.flagstat", '''\
+10 + 0 in total (QC-passed reads + QC-failed reads)
+10 + 0 primary
+0 + 0 secondary
+0 + 0 supplementary
+0 + 0 duplicates
+8 + 0 mapped (80.00% : N/A)
+10 + 0 paired in sequencing
+5 + 0 read1
+5 + 0 read2
+6 + 0 properly paired (60.00% : N/A)
+6 + 0 with itself and mate mapped
+1 + 0 singletons (10.00% : N/A)
+1 + 0 with mate mapped to a different chr
+''')
+                write("input/flagstat/${sample}.final.flagstat", '''\
+8 + 0 in total (QC-passed reads + QC-failed reads)
+8 + 0 primary
+0 + 0 secondary
+0 + 0 supplementary
+1 + 0 duplicates
+8 + 0 mapped (100.00% : N/A)
+8 + 0 paired in sequencing
+4 + 0 read1
+4 + 0 read2
+6 + 0 properly paired (75.00% : N/A)
+6 + 0 with itself and mate mapped
+0 + 0 singletons (0.00% : N/A)
+0 + 0 with mate mapped to a different chr
+''')
+                write("input/stats/${sample}.stats", '''\
+SN\traw total sequences:\t8
+SN\tsequences:\t8
+SN\treads MQ0:\t2
+SN\taverage length:\t150
+SN\taverage quality:\t36.5
+SN\tinsert size average:\t250.5
+SN\tinsert size standard deviation:\t20.1
+SN\terror rate:\t1.25e-03
+SN\tbases mapped (cigar):\t1200
+''')
+                write("input/idxstats/${sample}.idxstats", '''\
+chr1\t1000\t8\t0
+chr2\t500\t0\t0
+*\t0\t0\t0
+''')
+            }
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                }
+            }
+            process {
+                """
+                input[0] = ['sample2', 'sample1']
+                input[1] = files("${launchDir}/input/raw/*")
+                input[2] = files("${launchDir}/input/flagstat/*")
+                input[3] = files("${launchDir}/input/stats/*")
+                input[4] = files("${launchDir}/input/idxstats/*")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def summary = ChoCallateTestUtils.outputFile(
+                process.out[0][0]
+            )
+            assert summary.name == 'mapping_summary.tsv'
+            def lines = summary.readLines()
+            def header = lines[0].split('\t', -1)
+            def rows = lines.drop(1).collect { line ->
+                [header, line.split('\t', -1)].transpose().collectEntries()
+            }
+            assert lines.size() == 3
+            assert [rows[0]['sample'], rows[1]['sample']] ==
+                ['sample2', 'sample1']
+            def values = rows[0]
+            assert values['raw_mapped_pct'] == '80.00'
+            assert values['final_duplicate_pct'] == '12.50'
+            assert values['final_mq0_pct'] == '25.00'
+            assert values['contigs_with_reads'] == '1'
+            assert new File(
+                "${launchDir}/output/mapping_stats/mapping_summary.tsv"
+            ).isFile()
+        }
+    }
+}

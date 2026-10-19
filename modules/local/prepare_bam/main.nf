@@ -14,7 +14,8 @@ process PREPARE_BAM {
 
     output:
     tuple val(sample_id), path("mapping.bam"),
-        path("mapping.bam.csi"), emit: bam
+        path("mapping.bam.csi"),
+        path("mapping.raw.flagstat"), emit: bam
 
     script:
     def rmdup_mode = CLIParamsValidation.rmdup_mode(params.rmdup)
@@ -28,6 +29,11 @@ process PREPARE_BAM {
     def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
     """
     set -o pipefail
+
+    # Record the input BAM before MAPQ filtering and duplicate handling, so
+    # the raw report stays comparable with the mapping path.
+    samtools flagstat --threads ${task.cpus} \
+        tmp/read1 > mapping.raw.flagstat
 
     check_bam_reference.py tmp/read1 tmp/ref_genome.fasta.fai
 

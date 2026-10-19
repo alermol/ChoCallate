@@ -186,6 +186,27 @@ one per line, the samples that were removed from the run: samples whose
 every caller failed as well as samples with an empty coverage BED when
 `coverage.on_empty: "skip"` is set.
 
+Per-sample mapping statistics are published under
+`<output.directory>/mapping_stats/` for every sample that reached mapping:
+
+- `<sample_id>.raw.flagstat`: `samtools flagstat` of the aligner output
+  before MAPQ filtering and duplicate handling. For BAM input this is the
+  input BAM. It provides the mapping rate that the post-processing filters
+  would otherwise hide.
+- `<sample_id>.final.flagstat`, `<sample_id>.stats` and
+  `<sample_id>.idxstats`: `samtools flagstat`, `samtools stats` and
+  `samtools idxstats` of the final BAM consumed by coverage and calling.
+- `mapping_summary.tsv`: one row per samplesheet entry, in samplesheet order,
+  with alignment-record counts, raw mapped and properly paired fractions,
+  duplicate and MQ0 fractions, mean read length and MAPQ, insert size, error
+  rate and the number of contigs with mapped reads.
+
+Counts are alignment records: a paired-end read pair contributes two records.
+The raw report is taken before `bam_filter.min_map_qual` and `rmdup.mode` are
+applied, so `raw_mapped_pct` describes the mapper output rather than the
+filtered BAM. Statistics are reported even for samples that are later dropped
+by the coverage filter or a failed caller.
+
 Pipeline internals are always BCF. `GENERATE_CONSENSUS` writes one internal
 per-sample BCF, `ANNOTATE_HEADER` attaches the command-line header for
 per-sample output, `MERGE_OUTPUTS` writes an internal multi-sample BCF when

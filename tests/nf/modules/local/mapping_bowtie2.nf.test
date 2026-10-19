@@ -43,8 +43,13 @@ nextflow_process {
             def csi = ChoCallateTestUtils.outputFile(
                 process.out.bam[0][2]
             )
+            def raw = ChoCallateTestUtils.outputFile(
+                process.out.bam[0][3]
+            )
             assert bam.isFile()
             assert csi.isFile()
+            assert raw.isFile()
+            assert raw.readLines().any { it.contains('mapped') }
             assert ChoCallateTestUtils.bamRecords(bam) > 0
             def header = ChoCallateTestUtils.bamHeader(bam)
             assert header.contains('@RG')
