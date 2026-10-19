@@ -208,8 +208,7 @@ filtered BAM. Statistics are reported even for samples that are later dropped
 by the coverage filter or a failed caller.
 
 Pipeline internals are always BCF. `GENERATE_CONSENSUS` writes one internal
-per-sample BCF, `ANNOTATE_HEADER` attaches the command-line header for
-per-sample output, `MERGE_OUTPUTS` writes an internal multi-sample BCF when
+per-sample BCF, `MERGE_OUTPUTS` writes an internal multi-sample BCF when
 `output.type` is `"single"`, and `EXPORT_OUTPUT` is the only stage that applies
 `output.format`, `remove_invariant` and `split_multiallelic` and publishes the
 final file. A VCF output is bgzip-compressed (`.vcf.gz`).
@@ -233,7 +232,7 @@ Calling on fragmented coverage: GATK uses `calling.gatk.interval_padding` (defau
 
 Mapping and BAM input share `bin/postprocess_bam.sh`: aligner output is piped through `samtools view -u` as uncompressed BAM, then reads are coordinate-sorted and MAPQ-filtered (`bam_filter.min_map_qual`, default 10) after mate fixing and duplicate handling; when duplicate handling is disabled, the MAPQ filter runs before sorting. The post-processing CPU allocation is divided among its concurrent samtools stages, and each BAM is indexed once. `rmdup.mode` selects duplicate handling with `samtools markdup`: `none` leaves duplicates unflagged, `mark` (default) flags them without removing them, and `remove` flags and removes them from the BAM. The callers, mosdepth coverage and the consensus pileup already skip duplicate-flagged reads, so `mark` is sufficient for calling while keeping the reads available for inspection. The former `rmdup.enabled` key was replaced by `rmdup.mode`. Read groups include `PL` (`mapping.platform`, default `ILLUMINA`) and `LB` (`mapping.library`, default the sample id).
 
-Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,FilteredVote=abstain,ReferenceBlocks=True>`. `CallersFailed="..."` is added in degraded mode, `SamplesDropped="..."` lists samples that were removed entirely, and `MinCoverage=...` is added when `absent_vote` is `abstain`. The final output also records `##ChoCallateCommand="<full nextflow command>"`. The command line is read from the `NXF_CLI` runtime variable, not embedded in a task script, so changing launch options such as adding `-resume` does not invalidate cached consensus or merge tasks.
+Each consensus file carries one structured header line describing the applied rule, for example `##ChoCallate=<Version=4.0.0,Threshold=2,Callers="bcftools,gatk",Rule=two-stage,Tie=nocall,AbsentVote=ref,FilteredVote=abstain,ReferenceBlocks=True>`. `CallersFailed="..."` is added in degraded mode, `SamplesDropped="..."` lists samples that were removed entirely, and `MinCoverage=...` is added when `absent_vote` is `abstain`.
 
 Caller selection: `calling.callers` accepts any non-empty subset of `bcftools,freebayes,gatk`; names are trimmed and deduplicated. The configured order only affects the result when `consensus.tie_policy: "first"`; the default `nocall` policy is order-independent. Every caller retries transient failures (exit status 137 or 140) up to `resources.max_retries` times; any other failure terminates the run immediately. Set `calling.allow_caller_failure: true` to continue without a failed caller instead: a warning is logged, the header records the failed callers, and the run aborts if `consensus.threshold` exceeds the number of surviving callers. If every caller fails for a sample, that sample is dropped with a warning in degraded mode (and with an error otherwise); it is listed in `dropped_samples.txt` and in `SamplesDropped=` in the merged header.
 

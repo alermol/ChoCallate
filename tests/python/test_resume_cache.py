@@ -103,7 +103,7 @@ def test_resume_keeps_all_tasks_cached(tmp_path, output_type):
     statuses = {row['name']: row['status'] for row in rows}
     assert all(row['status'] == 'CACHED' for row in rows), statuses
     final_step = (
-        'MERGE_OUTPUTS' if output_type == 'single' else 'ANNOTATE_HEADER'
+        'MERGE_OUTPUTS' if output_type == 'single' else 'EXPORT_OUTPUT'
     )
     assert any(row['name'].startswith(final_step) for row in rows)
 
@@ -115,5 +115,4 @@ def test_resume_keeps_all_tasks_cached(tmp_path, output_type):
         [BCFTOOLS, 'view', '-h', str(output)],
         check=True, capture_output=True, text=True,
     ).stdout
-    assert '##ChoCallateCommand="' in header
-    assert 'main.nf' in header
+    assert '##ChoCallate=<' in header

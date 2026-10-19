@@ -59,7 +59,6 @@ nextflow_pipeline {
                 ['sample1']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -136,7 +135,6 @@ nextflow_pipeline {
                 ['sample1']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -195,7 +193,6 @@ nextflow_pipeline {
                 ['bam_sample']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -265,7 +262,6 @@ nextflow_pipeline {
             assert ChoCallateTestUtils.vcfSamples(vcf) == ['sample_se']
             def header = ChoCallateTestUtils.vcfHeader(vcf)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -335,7 +331,6 @@ nextflow_pipeline {
                 ['sample1']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -401,7 +396,6 @@ nextflow_pipeline {
                 ['sample1']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -479,7 +473,6 @@ nextflow_pipeline {
                 ['sample_c', 'sample_a', 'sample_b']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
@@ -553,7 +546,6 @@ nextflow_pipeline {
                 ['sample_a', 'sample_b']
             def header = ChoCallateTestUtils.vcfHeader(consensus)
             assert header.contains('##ChoCallate=<')
-            assert header.contains('##ChoCallateCommand=')
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )

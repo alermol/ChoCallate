@@ -175,8 +175,7 @@ else
         "$bcftools" index -f --csi "$bcf"
     done
 
-    # Only the structured metadata line belongs to the merge. The command
-    # line is attached to the final output by MERGE_OUTPUTS.
+    # Only the structured metadata line belongs to the merge.
     "$bcftools" view -h "$first" \
         | grep '^##ChoCallate=' > "$tmpdir/cho_meta.hdr" || true
 

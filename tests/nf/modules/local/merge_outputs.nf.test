@@ -71,7 +71,6 @@ nextflow_process {
                 '##contig=<ID=CP002684.1,length=200001>'
             )
             assert header.contains('##ChoCallate=<Version=test')
-            assert header.contains('##ChoCallateCommand=')
             assert ChoCallateTestUtils.recordCount(consensus) == 3
             assert snapshot(
                 ChoCallateTestUtils.statsLines(consensus)

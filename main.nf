@@ -15,7 +15,6 @@ include { CALLING_BCFTOOLS } from './modules/local/calling_bcftools'
 include { CALLING_FREEBAYES } from './modules/local/calling_freebayes'
 include { CALLING_GATK } from './modules/local/calling_gatk'
 include { GENERATE_CONSENSUS } from './modules/local/generate_consensus'
-include { ANNOTATE_HEADER } from './modules/local/annotate_header'
 include { MERGE_OUTPUTS } from './modules/local/merge_outputs'
 include { REPORT_DROPPED_SAMPLES } from './modules/local/report_dropped_samples'
 include { EXPORT_OUTPUT } from './modules/local/export_output'
@@ -349,16 +348,12 @@ workflow {
             ref_genome
         )
     } else {
-        // Per-sample output has no merge stage, so the command-line header is
-        // attached by a dedicated final step. Its script reads NXF_CLI at
-        // runtime and therefore stays cacheable across command-line changes.
         consensus_bcf = GENERATE_CONSENSUS.out.consensus_bcf
             .combine(dropped_report)
             .map { sample_id, bcf, _report -> tuple(sample_id, bcf) }
             .ifEmpty { error(all_dropped_message) }
-        annotated = ANNOTATE_HEADER(consensus_bcf)
         EXPORT_OUTPUT(
-            annotated,
+            consensus_bcf,
             ref_genome
         )
     }
