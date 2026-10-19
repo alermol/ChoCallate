@@ -63,7 +63,8 @@ def write_paired_bam(path):
     return path
 
 
-def run_helper(tmp_path, *args, env=None, threads=1, memory_mb=None):
+def run_helper(tmp_path, *args, env=None, threads=1, memory_mb=None,
+               reserve_mb=None):
     output = tmp_path / 'mapping.bam'
     command = [
         str(BIN_DIR / 'postprocess_bam.sh'),
@@ -74,6 +75,8 @@ def run_helper(tmp_path, *args, env=None, threads=1, memory_mb=None):
     ]
     if memory_mb is not None:
         command += ['--memory-mb', str(memory_mb)]
+    if reserve_mb is not None:
+        command += ['--reserve-mb', str(reserve_mb)]
     command += list(args)
     subprocess.run(command, check=True, cwd=str(tmp_path), env=env)
     return output
@@ -194,6 +197,35 @@ def test_sort_memory_comes_from_task_memory(tmp_path, extra_args, expected):
     ]
     assert sort_calls
     assert all(f'-m {expected}' in line for line in sort_calls)
+
+
+@pytest.mark.parametrize(
+    'extra_args,expected',
+    [([], '146M'),
+     (['--rmdup-mode', 'mark'], '256M'),
+     (['--rmdup-mode', 'remove'], '256M')],
+    ids=['sort', 'mark', 'remove'])
+def test_sort_memory_excludes_the_aligner_reserve(tmp_path, extra_args,
+                                                  expected):
+    write_paired_bam(tmp_path / 'in.bam')
+    env, log = write_stub_samtools(tmp_path)
+
+    run_helper(
+        tmp_path, *extra_args, threads=8, memory_mb=4096,
+        reserve_mb=2048, env=env)
+
+    sort_calls = [
+        line for line in log.read_text().splitlines()
+        if line.startswith('sort ')
+    ]
+    assert sort_calls
+    assert all(f'-m {expected}' in line for line in sort_calls)
+
+
+def test_postprocess_rejects_reserve_not_below_task_memory(tmp_path):
+    write_paired_bam(tmp_path / 'in.bam')
+    with pytest.raises(subprocess.CalledProcessError):
+        run_helper(tmp_path, threads=1, memory_mb=1024, reserve_mb=1024)
 
 
 @pytest.mark.parametrize(

@@ -63,8 +63,9 @@ def _params_file(tmp_path, output_type, index_dir):
 
 def _run(tmp_path, params_file, resume):
     # tests/nextflow.config disables nf-boost cleanup: the plugin deletes work
-    # files as soon as they are no longer needed, so cleanup and -resume cannot
-    # be combined. This test isolates cache-key stability from that limitation.
+    # files once no downstream process needs them, so cleanup and -resume
+    # cannot be combined. The pipeline exposes the observer as
+    # boost.cleanup, but this test isolates cache-key stability from cleanup.
     command = [
         NEXTFLOW, '-log', str(tmp_path / 'nextflow.log'),
         'run', str(PROJECT_ROOT / 'main.nf'),

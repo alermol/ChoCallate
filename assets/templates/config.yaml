@@ -123,6 +123,14 @@ mapping:
   # divides its share between its concurrent samtools stages.
   cpu: 10
 
+  # Memory (MiB) reserved in each aligner mapping task for the index and
+  # mapper working set, which stay resident while samtools sort runs in the
+  # same pipe. Sort receives half of the task memory that remains after this
+  # reserve. 0 estimates it from the staged index files plus 1 GiB; set it
+  # explicitly for large genomes when the aligner needs more than the index
+  # files suggest. The reserve must be smaller than the task memory.
+  aligner_reserve_mb: 0
+
   # Read-group PL value.
   platform: "ILLUMINA"
 
@@ -223,3 +231,13 @@ consensus:
 
   # Zygosity tie-breaker: "nocall" or "first".
   tie_policy: "nocall"
+
+boost:
+  # nf-boost work-directory cleanup observer. "v1" and "v2" delete the files
+  # of a completed task once no downstream process needs them; "v2" is the
+  # current observer.
+  # Deleted files cannot be reused, so cleanup and -resume are mutually
+  # exclusive: a resumed run re-executes every task whose files were removed.
+  # Set this to false to keep the work directory and let -resume reuse
+  # completed tasks.
+  cleanup: "v2"

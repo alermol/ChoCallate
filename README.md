@@ -121,6 +121,14 @@ Parameters are checked against `nextflow_schema.json` before the first task:
 invalid enum values, negative numbers, missing input files and unknown keys
 abort with the offending key and the accepted values.
 
+`boost.cleanup` (default `"v2"`) controls the nf-boost work-directory
+cleanup. The cleanup observers delete the files of a completed task once no
+downstream process needs them, and deleted files cannot be reused. A later
+`nextflow run ... -resume` therefore re-executes every task whose files were
+removed. Set `boost.cleanup: false` in the params file to keep the work
+directory and let `-resume` reuse completed tasks; `"v1"` and `"v2"` enable
+the corresponding cleanup observer.
+
 ## Resources
 
 Processes use the `process_low`, `process_medium` and `process_high` labels.
@@ -140,9 +148,18 @@ surviving callers. GNU parallel
 is started with `--halt now,fail=1` and its job log is inspected, so a
 SIGKILLed child (signal 9, exit 137, or the GATK launcher's 247) is reported
 as task exit 137 instead of a generic non-zero parallel status. Mapping tasks
-split `mapping.cpu` between the mapper
-and the concurrent BAM post-processing, and `samtools sort` receives half of
-the task memory split across its threads.
+split `mapping.cpu` between the mapper and the concurrent BAM
+post-processing. Because `samtools sort` runs in the same task while the
+mapper index is resident, it receives half of the task memory that remains
+after the aligner reserve, split across its threads. The reserve is
+`mapping.aligner_reserve_mb`; when it is 0 (the default), the pipeline
+estimates it from the staged index files plus 1 GiB. For large genomes the
+index dominates the task memory: leave the estimate in place or set the
+reserve explicitly (roughly 4 GiB for a human bowtie2 index, 6 GiB for BWA
+and 8 GiB or more for a minimap2 `.mmi`) and raise
+`resources.medium.memory_mb` so that the reserve, the sort buffer and the
+streaming stages fit together. A reserve that is not smaller than the task
+memory stops the task with a message naming both values.
 
 
 
@@ -216,8 +233,8 @@ final file. A VCF output is bgzip-compressed (`.vcf.gz`).
 `output.publish_mode` controls how those files are published: `copy` (default)
 writes independent copies, while `link` creates symbolic links into the
 Nextflow work directory. Linked files require the work directory to be retained
-(for example, disable `boost.cleanup`). Results are never moved out of the work
-directory, so `-resume` keeps working.
+(for example, with `boost.cleanup: false`). Results are never moved out of the
+work directory, so `-resume` keeps working.
 
 
 Consensus VCF/BCF records include `FORMAT/GT`, `AD`, and `DP` (AD/DP from BAM), plus site-level `INFO` tags (`AN`, `AC`, `AF`, `NS`, total `DP`, etc.). Details: [Output Structure](https://github.com/alermol/ChoCallate/wiki/Output-Structure).

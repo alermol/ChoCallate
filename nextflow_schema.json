@@ -231,6 +231,11 @@
                     "description": "CPUs per task, shared by mapper and sort.",
                     "minimum": 1
                 },
+                "aligner_reserve_mb": {
+                    "type": "integer",
+                    "description": "Memory in MiB reserved for the aligner index and working set before sort memory is derived. 0 estimates the reserve from the staged index files plus 1 GiB. The reserve must be smaller than the task memory.",
+                    "minimum": 0
+                },
                 "platform": {
                     "type": "string",
                     "description": "Read-group PL value.",
@@ -463,6 +468,19 @@
                 }
             },
             "required": ["threshold", "cpu"]
+        },
+        "boost": {
+            "type": "object",
+            "title": "nf-boost",
+            "description": "Work-directory cleanup performed by the nf-boost plugin.",
+            "properties": {
+                "cleanup": {
+                    "type": ["string", "boolean"],
+                    "description": "Cleanup observer for completed tasks: 'v1' or 'v2' delete work files as soon as no downstream process needs them, false keeps them so -resume can reuse the run.",
+                    "enum": ["v1", "v2", false]
+                }
+            },
+            "required": ["cleanup"]
         }
     }
 }

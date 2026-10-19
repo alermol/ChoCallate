@@ -32,8 +32,20 @@ process MAPPING_BOWTIE2 {
     def cpus = task.cpus as int
     def aligner_cpus = Math.max(1, (cpus + 1).intdiv(2))
     def postprocess_cpus = Math.max(1, cpus - aligner_cpus)
+    // The aligner index is resident while BAM post-processing runs in the
+    // same pipe. Reserve the staged index size plus 1 GiB for aligner and
+    // pipe buffers before sort receives half of the remaining task memory;
+    // mapping.aligner_reserve_mb overrides the estimate.
+    def reserve_mb = params.mapping.aligner_reserve_mb ?: 0
+    if (reserve_mb <= 0) {
+        def index_paths = index_files instanceof List
+            ? index_files : [index_files]
+        def index_bytes = index_paths.collect { it.size() }.sum() ?: 0
+        reserve_mb = index_bytes.intdiv(1048576) + 1024
+    }
     def memory_mb = task.memory ? task.memory.toMega() : 0
-    def memory_option = memory_mb > 0 ? "--memory-mb ${memory_mb}" : ''
+    def memory_option = memory_mb > 0
+        ? "--memory-mb ${memory_mb} --reserve-mb ${reserve_mb}" : ''
     def reads = params.input.reads_type == 'se' ? "-U tmp/read1" :
                 params.input.reads_type == 'pe' ? "-1 tmp/read1 -2 tmp/read2" :
                 params.input.reads_type == 'mx' ? "-1 tmp/read1 -2 tmp/read2 -U tmp/read3" : ''

@@ -11,7 +11,11 @@ Usage: postprocess_bam.sh --input BAM|-
   --mapq INT             Minimum mapping quality (default: 0)
   --threads INT          Worker threads, split across pipeline stages
                          (default: 1)
-  --memory-mb INT        Task memory in MiB (sort uses half)
+  --memory-mb INT        Task memory in MiB (sort uses half of the
+                         remainder after --reserve-mb)
+  --reserve-mb INT       Memory in MiB reserved for the aligner index
+                         and other co-resident processes; excluded
+                         before splitting sort memory (default: 0)
   --java-options OPTS    JVM options for GATK LeftAlignIndels
   --rmdup-mode MODE      Duplicate handling: none, mark or remove
                          (default: none)
@@ -27,6 +31,7 @@ dict=""
 mapq=0
 threads=1
 memory_mb=0
+reserve_mb=0
 java_options=""
 rmdup_mode="none"
 left_align=false
@@ -59,6 +64,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --memory-mb)
             memory_mb="$2"
+            shift 2
+            ;;
+        --reserve-mb)
+            reserve_mb="$2"
             shift 2
             ;;
         --java-options)
@@ -116,6 +125,15 @@ if [[ "$memory_mb" -lt 0 ]]; then
     echo "--memory-mb must be >= 0" >&2
     exit 2
 fi
+if [[ "$reserve_mb" -lt 0 ]]; then
+    echo "--reserve-mb must be >= 0" >&2
+    exit 2
+fi
+if [[ "$memory_mb" -gt 0 && "$reserve_mb" -ge "$memory_mb" ]]; then
+    echo "--reserve-mb ($reserve_mb) must be smaller than" \
+        "--memory-mb ($memory_mb)" >&2
+    exit 2
+fi
 
 tmpdir="$(mktemp -d -p "$PWD" .postprocess.XXXXXX)"
 cleanup() {
@@ -140,11 +158,14 @@ else
     sort_threads="$threads"
 fi
 
-# Half of the task memory is shared by the sorting threads; the rest is left
-# for the aligner or for the other BAM-processing stages.
+# The aligner index is resident while sort runs in the same mapping task.
+# Subtract the reserved memory first, then share half of the remainder
+# between the sorting threads and leave the rest for the aligner working set
+# and the other BAM-processing stages.
 sort_memory_mb=768
 if [[ "$memory_mb" -gt 0 ]]; then
-    sort_memory_mb=$(( memory_mb / 2 / sort_threads ))
+    available_mb=$(( memory_mb - reserve_mb ))
+    sort_memory_mb=$(( available_mb / 2 / sort_threads ))
     if [[ "$sort_memory_mb" -lt 1 ]]; then
         sort_memory_mb=1
     fi
