@@ -211,7 +211,9 @@ workflow {
     exclude_bed = params.input.exclude_bed == null
         ? file("${projectDir}/assets/NO_FILE", checkIfExists: true)
         : file(params.input.exclude_bed, checkIfExists: true)
-    bed_coverage = GENERATE_COVERAGE(bam_for_analysis, include_bed, exclude_bed)
+    bed_coverage = GENERATE_COVERAGE(
+        bam_for_analysis, include_bed, exclude_bed, fai_index
+    )
 
     // With coverage.on_empty="skip", an empty coverage BED removes the
     // sample before scattering.  The default "fail" mode is handled inside

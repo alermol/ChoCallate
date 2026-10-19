@@ -10,6 +10,7 @@ process GENERATE_COVERAGE {
     tuple val(sample_id), path("tmp/input.bam"), path("tmp/input.bam.csi")
     path(include_bed)
     path(exclude_bed)
+    path("tmp/ref_genome.fasta.fai")
 
     output:
     tuple val(sample_id), path("coverage.bed"), emit: coverage
@@ -23,15 +24,16 @@ process GENERATE_COVERAGE {
     def on_empty = params.coverage.on_empty ?: 'fail'
     def empty_message = "Sample ${sample_id}: coverage.bed is empty: " +
         "no region reaches coverage.min_coverage=${min_coverage}"
-    // UCSC track/browser header lines are not BED records and sort-bed
-    // rejects them when they follow a data line, so drop them first.
-    def strip_headers = 'awk \'!/^(track|browser)([[:space:]]|$)/\''
+    // sort-bed rejects track/browser lines and # comments. filter_bed.py
+    // drops them and rejects contigs that are not present in the reference
+    // .fai with an actionable error.
+    def filter_bed = 'filter_bed.py tmp/ref_genome.fasta.fai'
     def sort_include = include_bed.name != "N1_FILE"
-        ? "${strip_headers} \"${include_bed}\" | " +
+        ? "${filter_bed} \"${include_bed}\" | " +
             "sort-bed - > tmp/include.sorted.bed"
         : ""
     def sort_exclude = exclude_bed.name != "NO_FILE"
-        ? "${strip_headers} \"${exclude_bed}\" | " +
+        ? "${filter_bed} \"${exclude_bed}\" | " +
             "sort-bed - > tmp/exclude.sorted.bed"
         : ""
     """
