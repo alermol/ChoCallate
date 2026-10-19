@@ -108,23 +108,6 @@ fi
 
 first="${files[0]}"
 
-# Patch the first sample's structured header once; the merged header is
-# rebuilt from it, and a single-file merge keeps it unchanged otherwise.
-if [[ -n "$samples_dropped" ]]; then
-    "$bcftools" view -h "$first" > "$tmpdir/first.hdr"
-    awk -v dropped="$samples_dropped" \
-        '/^##ChoCallate=</ {
-            sub(/>$/, ",SamplesDropped=\"" dropped "\">")
-        } 1' \
-        "$tmpdir/first.hdr" > "$tmpdir/first.mod.hdr"
-    "$bcftools" reheader -h "$tmpdir/first.mod.hdr" \
-        -o "$tmpdir/first.bcf" "$first"
-    files[0]="$tmpdir/first.bcf"
-    printf '%s\n' "${files[@]}" > "$tmpdir/files.txt"
-    file_list="$tmpdir/files.txt"
-    first="${files[0]}"
-fi
-
 fill_tags="AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,DP:1=int(sum(FORMAT/DP))"
 output_flags=(-Ob -o "$output")
 if [[ "$format" == "vcf" ]]; then
@@ -165,6 +148,17 @@ output_stream() {
 }
 
 if [[ ${#files[@]} -eq 1 ]]; then
+    if [[ -n "$samples_dropped" ]]; then
+        "$bcftools" view -h "$first" > "$tmpdir/first.hdr"
+        awk -v dropped="$samples_dropped" \
+            '/^##ChoCallate=</ {
+                sub(/>$/, ",SamplesDropped=\"" dropped "\">")
+            } 1' \
+            "$tmpdir/first.hdr" > "$tmpdir/first.mod.hdr"
+        "$bcftools" reheader -h "$tmpdir/first.mod.hdr" \
+            -o "$tmpdir/first.bcf" "$first"
+        first="$tmpdir/first.bcf"
+    fi
     "$bcftools" view --threads "$cpus" -Ou "$first" \
         | invariant_stream \
         | join_stream \
@@ -175,9 +169,13 @@ else
         "$bcftools" index -f --csi "$bcf"
     done
 
-    # Only the structured metadata line belongs to the merge.
-    "$bcftools" view -h "$first" \
-        | grep '^##ChoCallate=' > "$tmpdir/cho_meta.hdr" || true
+    # Aggregate the structured metadata of every sample so that per-sample
+    # caller failures are not reduced to the first sample's provenance.
+    "$python" "$script_dir/merge_cho_headers.py" \
+        --file-list "$file_list" \
+        --bcftools "$bcftools" \
+        --samples-dropped "$samples_dropped" \
+        > "$tmpdir/cho_meta.hdr"
 
     "$python" "$script_dir/merge_bcf_tree.py" \
         --gvcf "$reference" \

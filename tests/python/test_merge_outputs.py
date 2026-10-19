@@ -80,6 +80,37 @@ def build_two_samples(tmp_path, use_accel, compress_reference_blocks=False):
     return sample_files, reference
 
 
+def build_degraded_samples(tmp_path, use_accel):
+    """Per-sample BCFs where each sample lost a different caller."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'ref{start}', start, REF_SEQ[start:start + 10])
+             for start in range(19, 30)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 32)])
+
+    configured = ['bcftools', 'freebayes', 'gatk']
+    surviving = {
+        'sampleA': ['bcftools', 'gatk'],
+        'sampleB': ['bcftools', 'freebayes'],
+    }
+    sample_files = {}
+    for sample, callers in surviving.items():
+        caller_bcfs = [
+            write_caller_bcf(
+                tmp_path / f'{sample}_{caller}.bcf', sample, [])
+            for caller in callers
+        ]
+        sample_files[sample] = run_consensus(
+            tmp_path, bam, bed_gz, caller_bcfs, threshold=1,
+            sample_name=sample, callers=callers,
+            configured_callers=configured, use_accel=use_accel,
+            output_name=f'{sample}.bcf', reference=reference)
+        subprocess.run(
+            [BCFTOOLS, 'index', '--csi', str(sample_files[sample])],
+            check=True)
+    return sample_files, reference
+
+
 def merge_chain(tmp_path, sample_files, reference, remove_invariant,
                 split_multiallelic=False, output_format='bcf', cpus=1,
                 samples_dropped=None):
@@ -254,6 +285,29 @@ def test_merged_output_has_metadata_line(tmp_path, use_accel):
         header = str(variant_file.header)
     assert '##ChoCallate=' in header
     assert 'Rule=two-stage' in header
+    assert header.count('##ChoCallate=') == 1
+    assert '##ChoCallateSamples=' not in header
+
+
+def test_merged_header_aggregates_degraded_callers(tmp_path, use_accel):
+    """Merged provenance keeps every sample's failed callers."""
+    sample_files, reference = build_degraded_samples(tmp_path, use_accel)
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False)
+    with pysam.VariantFile(str(merged), index_filename=None) as variant_file:
+        lines = str(variant_file.header).splitlines()
+    cho = [line for line in lines if line.startswith('##ChoCallate=<')]
+    per_sample = [line for line in lines
+                  if line.startswith('##ChoCallateSamples=<')]
+    assert len(cho) == 1
+    assert 'Callers="bcftools,gatk,freebayes"' in cho[0]
+    assert cho[0].endswith('CallersFailed="freebayes,gatk">')
+    assert per_sample == [
+        '##ChoCallateSamples=<Sample=sampleA,Callers="bcftools,gatk",'
+        'CallersFailed="freebayes">',
+        '##ChoCallateSamples=<Sample=sampleB,Callers="bcftools,freebayes",'
+        'CallersFailed="gatk">',
+    ]
 
 
 def test_merged_header_records_dropped_samples(tmp_path, use_accel):
