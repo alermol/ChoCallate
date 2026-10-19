@@ -35,8 +35,8 @@ process MERGE_OUTPUTS {
         --reference tmp/ref_genome.fasta \
         --output consensus.bcf \
         --format bcf \
-        --split-multiallelic \\
-        --cpus ${task.cpus} \\
+        --split-multiallelic \
+        --cpus ${task.cpus} \
         ${dropped_arg}
     """
 }
