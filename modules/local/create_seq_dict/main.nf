@@ -13,7 +13,9 @@ process CREATE_SEQ_DICT {
     script:
     def heap_option = ResourceUtils.javaHeapOption(task.memory)
     """
-    gatk CreateSequenceDictionary --java-options "${heap_option}" \
+    gatk CreateSequenceDictionary \
+        --java-options "-Djava.io.tmpdir=\$TMPDIR ${heap_option}" \
+        --TMP_DIR "\$TMPDIR" \
         -R tmp/ref_genome.fasta -O ref_genome.dict
     """
 }

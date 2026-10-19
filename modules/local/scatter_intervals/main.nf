@@ -36,7 +36,9 @@ process SCATTER_INTERVALS {
     dir=\${1%/*}
     stem=\${1##*/}
     stem=\${stem%.*}
-    gatk IntervalListToBed --java-options "${parallel_heap_option}" \
+    gatk IntervalListToBed \
+        --java-options "-Djava.io.tmpdir=\$TMPDIR ${parallel_heap_option}" \
+        --TMP_DIR "\$TMPDIR" \
         -I "\$1" -O "\$dir/\$stem.bed.tmp"
     cut -f 1-3 "\$dir/\$stem.bed.tmp" > "chunks/\$stem.bed"
     rm -f "\$1" "\$dir/\$stem.bed.tmp"
