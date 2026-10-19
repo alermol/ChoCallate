@@ -91,6 +91,7 @@ workflow {
             ['.mmi']
         ]
     ]
+    def index_files = channel.empty()
     if (params.input.format != 'bam') {
         def mapper = params.mapping.mapper
         def index_dir = params.input.reference_index_dir
