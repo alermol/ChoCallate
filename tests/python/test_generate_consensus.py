@@ -1025,6 +1025,53 @@ def test_accel_and_pure_paths_agree(tmp_path):
     assert (54, (ref_base(54), alt_base(54)), (0, 1)) in records
 
 
+def test_accel_and_pure_paths_agree_on_deletion_overlap_ad(tmp_path):
+    """A deletion does not hide the other mate's zero-quality base.
+
+    Each mate pair overlaps at a deleted base: one mate deletes it and the
+    other reads a reference base with quality 0.  The deletion is still one
+    observation, but it is not an allele, so reference AD must count the base.
+    The BAM lists the deletion first in one pair and last in the other, which
+    previously made the C tally and the pure fallback disagree.
+    """
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [
+        # deletion before the zero-quality base at 0-based position 21
+        ('del_first', 19, REF_SEQ[19:21] + REF_SEQ[22:24],
+         ((0, 2), (2, 1), (0, 2)), 0, 'IIII'),
+        ('del_first', 19, REF_SEQ[19:24], ((0, 5),), 0, 'II!II'),
+        # zero-quality base before the deletion at 0-based position 26
+        ('base_first', 24, REF_SEQ[24:29], ((0, 5),), 0, 'II!II'),
+        ('base_first', 24, REF_SEQ[24:26] + REF_SEQ[27:29],
+         ((0, 2), (2, 1), (0, 2)), 0, 'IIII'),
+    ]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [(CHR, 19, 29)])
+    caller_bcfs = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [])]
+
+    pure = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=1, use_accel=False,
+        output_name='pure.bcf', reference=reference)
+    accel = run_consensus(
+        tmp_path, bam, bed_gz, caller_bcfs, threshold=1, use_accel=True,
+        output_name='accel.bcf', reference=reference)
+
+    def text(path):
+        return subprocess.run([BCFTOOLS, 'view', '-H', str(path)],
+                              check=True, capture_output=True,
+                              text=True).stdout
+
+    assert text(pure) == text(accel)
+    records = {pos: (alleles, ad, dp)
+               for pos, alleles, _, ad, dp in read_records_full(pure)}
+    # 1-based 22 and 27 are the deleted bases; AD is (reference, <*>).
+    for pos in (22, 27):
+        assert records[pos] == ((ref_base(pos), '<*>'), (1, 0), 1)
+
+
 def test_accel_import_failure_falls_back(monkeypatch, capsys):
     """A binary-incompatible extension warns and uses pure pysam."""
     import builtins

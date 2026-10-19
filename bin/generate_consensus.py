@@ -652,10 +652,9 @@ def reference_support(column, ref_base):
 
     Returns:
         (depth, number of collapsed reads supporting the reference base, number
-        of collapsed observations that have an allele at this position).  Depth
-        is the number of collapsed observations, matching the mosdepth coverage
-        BED; the last value feeds the ``<*>`` AD slot.  Reference skips are not
-        observations.
+        of collapsed observations).  Depth is the number of collapsed
+        observations, matching the mosdepth coverage BED; the last value feeds
+        the ``<*>`` AD slot.  Reference skips are not observations.
     """
     names = column.get_query_names()
     if not names:
@@ -684,12 +683,18 @@ def _collapsed_support(names, seqs, quals, ref_base):
     Returns:
         (number of reads supporting the reference base, number of collapsed
         observations).  Reads with a base, an insertion or a deletion at the
-        position are one observation each; reference skips are ignored.
+        position are one observation each; reference skips are ignored.  A
+        deletion is not an allele, so an overlapping mate's base or insertion
+        is always preferred over it.
     """
     best = {}
+    observations = set()
     for i, name in enumerate(names):
         seq = seqs[i]
         if seq == '>' or seq == '<':
+            continue
+        observations.add(name)
+        if seq == '*':
             continue
         qual = quals[i]
         if qual == 255:
@@ -702,7 +707,7 @@ def _collapsed_support(names, seqs, quals, ref_base):
     for _, seq in best.values():
         if seq == ref_base or seq == ref_lower:
             support += 1
-    return support, len(best)
+    return support, len(observations)
 
 
 class ColumnWalker:

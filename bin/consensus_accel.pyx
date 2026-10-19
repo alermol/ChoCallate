@@ -10,7 +10,8 @@ pure-pysam implementation, so the pipeline keeps working from a plain checkout.
     the current column of a pysam pileup iterator directly from the htslib
     pileup buffer.  This mirrors ``build_pileup_site``'s overlap handling: one
     observation per query name, highest base quality wins (ties keep the first
-    observation), so DP matches the overlap-corrected mosdepth coverage BED.
+    observation), and a deletion is an observation without an allele, so DP
+    matches the overlap-corrected mosdepth coverage BED.
 
 ``BcfLineWriter``
     Writes records from VCF text lines through htslib's ``vcf_parse`` +
@@ -49,6 +50,8 @@ from pysam.libchtslib cimport (
 )
 
 DEF MISSING_QUAL = 0xff
+# Collapsed-observation state for a deletion: counted in DP, never an allele.
+DEF NO_ALLELE = 2
 # Table slots above this are refused; the caller falls back to the Python path.
 DEF MAX_TABLE_SLOTS = 1 << 21
 
@@ -77,6 +80,7 @@ cdef class PileupTally:
     cdef size_t cap
     cdef uint64_t *hashes
     cdef char **qnames
+    cdef uint32_t *name_lens
     cdef uint32_t *best_q
     cdef uint8_t *is_ref
     cdef uint32_t *epoch
@@ -89,6 +93,7 @@ cdef class PileupTally:
         self.cap = 0
         self.hashes = NULL
         self.qnames = NULL
+        self.name_lens = NULL
         self.best_q = NULL
         self.is_ref = NULL
         self.epoch = NULL
@@ -99,6 +104,7 @@ cdef class PileupTally:
     def __dealloc__(self):
         free(self.hashes)
         free(self.qnames)
+        free(self.name_lens)
         free(self.best_q)
         free(self.is_ref)
         free(self.epoch)
@@ -112,16 +118,19 @@ cdef class PileupTally:
             new_cap <<= 1
         free(self.hashes)
         free(self.qnames)
+        free(self.name_lens)
         free(self.best_q)
         free(self.is_ref)
         free(self.epoch)
         self.hashes = <uint64_t *>malloc(new_cap * sizeof(uint64_t))
         self.qnames = <char **>malloc(new_cap * sizeof(char *))
+        self.name_lens = <uint32_t *>malloc(new_cap * sizeof(uint32_t))
         self.best_q = <uint32_t *>malloc(new_cap * sizeof(uint32_t))
         self.is_ref = <uint8_t *>malloc(new_cap * sizeof(uint8_t))
         self.epoch = <uint32_t *>malloc(new_cap * sizeof(uint32_t))
         self.cap = 0
-        if (self.hashes is NULL or self.qnames is NULL or self.best_q is NULL
+        if (self.hashes is NULL or self.qnames is NULL
+                or self.name_lens is NULL or self.best_q is NULL
                 or self.is_ref is NULL or self.epoch is NULL):
             raise MemoryError()
         memset(self.epoch, 0, new_cap * sizeof(uint32_t))
@@ -213,11 +222,11 @@ cdef class PileupTally:
         lower it to exercise the fallback without a million-read column.
 
         ``dp`` is the number of collapsed observations and equals ``n_obs``:
-        one per distinct query name with an allele at the column (base,
-        insertion or deletion), excluding reference skips.  This matches the
-        overlap-corrected mosdepth coverage BED.  ``n_ref`` counts those
-        observations whose collapsed allele is the plain reference base, so
-        ``dp - n_ref`` is the ``<*>`` (other-allele) depth.
+        one per distinct query name that is not a reference skip.  This
+        matches the overlap-corrected mosdepth coverage BED.  A deletion is an
+        observation without an allele, so an overlapping mate's allele always
+        wins over it.  ``n_ref`` counts observations whose collapsed allele is
+        the plain reference base, so ``dp - n_ref`` is the ``<*>`` depth.
         """
         cdef int n = self.it.n_plp
         cdef const bam_pileup1_t *start = self.it.plp
@@ -227,7 +236,9 @@ cdef class PileupTally:
         cdef uint64_t h
         cdef size_t slot, mask
         cdef char *qname
-        cdef int l_qname, qpos, i, n_ref = 0, n_obs = 0, is_match
+        cdef uint32_t l_qname
+        cdef int qpos, i, n_ref = 0, n_obs = 0, is_match
+        cdef int prev_state
         cdef char base
 
         if n > (max_slots >> 1):
@@ -249,9 +260,9 @@ cdef class PileupTally:
                 continue
             qpos = p.qpos
             if p.is_del or qpos < 0:
-                # a deletion at this position is an observation that does not
-                # support the reference base
-                is_match = 0
+                # a deletion is an observation but never an allele: any base
+                # or insertion from an overlapping mate replaces it
+                is_match = NO_ALLELE
                 qual = 0
             else:
                 base = seq_nt16_str[bam_seqi(bam_get_seq(p.b), qpos)]
@@ -265,10 +276,19 @@ cdef class PileupTally:
             slot = <size_t>h & mask
             while self.epoch[slot] == epoch:
                 if (self.hashes[slot] == h
-                        and memcmp(self.qnames[slot], qname, l_qname) == 0):
+                        and self.name_lens[slot] == l_qname
+                        and memcmp(self.qnames[slot], qname,
+                                   l_qname) == 0):
+                    prev_state = self.is_ref[slot]
                     prev_q = self.best_q[slot]
-                    if qual > prev_q:
-                        n_ref -= self.is_ref[slot]
+                    if prev_state == NO_ALLELE:
+                        if is_match != NO_ALLELE:
+                            self.is_ref[slot] = is_match
+                            self.best_q[slot] = qual
+                            n_ref += is_match
+                    elif (is_match != NO_ALLELE
+                            and qual > prev_q):
+                        n_ref -= prev_state
                         self.best_q[slot] = qual
                         self.is_ref[slot] = is_match
                         n_ref += is_match
@@ -278,9 +298,11 @@ cdef class PileupTally:
                 self.epoch[slot] = epoch
                 self.hashes[slot] = h
                 self.qnames[slot] = qname
+                self.name_lens[slot] = l_qname
                 self.best_q[slot] = qual
                 self.is_ref[slot] = is_match
-                n_ref += is_match
+                if is_match != NO_ALLELE:
+                    n_ref += is_match
                 n_obs += 1
         return (n_obs, n_ref, n_obs)
 
