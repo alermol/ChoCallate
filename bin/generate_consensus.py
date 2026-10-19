@@ -196,11 +196,18 @@ class CallerCursor:
             return _NO_RECORD
         return self._head.pos
 
-    def skip_before(self, pos1):
-        """Discard records that start before 1-based ``pos1``."""
+    def skip_before(self, pos1, on_skip=None):
+        """Discard records that start before 1-based ``pos1``.
+
+        ``on_skip`` is called with every discarded record.  A deletion
+        anchored before ``pos1`` can still cover it, so the caller inspects
+        the discarded records before they are lost.
+        """
         head = self._head
         iterator = self._iterator
         while head is not None and head.pos < pos1:
+            if on_skip is not None:
+                on_skip(head)
             head = next(iterator, None)
         self._head = head
 
@@ -276,6 +283,52 @@ def genotype_key(records, ref_base, filtered_vote='abstain'):
             return (ref_base, {}, ploidy)
         return None
     return (ref_base, alt_copies, ploidy)
+
+
+def supported_deletion_spans(record, minimum_pos, filtered_vote='abstain'):
+    """REF spans of the deletion alleles a caller record carries.
+
+    A record whose POS lies before a BED chunk is still fetched when its REF
+    span overlaps the chunk.  The previous chunk already voted on it, but the
+    cursor would discard it before the walk reaches the covered positions.
+    Returning the spans lets the caller carry the deletion suppression across
+    the chunk boundary.
+
+    Args:
+        record: pysam.VariantRecord.
+        minimum_pos: 1-based position that a REF span must reach.
+        filtered_vote: Vote policy for filtered records.  A filtered record
+            supplies no ALT copies under either policy, because ``ref`` turns
+            it into a reference vote.
+
+    Returns:
+        List of ``(REF, ALT, span_end)`` tuples for the deletion alleles the
+        genotype carries.  ``span_end`` is the 1-based inclusive end of the
+        record's REF span.  Empty when the record does not reach
+        ``minimum_pos`` or carries no usable deletion allele.
+    """
+    if record.stop < minimum_pos:
+        return []
+    key = genotype_key([record], '', filtered_vote)
+    if key is None:
+        return []
+    _, copies, _ = key
+    return [(ref, alt, record.stop)
+            for ref, alt in copies if len(ref) > len(alt)]
+
+
+def note_deletion_support(record, minimum_pos, caller_index, support,
+                          filtered_vote):
+    """Add one caller's boundary-crossing deletions to the support map.
+
+    ``support`` maps ``(POS, REF, ALT, span_end)`` to the set of caller
+    indexes carrying the allele, so the site-level consensus threshold can be
+    applied without retaining the records.
+    """
+    for ref, alt, span_end in supported_deletion_spans(
+            record, minimum_pos, filtered_vote):
+        support.setdefault((record.pos, ref, alt, span_end), set()).add(
+            caller_index)
 
 
 def _zygosity(key, allele):
@@ -957,11 +1010,33 @@ def main():
                             # overlaps the span start, moved past some caller
                             # records
                             min_next = _NO_RECORD
-                            for cursor in cursors:
-                                cursor.skip_before(vcf_start)
+                            # A deletion anchored in the previous BED chunk is
+                            # fetched here because its REF span overlaps this
+                            # chunk, but its POS is before the chunk start.
+                            # Seed its span before the cursors discard the
+                            # record, so reference records are not written
+                            # over bases the previous chunk called deleted.
+                            # Records skipped inside a BED gap are not seeded:
+                            # no earlier interval wrote their deletion record.
+                            seed_deletions = vcf_start == span_start + 1
+                            deletion_support = {}
+                            for fi, cursor in enumerate(cursors):
+                                if seed_deletions:
+                                    cursor.skip_before(
+                                        vcf_start,
+                                        lambda record, fi=fi: (
+                                            note_deletion_support(
+                                                record, vcf_start, fi,
+                                                deletion_support,
+                                                filtered_vote)))
+                                else:
+                                    cursor.skip_before(vcf_start)
                                 position = cursor.position()
                                 if position < min_next:
                                     min_next = position
+                            for key, supporters in deletion_support.items():
+                                if len(supporters) >= threshold:
+                                    deletion_end = max(deletion_end, key[3])
 
                         if min_next != vcf_start:
                             # fast path: no caller record here.  With

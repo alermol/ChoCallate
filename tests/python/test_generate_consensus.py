@@ -616,6 +616,95 @@ def test_deletion_does_not_duplicate_or_skip_interval_boundaries(
     assert span_positions(read_spans(output)) == [20, 21, 22, 23, 24]
 
 
+def _run_chunked_deletion(tmp_path, use_accel, caller_records,
+                          threshold=2, filtered_vote='abstain',
+                          compress_reference_blocks=False):
+    """Run two independent BED chunks around a deletion at POS 20.
+
+    Chunk A covers 16..20 and evaluates the deletion anchored at POS 20;
+    chunk B covers 21..25 in a separate process.  Returns both outputs.
+    """
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    caller_bcfs = []
+    for index, records in enumerate(caller_records):
+        caller_bcfs.append(write_caller_bcf(
+            tmp_path / f'caller{index}.bcf', 'sample1', records))
+    chunk_a = write_bed(tmp_path / 'chunk_a.bed',
+                        [('chr1', POS_20_0B - 4, POS_20_0B + 1)])
+    chunk_b = write_bed(tmp_path / 'chunk_b.bed',
+                        [('chr1', POS_20_0B + 1, POS_20_0B + 6)])
+    outputs = []
+    for name, bed_gz in (('a', chunk_a), ('b', chunk_b)):
+        outputs.append(run_consensus(
+            tmp_path, bam, bed_gz, caller_bcfs, threshold,
+            use_accel=use_accel, reference=reference,
+            filtered_vote=filtered_vote,
+            compress_reference_blocks=compress_reference_blocks,
+            output_name=f'chunk_{name}.bcf'))
+    return outputs
+
+
+@pytest.mark.parametrize('compress', [False, True])
+def test_deletion_span_survives_chunk_boundary(tmp_path, use_accel, compress):
+    """A deletion crossing a chunk boundary suppresses the next chunk's
+    reference records.
+
+    The second chunk fetches the deletion because its REF span overlaps the
+    chunk, but skips it because its POS is before the chunk start.  Without
+    seeding the span, the chunk writes ``<*>`` records over the deleted bases
+    in addition to the deletion record written by the first chunk.
+    """
+    deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
+    deletion_alt = REF_SEQ[POS_20_0B].upper()
+    record = (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))
+    first, second = _run_chunked_deletion(
+        tmp_path, use_accel, [[record], [record]],
+        compress_reference_blocks=compress)
+    first_spans = read_spans(first)
+    second_spans = read_spans(second)
+    assert any(span[:4] == (20, 23, (deletion_ref, deletion_alt), (0, 1))
+               for span in first_spans)
+    assert span_positions(second_spans) == [24, 25]
+    # The deletion record represents 20..23, so every chunk base is covered
+    # exactly once with no contradictory hom-reference call.
+    assert span_positions(first_spans + second_spans) == list(range(16, 26))
+
+
+def test_boundary_deletion_below_threshold_keeps_references(
+        tmp_path, use_accel):
+    """A skipped deletion with too little support must not suppress sites.
+
+    The first chunk cannot call the deletion, so the second chunk must keep
+    writing reference records: otherwise the deleted bases would disappear
+    from the all-sites output without a deletion record covering them.
+    """
+    deletion_ref = REF_SEQ[POS_20_0B:POS_20_0B + 4].upper()
+    deletion_alt = REF_SEQ[POS_20_0B].upper()
+    record = (POS_20_0B, deletion_ref, [deletion_alt], (0, 1))
+    _, second = _run_chunked_deletion(
+        tmp_path, use_accel, [[record], []], threshold=2)
+    assert [start for start, *_ in read_spans(second)] == list(range(21, 26))
+
+
+@pytest.mark.parametrize('record,filtered_vote', [
+    ((POS_20_0B, REF_SEQ[POS_20_0B:POS_20_0B + 4].upper(),
+      [REF_SEQ[POS_20_0B].upper()], (0, 0)), 'abstain'),
+    ((POS_20_0B, REF_SEQ[POS_20_0B:POS_20_0B + 4].upper(),
+      [REF_SEQ[POS_20_0B].upper()], (0, 1), None, 'LowQual'), 'abstain'),
+    ((POS_20_0B, REF_SEQ[POS_20_0B:POS_20_0B + 4].upper(),
+      [REF_SEQ[POS_20_0B].upper()], (0, 1), None, 'LowQual'), 'ref'),
+], ids=['hom-ref-gt', 'filtered-abstain', 'filtered-ref'])
+def test_boundary_deletion_respects_gt_and_filter(tmp_path, use_accel,
+                                                  record, filtered_vote):
+    """A skipped record without usable ALT support does not suppress sites."""
+    _, second = _run_chunked_deletion(
+        tmp_path, use_accel, [[record], [record]],
+        filtered_vote=filtered_vote)
+    assert [start for start, *_ in read_spans(second)] == list(range(21, 26))
+
+
 def _caller_record(ref, alts, gt):
     """Minimal pysam.VariantRecord stand-in for genotype_key tests."""
     from types import SimpleNamespace
