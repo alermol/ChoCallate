@@ -239,12 +239,13 @@
                 },
                 "platform": {
                     "type": "string",
-                    "description": "Read-group PL value.",
-                    "minLength": 1
+                    "description": "Read-group PL value. Accepted characters: letters, digits, underscore, dot, colon and hyphen.",
+                    "pattern": "^[A-Za-z0-9_.:-]+$"
                 },
                 "library": {
                     "type": ["string", "null"],
-                    "description": "Read-group LB value. Defaults to the sample id."
+                    "description": "Read-group LB value. Defaults to the sample id. Accepted characters: letters, digits, underscore, dot, colon and hyphen.",
+                    "pattern": "^[A-Za-z0-9_.:-]+$"
                 }
             }
         },

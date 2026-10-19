@@ -216,6 +216,44 @@ def test_unsafe_sample_id_is_rejected(tmp_path):
     assert "not shell-safe" in _output(result)
 
 
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("platform", 'ILLUMINA"'),
+        ("platform", "ILLUMINA SM"),
+        ("library", 'lib"ary'),
+        ("library", "lib ary"),
+        ("library", "lib\\ary"),
+    ],
+)
+def test_unsafe_read_group_values_are_rejected(tmp_path, key, value):
+    _prepare_inputs(tmp_path)
+    params = _config(tmp_path, overrides={"mapping": {key: value}})
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    assert "--mapping.{}".format(key) in output
+    assert "does not match regular expression" in output
+    assert "^[A-Za-z0-9_.:-]+$" in output
+
+
+@pytest.mark.parametrize("key", ["platform", "library"])
+def test_read_group_value_with_line_terminator_is_rejected(tmp_path, key):
+    _prepare_inputs(tmp_path)
+    params = _config(
+        tmp_path, overrides={"mapping": {key: "value\n"}}
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    assert "mapping.{}".format(key) in output
+    assert "not safe for a SAM read group" in output
+
+
 def test_wrong_samplesheet_width_is_rejected(tmp_path):
     samplesheet = _prepare_inputs(
         tmp_path,

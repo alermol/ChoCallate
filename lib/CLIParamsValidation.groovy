@@ -12,6 +12,7 @@ class CLIParamsValidation {
     static final List<String> AVAILABLE_CALLERS =
         ['bcftools', 'freebayes', 'gatk']
     static final String SAMPLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/
+    static final String READ_GROUP_PATTERN = /^[A-Za-z0-9_.:-]+$/
 
     // Caller options that select ploidy or copy number.  A true value means
     // that an explicit diploid setting (2) is accepted; a false value means
@@ -94,6 +95,30 @@ class CLIParamsValidation {
                 "input.reads_type: 'mx' is only supported with " +
                 "mapping.mapper 'bowtie2' (got '${mapper}')"
             )
+        }
+    }
+
+    /**
+     * Rejects read-group values that are unsafe in the mapper command line
+     * or in the SAM header.
+     *
+     * The schema applies the same pattern, but JSON Schema pattern matching
+     * can accept a trailing line terminator.  A full-string match keeps
+     * values such as `platform: "ILLUMINA\n"` out of the @RG tag.
+     */
+    static void read_group_validation(Map mapping) {
+        def values = [
+            'mapping.platform': mapping?.platform ?: 'ILLUMINA',
+            'mapping.library': mapping?.library
+        ]
+        values.each { key, value ->
+            if (value != null && !(value ==~ READ_GROUP_PATTERN)) {
+                fail(
+                    "${key}: '${value}' is not safe for a SAM read group; " +
+                    'accepted characters are letters, digits, underscore, ' +
+                    'dot, colon and hyphen'
+                )
+            }
         }
     }
 

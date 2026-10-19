@@ -132,10 +132,12 @@ mapping:
   # files suggest. The reserve must be smaller than the task memory.
   aligner_reserve_mb: 0
 
-  # Read-group PL value.
+  # Read-group PL value. Accepted characters: letters, digits, "_", ".",
+  # ":" and "-".
   platform: "ILLUMINA"
 
-  # Read-group LB value. null uses the sample id.
+  # Read-group LB value. null uses the sample id. Accepted characters:
+  # letters, digits, "_", ".", ":" and "-".
   library: null
 
 bam_filter:
