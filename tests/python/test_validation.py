@@ -168,7 +168,19 @@ def test_negative_integer_is_rejected(tmp_path):
     assert result.returncode != 0
     output = _output(result)
     assert "--coverage.min_coverage" in output
-    assert "-1 is less than 0" in output
+    assert "-1 is less than 1" in output
+
+
+def test_zero_min_coverage_is_rejected(tmp_path):
+    _prepare_inputs(tmp_path)
+    params = _config(tmp_path, overrides={"coverage": {"min_coverage": 0}})
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    output = _output(result)
+    assert "--coverage.min_coverage" in output
+    assert "0 is less than 1" in output
 
 
 def test_unknown_nested_parameter_is_rejected(tmp_path):

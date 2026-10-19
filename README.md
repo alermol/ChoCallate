@@ -118,8 +118,8 @@ documents its accepted values, so a run only needs to override the values that
 differ. There is no separate command-line help.
 
 Parameters are checked against `nextflow_schema.json` before the first task:
-invalid enum values, negative numbers, missing input files and unknown keys
-abort with the offending key and the accepted values.
+invalid enum values, values below the accepted minimum, missing input files
+and unknown keys abort with the offending key and the accepted values.
 
 `boost.cleanup` (default `"v2"`) controls the nf-boost work-directory
 cleanup. The cleanup observers delete the files of a completed task once no

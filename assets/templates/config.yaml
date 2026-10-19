@@ -157,6 +157,7 @@ left_align_indels:
 
 coverage:
   # Minimum depth for a base to enter the coverage BED and consensus.
+  # Must be at least 1; zero-depth positions are not included.
   min_coverage: 5
 
   # Action when no base of a sample reaches min_coverage (empty coverage BED):

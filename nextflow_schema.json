@@ -291,8 +291,8 @@
             "properties": {
                 "min_coverage": {
                     "type": "integer",
-                    "description": "Minimum depth for a base to be included in the consensus.",
-                    "minimum": 0
+                    "description": "Minimum depth (at least 1) for a base to be included in the coverage BED and consensus.",
+                    "minimum": 1
                 },
                 "on_empty": {
                     "type": "string",
