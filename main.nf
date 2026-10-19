@@ -191,7 +191,7 @@ workflow {
     mapping_idxstats_files = mapping_stats
         .map { _sample_id, _raw, _flagstat, _stats, idxstats -> idxstats }
         .collect()
-    mapping_summary = MAPPING_SUMMARY(
+    MAPPING_SUMMARY(
         channel.value(sample_ids),
         raw_flagstat_files,
         final_flagstat_files,

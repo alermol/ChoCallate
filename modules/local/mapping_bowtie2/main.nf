@@ -40,7 +40,9 @@ process MAPPING_BOWTIE2 {
     if (reserve_mb <= 0) {
         def index_paths = index_files instanceof List
             ? index_files : [index_files]
-        def index_bytes = index_paths.collect { it.size() }.sum() ?: 0
+        def index_bytes = index_paths
+            .collect { index_path -> index_path.size() }
+            .sum() ?: 0
         reserve_mb = index_bytes.intdiv(1048576) + 1024
     }
     def memory_mb = task.memory ? task.memory.toMega() : 0
