@@ -918,6 +918,29 @@ def resolve_inputs(input_specs, configured_callers):
     return received, failed, [present[caller] for caller in received]
 
 
+def _bounded_int(value, minimum):
+    """argparse type for an integer of at least ``minimum``."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            'invalid integer: {!r}'.format(value)) from None
+    if number < minimum:
+        raise argparse.ArgumentTypeError(
+            'must be at least {}, got {}'.format(minimum, number))
+    return number
+
+
+def positive_int(value):
+    """argparse type for an integer of at least 1."""
+    return _bounded_int(value, 1)
+
+
+def non_negative_int(value):
+    """argparse type for an integer of at least 0."""
+    return _bounded_int(value, 0)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True, action='append',
@@ -930,8 +953,10 @@ def main():
     parser.add_argument('--output', required=True, help='Output BCF file')
     parser.add_argument('--sample_name', required=True, help='Sample name')
     parser.add_argument('--reference', required=True, help='Reference genome assembly (fasta file and fai index)')
-    parser.add_argument('--consensus_threshold', required=True, type=int,
-                        help='Minimum caller support at the site level')
+    parser.add_argument('--consensus_threshold', required=True,
+                        type=positive_int,
+                        help='Minimum caller support at the site level '
+                             '(at least 1)')
     parser.add_argument('--version', required=True, type=str, help='Version of ChoCallate pipeline')
     parser.add_argument('--absent_vote', choices=('ref', 'abstain'), default='ref',
                         help='Vote of a caller without a record at a position')
@@ -941,9 +966,10 @@ def main():
                              'PASS or .')
     parser.add_argument('--tie_policy', choices=('nocall', 'first'),
                         default='nocall', help='How to break voting ties')
-    parser.add_argument('--min_coverage', type=int, default=0,
+    parser.add_argument('--min_coverage', type=non_negative_int, default=0,
                         help='Coverage required for an absent caller to vote '
-                             'reference when --absent_vote is abstain')
+                             'reference when --absent_vote is abstain '
+                             '(non-negative)')
     parser.add_argument('--compress_reference_blocks', '--reference_blocks',
                         action='store_true',
                         dest='compress_reference_blocks',

@@ -18,6 +18,7 @@ from conftest import (  # noqa: I100,I202  (tests run from this directory)
     ACCEL_AVAILABLE,
     BCFTOOLS,
     CHR,
+    CONSENSUS_SCRIPT,
     REF_SEQ,
     alt_base,
     ref_base,
@@ -107,6 +108,30 @@ def test_all_sites_written_once(consensus_runner):
     for pos, alleles, gt in records:
         assert alleles == (ref_base(pos), '<*>')
         assert gt == (0, 0)
+
+
+def test_out_of_range_numeric_options_are_rejected(tmp_path):
+    """Invalid numeric options fail before the input files are opened."""
+    base = [
+        sys.executable, str(CONSENSUS_SCRIPT),
+        '--input', 'caller.bcf',
+        '--bed', str(tmp_path / 'coverage.bed.gz'),
+        '--bam', str(tmp_path / 'sample.bam'),
+        '--output', str(tmp_path / 'out.bcf'),
+        '--sample_name', 'sample1',
+        '--reference', str(tmp_path / 'ref.fa'),
+        '--consensus_threshold', '1',
+        '--min_coverage', '0',
+        '--version', 'test',
+    ]
+    for option, value, message in (
+            ('--consensus_threshold', '0', 'must be at least 1'),
+            ('--min_coverage', '-1', 'must be at least 0')):
+        result = subprocess.run(base + [option, value],
+                                capture_output=True, text=True)
+        assert result.returncode == 2
+        assert option in result.stderr
+        assert message in result.stderr
 
 
 def test_bed_interval_past_contig_end_fails_clearly(
