@@ -109,6 +109,23 @@ def test_all_sites_written_once(consensus_runner):
         assert gt == (0, 0)
 
 
+def test_bed_interval_past_contig_end_fails_clearly(
+        tmp_path, use_accel, basic_dataset):
+    """A BED interval beyond the contig end is rejected explicitly."""
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [(CHR, len(REF_SEQ) - 5, len(REF_SEQ) + 5)])
+    caller = write_caller_bcf(tmp_path / 'caller.bcf', 'sample1', [])
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        run_consensus(
+            tmp_path, basic_dataset['bam'], bed_gz, [caller], threshold=1,
+            use_accel=use_accel, reference=basic_dataset['reference'])
+    stderr = excinfo.value.stderr
+    assert 'Traceback' not in stderr
+    assert 'IndexError' not in stderr
+    assert 'extends past the end of contig' in stderr
+    assert "'{}' ({} bp)".format(CHR, len(REF_SEQ)) in stderr
+
+
 def test_iupac_reference_positions_are_omitted(tmp_path, use_accel):
     """Positions with an IUPAC reference base are not written."""
     seq = REF_SEQ[:19] + 'R' + REF_SEQ[20:23] + 'Y' + REF_SEQ[24:]

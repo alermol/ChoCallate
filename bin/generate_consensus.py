@@ -150,24 +150,62 @@ def has_ambiguous_bases(allele):
     return any(base not in _UNAMBIGUOUS_BASES for base in allele.upper())
 
 
-def batched_intervals(bed_file, max_gap):
+class BedIntervalError(ValueError):
+    """A BED interval cannot be read from the reference."""
+
+
+def validate_bed_interval(chrom, start, end, contig_lengths):
+    """Reject a BED interval that cannot be read from the reference.
+
+    Args:
+        chrom: Contig name of the interval.
+        start: 0-based interval start.
+        end: 0-based, exclusive interval end.
+        contig_lengths: Mapping of contig name to reference length.
+
+    Raises:
+        BedIntervalError: when the contig is absent from the reference,
+            the coordinates are negative or reversed, or the interval ends
+            past the contig length.
+    """
+    length = contig_lengths.get(chrom)
+    if length is None:
+        raise BedIntervalError(
+            "BED contig '{}' is not present in the reference".format(chrom))
+    if start < 0 or end < start:
+        raise BedIntervalError(
+            'invalid BED interval {}:{}-{}: start must be >= 0 and '
+            'end >= start'.format(chrom, start, end))
+    if end > length:
+        raise BedIntervalError(
+            "BED interval {}:{}-{} extends past the end of contig "
+            "'{}' ({} bp); clip the interval to the contig".format(
+                chrom, start, end, chrom, length))
+
+
+def batched_intervals(bed_file, max_gap, contig_lengths):
     """Group BED intervals into spans that share one pileup iterator.
 
     Args:
         bed_file: pysam.TabixFile of the (bgzipped) coverage BED.
         max_gap: Maximum gap between intervals of the same span.
+        contig_lengths: Mapping of contig name to reference length.
 
     Yields:
         Tuples of (contig, [(start, end), ...]) where start/end are the 0-based
         half-open BED coordinates.
+
+    Raises:
+        BedIntervalError: when an interval cannot be read from the reference.
     """
     contig = None
     span = []
     span_end = None
     for line in bed_file.fetch():
-        chrom, start, end = line.split('\t')
+        chrom, start, end = line.split('\t')[:3]
         start = int(start)
         end = int(end)
+        validate_bed_interval(chrom, start, end, contig_lengths)
         if span and (chrom != contig or start - span_end > max_gap):
             yield contig, span
             span = []
@@ -940,6 +978,8 @@ def main():
     with ExitStack() as stack:
         bed_file = stack.enter_context(pysam.TabixFile(args.bed, index=args.bed + '.csi'))
         reference_file = stack.enter_context(pysam.FastaFile(args.reference, filepath_index=args.reference + '.fai'))
+        contig_lengths = dict(zip(reference_file.references,
+                                  reference_file.lengths))
         bam_file = stack.enter_context(pysam.AlignmentFile(args.bam, 'rb'))
         header = generate_minimal_header(args.sample_name,
                                          reference_file,
@@ -971,7 +1011,8 @@ def main():
         deletion_end = 0
         current_contig = None
         try:
-            for contig, intervals in batched_intervals(bed_file, SPAN_MAX_GAP):
+            for contig, intervals in batched_intervals(
+                    bed_file, SPAN_MAX_GAP, contig_lengths):
                 if contig != current_contig:
                     current_contig = contig
                     deletion_end = 0
@@ -1224,6 +1265,8 @@ def main():
                 flush_reference_block(pending_block, output_file, writer,
                                       use_accel)
                 pending_block = None
+        except BedIntervalError as error:
+            sys.exit('ERROR: {}'.format(error))
         finally:
             if writer is not None:
                 writer.close()
