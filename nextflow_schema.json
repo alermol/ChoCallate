@@ -89,7 +89,8 @@
                 },
                 "remove_invariant": {
                     "type": "boolean",
-                    "description": "Drop monomorphic records when exporting the final consensus."
+                    "default": false,
+                    "description": "Drop monomorphic records when exporting the final consensus. Default false keeps monomorphic/reference records."
                 },
                 "split_multiallelic": {
                     "type": "boolean",

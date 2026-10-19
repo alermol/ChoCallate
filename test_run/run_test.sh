@@ -20,7 +20,7 @@ output:
   directory: "$PWD/ChoCallate_output"
   type: "single"
   format: "bcf"
-  remove_invariant: true
+  remove_invariant: false
   split_multiallelic: false
 
 mapping:

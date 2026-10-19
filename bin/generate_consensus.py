@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Generate the consensus BCF of one sample from its caller BCFs.
 
-By default every position of the (bgzipped, tabixed) coverage BED is
-represented in the output, so the consensus contains all sites, monomorphic
-ones included, except positions whose reference base is an IUPAC ambiguity
-code (N included).  Those positions cannot be written without an ambiguity
-code and are omitted; caller alleles carrying one are omitted as well, so
-output sequence alleles contain only A, C, G and T.  A called deletion's REF
-span represents the positions it covers, and ``--variants_only`` omits
-reference records instead.  At each position the callers vote with their
+By default every position of the (bgzipped, tabixed) coverage BED that
+resolves to a reference or variant consensus is represented in the output, so
+the consensus contains all sites, monomorphic ones included.  Positions whose
+reference base is an IUPAC ambiguity code (N included) and positions that
+resolve to a no-call are omitted: the former cannot be written without an
+ambiguity code, and the latter has no consensus genotype to report.  Caller
+alleles carrying an ambiguity code are omitted as well, so output sequence
+alleles contain only A, C, G and T.  A called deletion's REF span represents
+the positions it covers, and ``--variants_only`` omits reference records
+instead.  At each position the callers vote with their
 genotype in two stages: an ALT allele must first be supported by at least
 ``--consensus_threshold`` callers, then the majority zygosity among the
 supporters of the winning ALT decides between heterozygous and homozygous
@@ -26,13 +28,13 @@ has at least ``--min_coverage`` reads at the position; a caller record with a
 missing genotype (``./.``, ``0/.``) always abstains.  A caller record whose
 FILTER is not ``PASS``/``.`` abstains as well by default
 (``--filtered_vote abstain``); with ``--filtered_vote ref`` it votes reference
-instead.  Hom-reference calls of any ploidy vote reference.  Positions without
-a consensus variant are written as
-gVCF-style records with the symbolic ALT ``<*>``: the reference allele plus
-"any other allele", whose FORMAT/AD slot carries the depth of reads that do not
-support the reference base.  ``bcftools merge --gvcf`` maps that slot onto the
-real ALT allele of another sample's variant, so merged hom-reference samples
-report their actual non-reference depth instead of a fabricated 0.
+instead.  Hom-reference calls of any ploidy vote reference.  Positions
+resolved as hom-reference are written as gVCF-style records with the
+symbolic ALT ``<*>``: the reference allele plus "any other allele", whose
+FORMAT/AD slot carries the depth of reads that do not support the reference
+base.  ``bcftools merge --gvcf`` maps that slot onto the real ALT allele of
+another sample's variant, so merged hom-reference samples report their actual
+non-reference depth instead of a fabricated 0.
 
 With ``--compress_reference_blocks``, runs of consecutive hom-reference
 positions without caller records are written as one gVCF block carrying

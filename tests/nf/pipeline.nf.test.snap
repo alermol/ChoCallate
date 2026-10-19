@@ -83,7 +83,7 @@
             "nextflow": "26.04.7"
         }
     },
-    "test_remove_invariant_false": {
+    "test_default_keeps_monomorphic": {
         "content": [
             [
                 "SN\t0\tnumber of samples:\t1",

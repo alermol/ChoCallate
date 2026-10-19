@@ -5,7 +5,9 @@ COPY environment.yaml .
 RUN micromamba create -y -f environment.yaml && \
     micromamba clean --all --yes
 
-COPY . .
+# The image runs as MAMBA_USER and the accelerator build below writes into
+# bin/, so the copied project must be owned by that user.
+COPY --chown=${MAMBA_USER}:${MAMBA_USER} . .
 
 # Build the optional Cython accelerator for generate_consensus.py in place.
 # generate_consensus.py falls back to an equivalent pure-pysam implementation if

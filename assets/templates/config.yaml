@@ -54,7 +54,8 @@ output:
   format: "bcf"
 
   # Drop monomorphic/reference-only records when exporting the final output.
-  remove_invariant: true
+  # false (default) keeps monomorphic/reference records.
+  remove_invariant: false
 
   # Keep one record per ALT allele in the final output instead of re-joining
   # multi-allelic sites.

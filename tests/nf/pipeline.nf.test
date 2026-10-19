@@ -341,7 +341,8 @@ nextflow_pipeline {
         }
     }
 
-    test("test_remove_invariant_false") {
+    test("test_default_keeps_monomorphic") {
+        tag "all_sites"
         setup {
             ChoCallateTestUtils.bowtie2Index(
                 projectDir, new File(launchDir)
@@ -373,7 +374,6 @@ nextflow_pipeline {
                     directory = "${outputDir}"
                     type = "single"
                     format = "bcf"
-                    remove_invariant = false
                 }
                 coverage {
                     min_coverage = 1
@@ -399,6 +399,13 @@ nextflow_pipeline {
             assert header.contains(
                 '##contig=<ID=CP002684.1,length=200001>'
             )
+            // output.remove_invariant is intentionally not set: the default
+            // must keep monomorphic reference records in the published file.
+            def body = ChoCallateTestUtils.run(
+                consensus.parentFile,
+                "bcftools view -H '${consensus.absolutePath}'"
+            )
+            assert body.contains('<*>')
             // Soft-filtered caller records abstain, so positions where the
             // only caller record is LowQual are not written as reference.
             assert ChoCallateTestUtils.recordCount(consensus) == 578
