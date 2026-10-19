@@ -134,7 +134,7 @@ fi
 invariant_stream() {
     if [[ "$remove_invariant" == true ]]; then
         "$bcftools" filter --threads "$cpus" \
-            -e 'ALT="." || ALT="<*>" || COUNT(GT="RR")=N_SAMPLES' -Ou
+            -e 'ALT="." || ALT="<*>" || COUNT(GT="alt")=0' -Ou
     else
         "$bcftools" view --threads "$cpus" -Ou
     fi
