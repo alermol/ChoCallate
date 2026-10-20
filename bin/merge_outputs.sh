@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Bash before 4.4 treats an empty array as unset under `set -u`, so array
+# elements are expanded as "${arr[@]+"${arr[@]}"}" in this script.
+
 usage() {
     cat <<'EOF'
 Usage: merge_outputs.sh --file-list FILE --reference FASTA --output PATH
@@ -144,7 +147,7 @@ annotate_stream() {
 }
 
 output_stream() {
-    "$bcftools" view "${output_flags[@]}"
+    "$bcftools" view ${output_flags[@]+"${output_flags[@]}"}
 }
 
 if [[ ${#files[@]} -eq 1 ]]; then
@@ -165,7 +168,7 @@ if [[ ${#files[@]} -eq 1 ]]; then
         | tag_stream \
         | output_stream
 else
-    for bcf in "${files[@]}"; do
+    for bcf in ${files[@]+"${files[@]}"}; do
         "$bcftools" index -f --csi "$bcf"
     done
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Bash before 4.4 treats an empty array as unset under `set -u`, so array
+# elements are expanded as "${arr[@]+"${arr[@]}"}" in this script.
+
 usage() {
     cat <<'EOF'
 Usage: postprocess_bam.sh --input BAM|-
@@ -197,7 +200,8 @@ if [[ "$rmdup_mode" != none ]]; then
         | samtools sort --threads "$sort_threads" \
             -m "${sort_memory_mb}M" -u -T "$tmpdir/sort" - \
         | samtools markdup --threads "$stage_threads" -u \
-            "${markdup_flags[@]}" -T "$tmpdir/markdup" - - \
+            ${markdup_flags[@]+"${markdup_flags[@]}"} \
+            -T "$tmpdir/markdup" - - \
         | samtools view --threads "$stage_threads" -F 4 -q "$mapq" \
             -b -o "$filtered_bam" -
 else
@@ -217,7 +221,8 @@ if [[ -n "$fai" ]]; then
     if [[ -n "$dict" ]]; then
         check_args+=(--dict "$dict")
     fi
-    "$script_dir/check_bam_reference.py" "${check_args[@]}"
+    "$script_dir/check_bam_reference.py" \
+        ${check_args[@]+"${check_args[@]}"}
 fi
 
 if [[ "$left_align" == true ]]; then
@@ -226,7 +231,7 @@ if [[ "$left_align" == true ]]; then
     if [[ -n "$java_options" ]]; then
         gatk_opts=(--java-options "$java_options")
     fi
-    gatk LeftAlignIndels "${gatk_opts[@]}" \
+    gatk LeftAlignIndels ${gatk_opts[@]+"${gatk_opts[@]}"} \
         -I "$filtered_bam" \
         -O "$output" \
         -R "$reference" \
