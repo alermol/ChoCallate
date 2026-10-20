@@ -6,7 +6,7 @@
 
 ## Quick start
 
-Requirements: Linux, Conda/Mamba and Git. Nextflow and all analysis tools are installed by the environment. The first run resolves the `nf-schema` and `nf-boost` plugins; an offline Conda setup must install them once, while the Docker image bundles them.
+Requirements: Linux, Conda/Mamba and Git. Nextflow and all analysis tools are installed by the environment. The first run resolves the `nf-schema` and `nf-boost` plugins; an offline Conda setup must install the pinned versions once, while the Docker image bundles them.
 
 ```bash
 git clone --depth 1 https://github.com/alermol/ChoCallate.git
@@ -27,6 +27,8 @@ input:
 output:
   directory: ChoCallate_output
 ```
+
+`reference_genome` must be plain FASTA or BGZF-compressed FASTA; plain gzip is rejected. For FASTQ input, `reference_index_dir` must contain the index files for the selected `mapping.mapper` (Bowtie2 by default).
 
 `samples.tsv` is tab-separated:
 

@@ -21,7 +21,6 @@ test_run/accs_list.txt
 test_run/ERR*
 test_run/*.bt2
 AGENTS.md
-ChoCallate_review.md
 test_run/samples.tsv
 test_run/arth_chr1.fasta.gz.*
 test_run/benchmark_*
