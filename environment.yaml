@@ -15,7 +15,7 @@ dependencies:
   # pysam has no free-threaded build, so keep the GIL-enabled CPython build.
   - python=3.13.16=*_cp313
   - bedops=2.4.42
-  - nextflow=26.10.2
+  - nextflow=26.04.7
   - parallel=20260922
   - pysam=0.24.1
   # test suite (tests/python, run with `pytest -q tests/python`)

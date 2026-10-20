@@ -24,7 +24,7 @@ RUN micromamba run -n ChoCallate python bin/build_consensus_accel.py
 # Pin the plugins in the image so a run does not need network access.
 ENV NXF_HOME=/opt/chocallate/.nextflow
 RUN micromamba run -n ChoCallate nextflow plugin install \
-        nf-schema@3.0.0,nf-boost@0.7.0 && \
+        nf-schema@3.0.0,nf-boost@0.8.0 && \
     chmod -R a+rwX "${NXF_HOME}"
 
 # Both micromamba run and Nextflow need a writable HOME. With docker run -u
