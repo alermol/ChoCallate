@@ -1,0 +1,15 @@
+{
+    "replaces read groups and indexes an input BAM": {
+        "content": [
+            [
+                39943,
+                "@RG\tID:bam_sample\tSM:bam_sample\tPL:ILLUMINA\tLB:bam_sample"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:51:45.57727183",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

@@ -1,14 +1,12 @@
 process CALLING_BCFTOOLS {
-    maxForks 1
-    cpus params.calling.cpu
-    errorStrategy 'ignore'
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    label 'process_medium'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     tag "${sample_id}"
 
     input:
-    tuple val(sample_id), path("tmp/input.bam"), path("tmp/coverage.bed")
+    tuple val(sample_id), path("tmp/input.bam"), path("tmp/input.bam.csi"), path("tmp/bed_chunks/*", arity: '1..*')
     path("tmp/ref_genome.fasta")
     path("tmp/ref_genome.fasta.fai")
     path("tmp/ref_genome.dict")
@@ -17,23 +15,55 @@ process CALLING_BCFTOOLS {
     tuple val(sample_id), path("bcftools.bcf"), emit: calling_result
 
     script:
+    def caller = params.calling.bcftools ?: [:]
+    def call_args = caller.call?.extra_args ?: ''
+    def mpileup_args = caller.mpileup?.extra_args ?: ''
+    def max_depth = caller.mpileup?.max_depth
+    def max_idepth = caller.mpileup?.max_idepth
+    def min_snp = caller.min_snp_qual
+    def min_indel = caller.min_indel_qual
+    assert max_depth != null : 'calling.bcftools.mpileup.max_depth is required'
+    assert max_idepth != null : 'calling.bcftools.mpileup.max_idepth is required'
+    assert min_snp != null : 'calling.bcftools.min_snp_qual is required'
+    assert min_indel != null : 'calling.bcftools.min_indel_qual is required'
+    def qual_filter = "(TYPE=\\\"snp\\\" && QUAL<${min_snp}) || (TYPE!=\\\"snp\\\" && QUAL<${min_indel})"
     """
-    mkdir -p tmp/bed_chunks/
     mkdir -p tmp/calling_chunks/
-
-    gatk SplitIntervals --java-options "-Djava.io.tmpdir=\$TMPDIR" --tmp-dir \$TMPDIR -R tmp/ref_genome.fasta -L tmp/coverage.bed --scatter-count ${task.cpus} -O tmp/bed_chunks/
-    parallel -j ${task.cpus} 'gatk IntervalListToBed -I {} -O {//}/{/.}.bed.tmp; cut -f 1-3 {//}/{/.}.bed.tmp | tee {//}/{/.}.bed; rm {} {//}/{/.}.bed.tmp' ::: tmp/bed_chunks/*
-
-    samtools index --threads ${task.cpus} --csi tmp/input.bam
 
     cat <<EOF > tmp/calling_chunks/sample_id.txt
     ${sample_id}
     EOF
 
-    parallel -j ${task.cpus} \
-    'bcftools mpileup ${params.calling.bcftools.mpileup.extra_args} -a FORMAT/AD,FORMAT/DP --count-orphans -Ou --fasta-ref tmp/ref_genome.fasta --regions-file {} tmp/input.bam | bcftools call ${params.calling.bcftools.call.extra_args} --multiallelic-caller --variants-only -Ou | bcftools reheader -s tmp/calling_chunks/sample_id.txt -f tmp/ref_genome.fasta.fai | bcftools filter -e"QUAL<${params.calling.min_snp_qual}" -Ou | bcftools norm --check-ref x -Ob --fasta-ref tmp/ref_genome.fasta -o tmp/calling_chunks/{#}.bcf;
-    bcftools index --csi tmp/calling_chunks/{#}.bcf' ::: tmp/bed_chunks/*.bed
+    cat > tmp/run_chunk.sh <<'EOF'
+    set -euo pipefail
+    bcftools mpileup --max-depth ${max_depth} --max-idepth ${max_idepth} \
+        ${mpileup_args} \
+        -a FORMAT/AD,FORMAT/DP --count-orphans -Ou \
+        --fasta-ref tmp/ref_genome.fasta --regions-file "\$1" \
+        tmp/input.bam \
+    | bcftools call ${call_args} --multiallelic-caller --variants-only -Ou \
+    | bcftools reheader -s tmp/calling_chunks/sample_id.txt \
+        -f tmp/ref_genome.fasta.fai \
+    | bcftools view -Ob -o "tmp/calling_chunks/\$2.bcf"
+    EOF
 
-    bcftools concat --naive --threads ${task.cpus} -Ob tmp/calling_chunks/*.bcf | bcftools view --threads ${task.cpus} -Ou --min-alleles 2 --max-alleles 2 | bcftools sort -Ou -o bcftools.bcf
+    # SIGKILLed children appear as signal 9, exit 137, or GATK's 247.
+    parallel --halt now,fail=1 --joblog tmp/parallel.log \
+        -j ${task.cpus} bash tmp/run_chunk.sh {} {#} \
+        ::: tmp/bed_chunks/*.bed || {
+        status=\$?
+        if awk 'NR > 1 && (\$7 == 137 || \$7 == 247 || \$8 == 9) {
+            found = 1 } END { exit !found }' tmp/parallel.log; then
+            exit 137
+        fi
+        exit "\${status}"
+    }
+
+    # The chunks are emitted in genomic order; ls -v keeps that order for
+    # concat, so no full sort is needed afterwards.
+    bcftools concat --naive --threads ${task.cpus} -Ob \$(ls -v tmp/calling_chunks/*.bcf) \
+    | bcftools norm --threads ${task.cpus} -f tmp/ref_genome.fasta -m -any --atomize --check-ref x -Ou \
+    | bcftools norm --threads ${task.cpus} -d exact -Ou \
+    | bcftools filter -s LowQual -m + -e"${qual_filter}" -Ob -o bcftools.bcf
     """
 }

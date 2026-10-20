@@ -1,0 +1,33 @@
+nextflow_process {
+
+    name "Test process DECOMPRESS_ASSEMBLY"
+    script "../../../../modules/local/decompress_assembly/main.nf"
+    process "DECOMPRESS_ASSEMBLY"
+
+    test("decompresses the bgzip reference") {
+        when {
+            process {
+                """
+                input[0] = file("${projectDir}/test_run/" +
+                    "arth_chr1.fasta.gz")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def fasta = ChoCallateTestUtils.outputFile(
+                process.out.ref_genome[0]
+            )
+            assert fasta.isFile()
+            def lines = fasta.readLines()
+            assert lines[0].startsWith('>CP002684.1')
+            assert lines.size() == 2859
+            assert lines[1].length() == 70
+            assert lines[-1].length() == 11
+            assert snapshot(
+                [lines[0], lines.size(), lines[1].length()]
+            ).match()
+        }
+    }
+}

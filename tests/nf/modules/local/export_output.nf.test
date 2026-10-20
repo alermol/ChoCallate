@@ -1,0 +1,212 @@
+nextflow_process {
+
+    name "Test process EXPORT_OUTPUT"
+    script "../../../../modules/local/export_output/main.nf"
+    process "EXPORT_OUTPUT"
+
+    test("exports a per-sample internal BCF as bgzipped VCF") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_a', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '11', '.', 'T', '<*>', '.', 'PASS',
+                     'END=11', 'GT:AD:DP', '0/0:9,1:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'sample'
+                    format = 'vcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample_a',
+                    file("${launchDir}/bcfs/sample_a.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def vcf = ChoCallateTestUtils.outputFile(process.out.vcf[0][1])
+            assert vcf.name == 'sample_a.vcf.gz'
+            assert vcf.isFile()
+            assert ChoCallateTestUtils.vcfSamples(vcf) == ['sample_a']
+            assert ChoCallateTestUtils.recordCount(vcf) == 3
+            assert ChoCallateTestUtils.vcfHeader(vcf).contains(
+                '##ChoCallate=<Version=test'
+            )
+        }
+    }
+
+    test("exports a merged internal BCF and removes invariant records") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'consensus', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '11', '.', 'T', '<*>', '.', 'PASS',
+                     'END=11', 'GT:AD:DP', '0/0:9,1:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'single'
+                    format = 'bcf'
+                    remove_invariant = true
+                    split_multiallelic = false
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'consensus',
+                    file("${launchDir}/bcfs/consensus.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(process.out.bcf[0][1])
+            assert bcf.name == 'consensus.bcf'
+            assert bcf.isFile()
+            assert ChoCallateTestUtils.vcfSamples(bcf) == ['sample_a']
+            assert ChoCallateTestUtils.recordCount(bcf) == 2
+            assert ChoCallateTestUtils.vcfHeader(bcf).contains(
+                '##ChoCallate=<Version=test'
+            )
+        }
+    }
+
+    test("keeps one record per ALT when split_multiallelic is true") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'consensus', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '10', '.', 'G', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'single'
+                    format = 'bcf'
+                    remove_invariant = true
+                    split_multiallelic = true
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'consensus',
+                    file("${launchDir}/bcfs/consensus.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(process.out.bcf[0][1])
+            assert bcf.isFile()
+            assert ChoCallateTestUtils.recordCount(bcf) == 3
+        }
+    }
+
+    test("preserves gVCF reference blocks in the final VCF") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'consensus', 'sample_a',
+                [
+                    ['CP002684.1', '11', '.', 'T', '<*>', '.', 'PASS',
+                     'END=15', 'GT:AD:DP', '0/0:10:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'single'
+                    format = 'vcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'consensus',
+                    file("${launchDir}/bcfs/consensus.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def vcf = ChoCallateTestUtils.outputFile(process.out.vcf[0][1])
+            assert vcf.isFile()
+            def body = ChoCallateTestUtils.run(
+                vcf.parentFile,
+                "bcftools view -H '${vcf.absolutePath}'"
+            )
+            assert body.contains('<*>')
+            assert body.contains('END=15')
+            assert ChoCallateTestUtils.recordCount(vcf) == 2
+        }
+    }
+}

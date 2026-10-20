@@ -1,0 +1,159 @@
+nextflow_process {
+
+    name "Test process GENERATE_CONSENSUS"
+    script "../../../../modules/local/generate_consensus/main.nf"
+    process "GENERATE_CONSENSUS"
+
+    test("builds a consensus BCF from caller records") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            def callers = new File(launchDir, 'callers')
+            callers.mkdirs()
+            def sampleId = new File(launchDir, 'sample_id.txt')
+            sampleId.text = 'sample1\n'
+            ChoCallateTestUtils.run(
+                new File(launchDir),
+                "set -o pipefail; " +
+                "bcftools mpileup -a FORMAT/AD,FORMAT/DP " +
+                "--count-orphans -Ou " +
+                "--fasta-ref '${launchDir}/reference/genome.fasta' " +
+                "'${launchDir}/sample1.bam' | " +
+                "bcftools call --multiallelic-caller --variants-only -Ou | " +
+                "bcftools reheader -s '${sampleId}' " +
+                "-f '${launchDir}/reference/genome.fasta.fai' " +
+                "-o '${callers}/bcftools.bcf'"
+            )
+            def chunks = new File(launchDir, 'chunks')
+            chunks.mkdirs()
+            new File(chunks, 'full.bed').text =
+                "CP002684.1\t0\t200001\n"
+        }
+
+        when {
+            params {
+                output {
+                    type = 'single'
+                    format = 'bcf'
+                    remove_invariant = false
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    'bcftools',
+                    [file("${launchDir}/callers/bcftools.bcf")],
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi"),
+                    [file("${launchDir}/chunks/full.bed")]
+                )
+                input[1] = 'bcftools'
+                input[2] = file("${launchDir}/reference/genome.fasta")
+                input[3] = file("${launchDir}/reference/genome.fasta.fai")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(
+                process.out.consensus_bcf[0][1]
+            )
+            assert bcf.isFile()
+            assert ChoCallateTestUtils.vcfSamples(bcf) == ['sample1']
+            def header = ChoCallateTestUtils.vcfHeader(bcf)
+            assert header.contains('##ChoCallate=<Version=')
+            assert header.contains('Threshold=1')
+            assert header.contains('Callers="bcftools"')
+            assert header.contains('Rule=two-stage')
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert ChoCallateTestUtils.recordCount(bcf) == 614
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(bcf)
+            ).match()
+        }
+    }
+
+    test("writes variants only for per-sample output") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            def callers = new File(launchDir, 'callers')
+            callers.mkdirs()
+            def sampleId = new File(launchDir, 'sample_id.txt')
+            sampleId.text = 'sample1\n'
+            ChoCallateTestUtils.run(
+                new File(launchDir),
+                "set -o pipefail; " +
+                "bcftools mpileup -a FORMAT/AD,FORMAT/DP " +
+                "--count-orphans -Ou " +
+                "--fasta-ref '${launchDir}/reference/genome.fasta' " +
+                "'${launchDir}/sample1.bam' | " +
+                "bcftools call --multiallelic-caller --variants-only -Ou | " +
+                "bcftools reheader -s '${sampleId}' " +
+                "-f '${launchDir}/reference/genome.fasta.fai' " +
+                "-o '${callers}/bcftools.bcf'"
+            )
+            def chunks = new File(launchDir, 'chunks')
+            chunks.mkdirs()
+            new File(chunks, 'full.bed').text =
+                "CP002684.1\t0\t200001\n"
+        }
+
+        when {
+            params {
+                output {
+                    type = 'sample'
+                    format = 'bcf'
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    'bcftools',
+                    [file("${launchDir}/callers/bcftools.bcf")],
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi"),
+                    [file("${launchDir}/chunks/full.bed")]
+                )
+                input[1] = 'bcftools'
+                input[2] = file("${launchDir}/reference/genome.fasta")
+                input[3] = file("${launchDir}/reference/genome.fasta.fai")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(
+                process.out.consensus_bcf[0][1]
+            )
+            assert ChoCallateTestUtils.recordCount(bcf) == 312
+            assert ChoCallateTestUtils.statsValue(
+                bcf, 'number of no-ALTs'
+            ) == 0
+            assert ChoCallateTestUtils.vcfHeader(bcf).contains(
+                'ReferenceBlocks=False'
+            )
+        }
+    }
+}

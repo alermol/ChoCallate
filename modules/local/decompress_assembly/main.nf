@@ -1,8 +1,7 @@
 process DECOMPRESS_ASSEMBLY {
-    maxForks 1
-    cpus Runtime.runtime.availableProcessors()
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    label 'process_low'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     input:
     path(ref_genome), name: "tmp/ref_genome.fasta.gz"
@@ -12,6 +11,7 @@ process DECOMPRESS_ASSEMBLY {
 
     script:
     """
-    bgzip --threads ${task.cpus} --decompress -o ref_genome.fasta tmp/ref_genome.fasta.gz
+    bgzip --threads ${task.cpus} --decompress \
+        -o ref_genome.fasta tmp/ref_genome.fasta.gz
     """
 }

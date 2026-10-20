@@ -1,0 +1,23 @@
+{
+    "merges sample BCFs in samplesheet order": {
+        "content": [
+            [
+                "SN\t0\tnumber of samples:\t2",
+                "SN\t0\tnumber of records:\t3",
+                "SN\t0\tnumber of no-ALTs:\t0",
+                "SN\t0\tnumber of SNPs:\t3",
+                "SN\t0\tnumber of MNPs:\t0",
+                "SN\t0\tnumber of indels:\t0",
+                "SN\t0\tnumber of others:\t0",
+                "SN\t0\tnumber of multiallelic sites:\t0",
+                "SN\t0\tnumber of multiallelic SNP sites:\t0",
+                "TSTV\t0\t3\t0\t0.00\t3\t0\t0.00"
+            ]
+        ],
+        "timestamp": "2026-10-17T23:54:38.340106968",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

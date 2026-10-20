@@ -1,0 +1,15 @@
+{
+    "computes covered intervals from a BAM": {
+        "content": [
+            [
+                3,
+                199795
+            ]
+        ],
+        "timestamp": "2026-10-17T23:49:13.332801396",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

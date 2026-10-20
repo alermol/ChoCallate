@@ -1,0 +1,151 @@
+nextflow_process {
+
+    name "Test process MERGE_OUTPUTS"
+    script "../../../../modules/local/merge_outputs/main.nf"
+    process "MERGE_OUTPUTS"
+
+    test("merges sample BCFs in samplesheet order") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_b', 'sample_b',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_a', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:4,6:10'],
+                    ['CP002684.1', '30', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    type = 'single'
+                    format = 'bcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample_b,sample_a',
+                    [
+                        file("${launchDir}/bcfs/sample_b.bcf"),
+                        file("${launchDir}/bcfs/sample_a.bcf")
+                    ]
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[2] = file("${launchDir}/reference/genome.fasta.fai")
+                input[3] = []
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def emitted = process.out[0]
+            def paths = emitted instanceof List ? emitted : [emitted]
+            def consensus = paths.collect { output ->
+                ChoCallateTestUtils.outputFile(output)
+            }.find { file -> file.name == 'consensus.bcf' }
+            assert consensus != null
+            assert consensus.isFile()
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample_b', 'sample_a']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert header.contains('##ChoCallate=<Version=test')
+            assert ChoCallateTestUtils.recordCount(consensus) == 3
+            assert snapshot(
+                ChoCallateTestUtils.statsLines(consensus)
+            ).match()
+        }
+    }
+
+    test("writes the internal consensus as BCF regardless of output.format") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_b', 'sample_b',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10']
+                ]
+            )
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_a', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:4,6:10'],
+                    ['CP002684.1', '30', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    type = 'single'
+                    format = 'vcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample_b,sample_a',
+                    [
+                        file("${launchDir}/bcfs/sample_b.bcf"),
+                        file("${launchDir}/bcfs/sample_a.bcf")
+                    ]
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[2] = file("${launchDir}/reference/genome.fasta.fai")
+                input[3] = []
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def emitted = process.out.consensus
+            def paths = emitted instanceof List ? emitted : [emitted]
+            def consensus = paths.collect { output ->
+                ChoCallateTestUtils.outputFile(output)
+            }.find { file -> file.name == 'consensus.bcf' }
+            assert consensus != null
+            assert consensus.isFile()
+            assert ChoCallateTestUtils.vcfSamples(consensus) ==
+                ['sample_b', 'sample_a']
+            def header = ChoCallateTestUtils.vcfHeader(consensus)
+            assert header.contains(
+                '##contig=<ID=CP002684.1,length=200001>'
+            )
+            assert header.contains('##ChoCallate=<Version=test')
+            assert ChoCallateTestUtils.recordCount(consensus) == 3
+        }
+    }
+}

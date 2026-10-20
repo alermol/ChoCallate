@@ -1,0 +1,222 @@
+nextflow_process {
+
+    name "Test process GENERATE_COVERAGE"
+    script "../../../../modules/local/generate_coverage/main.nf"
+    process "GENERATE_COVERAGE"
+
+    test("computes covered intervals from a BAM") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+        }
+
+        when {
+            params {
+                coverage {
+                    min_coverage = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi")
+                )
+                input[1] = file("${projectDir}/assets/N1_FILE")
+                input[2] = file("${projectDir}/assets/NO_FILE")
+                input[3] = file(
+                    "${launchDir}/reference/genome.fasta.fai"
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bed = ChoCallateTestUtils.outputFile(
+                process.out.coverage[0][1]
+            )
+            assert bed.isFile()
+            def lines = bed.readLines().findAll { it.trim() }
+            assert lines.size() > 0
+            def intervals = lines.collect { line ->
+                def fields = line.split('\t', -1)
+                [
+                    fields[0],
+                    fields[1] as int,
+                    fields[2] as int
+                ]
+            }
+            assert intervals.every { it[0] == 'CP002684.1' }
+            assert intervals.every { it[1] >= 0 && it[2] <= 200001 }
+            assert intervals.every { it[1] < it[2] }
+            int covered = intervals.sum { it[2] - it[1] }
+            assert covered > 0
+            assert snapshot(
+                [intervals.size(), covered]
+            ).match()
+        }
+    }
+
+    test("stages include and exclude BEDs with the same file name") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            new File(launchDir, 'include').mkdirs()
+            new File(launchDir, 'exclude').mkdirs()
+            new File(launchDir, 'include/regions.bed').text =
+                'CP002684.1\t0\t200000\n'
+            new File(launchDir, 'exclude/regions.bed').text =
+                'CP002684.1\t0\t100\n'
+        }
+
+        when {
+            params {
+                coverage {
+                    min_coverage = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi")
+                )
+                input[1] = file("${launchDir}/include/regions.bed")
+                input[2] = file("${launchDir}/exclude/regions.bed")
+                input[3] = file(
+                    "${launchDir}/reference/genome.fasta.fai"
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bed = ChoCallateTestUtils.outputFile(
+                process.out.coverage[0][1]
+            )
+            def intervals = bed.readLines()
+                .findAll { it.trim() }
+                .collect { line ->
+                    def fields = line.split('\t', -1)
+                    [fields[0], fields[1] as int, fields[2] as int]
+                }
+            assert intervals.size() > 0
+            assert intervals.every { it[0] == 'CP002684.1' }
+            assert intervals.every { it[1] >= 100 }
+            assert intervals.every { it[2] <= 200000 }
+        }
+    }
+
+    test("strips track, browser and comment lines from BED inputs") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            // Put the header lines after data to ensure they are removed
+            // rather than relying on sort-bed's own header handling.
+            new File(launchDir, 'include.bed').text = [
+                '# include regions',
+                'CP002684.1\t0\t200000',
+                'track name=include',
+                'browser position CP002684.1:1-200000'
+            ].join('\n') + '\n'
+            new File(launchDir, 'exclude.bed').text = [
+                'browser position CP002684.1:1-100',
+                '# exclude the first 100 bp',
+                'CP002684.1\t0\t100',
+                'track name=exclude'
+            ].join('\n') + '\n'
+        }
+
+        when {
+            params {
+                coverage {
+                    min_coverage = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi")
+                )
+                input[1] = file("${launchDir}/include.bed")
+                input[2] = file("${launchDir}/exclude.bed")
+                input[3] = file(
+                    "${launchDir}/reference/genome.fasta.fai"
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bed = ChoCallateTestUtils.outputFile(
+                process.out.coverage[0][1]
+            )
+            def lines = bed.readLines().findAll { it.trim() }
+            assert lines.every { line ->
+                !line.startsWith('track') &&
+                    !line.startsWith('browser')
+            }
+            def intervals = lines.collect { line ->
+                def fields = line.split('\t', -1)
+                [fields[0], fields[1] as int, fields[2] as int]
+            }
+            assert intervals.every { it[0] == 'CP002684.1' }
+            assert intervals.every { it[1] < it[2] }
+            assert intervals.every { it[1] >= 100 }
+            assert intervals == intervals.sort { a, b ->
+                a[1] <=> b[1]
+            }
+        }
+    }
+
+    test("fails when a BED contig is absent from the reference .fai") {
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample1'
+            )
+            new File(launchDir, 'include.bed').text =
+                '# wrong assembly\nchr1\t0\t100\n'
+            new File(launchDir, 'exclude.bed').text = ''
+        }
+
+        when {
+            params {
+                coverage {
+                    min_coverage = 1
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/sample1.bam"),
+                    file("${launchDir}/sample1.bam.csi")
+                )
+                input[1] = file("${launchDir}/include.bed")
+                input[2] = file("${launchDir}/exclude.bed")
+                input[3] = file(
+                    "${launchDir}/reference/genome.fasta.fai"
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.failed
+            def output = (process.stdout + process.stderr).join('\n')
+            assert output.contains('include.bed')
+            assert output.contains("'chr1'")
+            assert output.contains('reference .fai')
+        }
+    }
+}

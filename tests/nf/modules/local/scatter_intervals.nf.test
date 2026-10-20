@@ -1,0 +1,58 @@
+nextflow_process {
+
+    name "Test process SCATTER_INTERVALS"
+    script "../../../../modules/local/scatter_intervals/main.nf"
+    process "SCATTER_INTERVALS"
+
+    test("splits covered intervals into caller chunks") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bed = new File(launchDir, 'coverage.bed')
+            bed.text = "CP002684.1\t0\t200001\n"
+        }
+
+        when {
+            params {
+                calling {
+                    cpu = 2
+                }
+                consensus {
+                    cpu = 2
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample1',
+                    file("${launchDir}/coverage.bed")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                input[2] = file("${launchDir}/reference/genome.fasta.fai")
+                input[3] = file("${launchDir}/reference/genome.dict")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def emitted = process.out.chunks[0][1]
+            def chunks = emitted instanceof List ? emitted : [emitted]
+            assert chunks.size() == 2
+            def summary = chunks.collect { chunk ->
+                def file = ChoCallateTestUtils.outputFile(chunk)
+                def lines = file.readLines().findAll { it.trim() }
+                assert lines.size() > 0
+                lines.each { line ->
+                    def fields = line.split('\t', -1)
+                    assert fields[0] == 'CP002684.1'
+                    assert fields[1] as int >= 0
+                    assert fields[2] as int <= 200001
+                }
+                [file.name, lines]
+            }.sort { it[0] }
+            assert snapshot(summary).match()
+        }
+    }
+}

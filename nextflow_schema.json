@@ -1,0 +1,488 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/alermol/ChoCallate/develop/nextflow_schema.json",
+    "title": "ChoCallate pipeline parameters",
+    "description": "Consensus variant calling with bcftools, FreeBayes and GATK.",
+    "type": "object",
+    "properties": {
+        "input": {
+            "type": "object",
+            "title": "Input",
+            "description": "Samples, reference genome and optional target regions.",
+            "properties": {
+                "samples_tsv": {
+                    "type": "string",
+                    "description": "Tab-separated samplesheet. Relative read paths are resolved from the samplesheet directory.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "reference_genome": {
+                    "type": "string",
+                    "description": "Reference FASTA, plain or bgzip-compressed (detected from the file header).",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "reference_index_dir": {
+                    "type": "string",
+                    "description": "Directory containing the mapper and caller reference indexes. Required when input.format is 'fastq'.",
+                    "format": "directory-path",
+                    "exists": true
+                },
+                "reference_index_prefix": {
+                    "type": ["string", "null"],
+                    "description": "Index prefix inside reference_index_dir. Must be a plain file name without directory separators. Defaults to the file name of reference_genome."
+                },
+                "include_bed": {
+                    "type": ["string", "null"],
+                    "description": "Optional BED file restricting calling to the listed regions.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "exclude_bed": {
+                    "type": ["string", "null"],
+                    "description": "Optional BED file of regions to exclude from calling.",
+                    "format": "file-path",
+                    "exists": true
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Input molecule type.",
+                    "enum": ["fastq", "bam"]
+                },
+                "reads_type": {
+                    "type": "string",
+                    "description": "FASTQ layout: single-end, paired-end or mixed (paired plus unpaired reads).",
+                    "enum": ["se", "pe", "mx"]
+                }
+            },
+            "required": ["samples_tsv", "reference_genome"],
+            "if": {
+                "properties": {
+                    "format": {
+                        "const": "fastq"
+                    }
+                }
+            },
+            "then": {
+                "required": ["reference_index_dir"]
+            }
+        },
+        "output": {
+            "type": "object",
+            "title": "Output",
+            "description": "Consensus output location, layout and filtering.",
+            "properties": {
+                "directory": {
+                    "type": "string",
+                    "description": "Directory for published results and Nextflow reports.",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Publish one merged multi-sample consensus ('single') or one file per sample ('sample').",
+                    "enum": ["single", "sample"]
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Final published format. Internal consensus and merge files are always BCF.",
+                    "enum": ["bcf", "vcf"]
+                },
+                "remove_invariant": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Drop monomorphic records when exporting the final consensus. Default false keeps monomorphic/reference records."
+                },
+                "split_multiallelic": {
+                    "type": "boolean",
+                    "description": "Keep one record per ALT allele in the final output instead of re-joining multi-allelic sites."
+                },
+                "compress_reference_blocks": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Collapse runs of hom-reference positions into gVCF blocks with INFO/END in the final output. Reference records are always gVCF-style internally; FORMAT/DP is the block minimum and FORMAT/AD is omitted on multi-base blocks."
+                },
+                "publish_mode": {
+                    "type": "string",
+                    "description": "Publish result files as independent copies or as symbolic links into the work directory.",
+                    "enum": ["copy", "link"]
+                }
+            }
+        },
+        "resources": {
+            "type": "object",
+            "title": "Resources",
+            "description": "CPU, memory and time limits for the process labels.",
+            "properties": {
+                "max_retries": {
+                    "type": "integer",
+                    "description": "Maximum number of retries after an exit status of 137 or 140.",
+                    "minimum": 0
+                },
+                "limits": {
+                    "type": "object",
+                    "title": "Limits",
+                    "description": "Hard ceilings for every task after retry escalation.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "Maximum CPUs requested by one task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Maximum memory requested by one task in MiB.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 7d or 168h.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
+                "low": {
+                    "type": "object",
+                    "title": "Low",
+                    "description": "Index creation, decompression and coverage tasks.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 4h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
+                "medium": {
+                    "type": "object",
+                    "title": "Medium",
+                    "description": "Mapping, variant calling, scattering and merging tasks.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 24h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                },
+                "high": {
+                    "type": "object",
+                    "title": "High",
+                    "description": "GATK HaplotypeCaller tasks, which start one JVM per assigned CPU.",
+                    "properties": {
+                        "cpus": {
+                            "type": "integer",
+                            "description": "CPUs requested per task.",
+                            "minimum": 1
+                        },
+                        "memory_mb": {
+                            "type": "integer",
+                            "description": "Memory requested per task in MiB. Retries multiply it by the attempt number.",
+                            "minimum": 1
+                        },
+                        "time": {
+                            "type": "string",
+                            "description": "Maximum task runtime, for example 48h or 90m.",
+                            "minLength": 1
+                        }
+                    },
+                    "required": ["cpus", "memory_mb", "time"]
+                }
+            },
+            "required": ["max_retries", "limits", "low", "medium", "high"]
+        },
+        "mapping": {
+            "type": "object",
+            "title": "Mapping",
+            "description": "Read mapping options.",
+            "properties": {
+                "mapper": {
+                    "type": "string",
+                    "description": "Read mapper. Mixed reads are supported by bowtie2 only.",
+                    "enum": ["bowtie2", "bwa", "minimap2"]
+                },
+                "extra_args": {
+                    "type": "string",
+                    "description": "Extra arguments passed verbatim to the mapper."
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs per task, shared by mapper and sort.",
+                    "minimum": 1
+                },
+                "aligner_reserve_mb": {
+                    "type": "integer",
+                    "description": "Memory in MiB reserved for the aligner index and working set before sort memory is derived. 0 estimates the reserve from the staged index files plus 1 GiB. The reserve must be smaller than the task memory.",
+                    "minimum": 0
+                },
+                "platform": {
+                    "type": "string",
+                    "description": "Read-group PL value. Accepted characters: letters, digits, underscore, dot, colon and hyphen.",
+                    "pattern": "^[A-Za-z0-9_.:-]+$"
+                },
+                "library": {
+                    "type": ["string", "null"],
+                    "description": "Read-group LB value. Defaults to the sample id. Accepted characters: letters, digits, underscore, dot, colon and hyphen.",
+                    "pattern": "^[A-Za-z0-9_.:-]+$"
+                }
+            }
+        },
+        "bam_filter": {
+            "type": "object",
+            "title": "BAM filter",
+            "description": "Alignment filtering applied after mapping.",
+            "properties": {
+                "min_map_qual": {
+                    "type": "integer",
+                    "description": "Minimum mapping quality; alignments below it are discarded.",
+                    "minimum": 0
+                }
+            }
+        },
+        "rmdup": {
+            "type": "object",
+            "title": "Duplicate handling",
+            "description": "Optical/PCR duplicate marking with samtools markdup.",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "description": "Duplicate handling: none (no marking), mark (flag duplicates, do not remove) or remove (flag and remove). Callers and the consensus pileup skip duplicate-flagged reads.",
+                    "enum": ["none", "mark", "remove"],
+                    "default": "mark"
+                }
+            }
+        },
+        "left_align_indels": {
+            "type": "object",
+            "title": "Left-align indels",
+            "description": "Normalise indel alignment with GATK LeftAlignIndels.",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Run GATK LeftAlignIndels on the final BAM."
+                }
+            }
+        },
+        "coverage": {
+            "type": "object",
+            "title": "Coverage",
+            "description": "Coverage-based site selection.",
+            "properties": {
+                "min_coverage": {
+                    "type": "integer",
+                    "description": "Minimum depth (at least 1) for a base to be included in the coverage BED and consensus.",
+                    "minimum": 1
+                },
+                "on_empty": {
+                    "type": "string",
+                    "description": "Action for a sample whose coverage BED is empty: fail or skip.",
+                    "enum": [
+                        "fail",
+                        "skip"
+                    ]
+                }
+            }
+        },
+        "calling": {
+            "type": "object",
+            "title": "Variant calling",
+            "description": "Caller selection and per-caller quality filters.",
+            "properties": {
+                "callers": {
+                    "type": "string",
+                    "description": "Comma-separated non-empty subset of bcftools, freebayes and gatk.",
+                    "minLength": 1
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs requested per calling task.",
+                    "minimum": 1
+                },
+                "allow_caller_failure": {
+                    "type": "boolean",
+                    "description": "Continue with the surviving callers when a caller fails. When false, a failed caller aborts the run."
+                },
+                "bcftools": {
+                    "type": "object",
+                    "title": "bcftools",
+                    "description": "bcftools mpileup/call options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum bcftools QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum bcftools QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "call": {
+                            "type": "object",
+                            "title": "bcftools call",
+                            "properties": {
+                                "extra_args": {
+                                    "type": "string",
+                                    "description": "Extra arguments for bcftools call."
+                                }
+                            }
+                        },
+                        "mpileup": {
+                            "type": "object",
+                            "title": "bcftools mpileup",
+                            "properties": {
+                                "max_depth": {
+                                    "type": "integer",
+                                    "default": 100000,
+                                    "description": "Maximum raw depth per input file. The bcftools default of 250 silently down-samples high-coverage libraries.",
+                                    "minimum": 1
+                                },
+                                "max_idepth": {
+                                    "type": "integer",
+                                    "default": 100000,
+                                    "description": "Maximum per-file depth for indel calling. The bcftools default of 250 silently down-samples high-coverage libraries.",
+                                    "minimum": 1
+                                },
+                                "extra_args": {
+                                    "type": "string",
+                                    "description": "Extra arguments for bcftools mpileup."
+                                }
+                            }
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                },
+                "freebayes": {
+                    "type": "object",
+                    "title": "FreeBayes",
+                    "description": "FreeBayes options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum freebayes QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum freebayes QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "use_best_n_alleles": {
+                            "type": "integer",
+                            "default": 4,
+                            "description": "Evaluate only the N best alleles per site, ranked by supporting quality. 0 evaluates all alleles, which can exhaust memory in repeat regions.",
+                            "minimum": 0
+                        },
+                        "limit_coverage": {
+                            "type": "integer",
+                            "default": 100000,
+                            "description": "Per-sample coverage cap; freebayes down-samples coverage above this depth.",
+                            "minimum": 1
+                        },
+                        "extra_args": {
+                            "type": "string",
+                            "description": "Extra arguments for freebayes."
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                },
+                "gatk": {
+                    "type": "object",
+                    "title": "GATK",
+                    "description": "GATK HaplotypeCaller options.",
+                    "properties": {
+                        "min_snp_qual": {
+                            "type": "number",
+                            "description": "Minimum GATK QUAL for SNPs.",
+                            "minimum": 0
+                        },
+                        "min_indel_qual": {
+                            "type": "number",
+                            "description": "Minimum GATK QUAL for indels and other non-SNP records.",
+                            "minimum": 0
+                        },
+                        "interval_padding": {
+                            "type": "integer",
+                            "description": "Padding added to each calling interval so indels at region edges are assembled.",
+                            "minimum": 0
+                        },
+                        "extra_args": {
+                            "type": "string",
+                            "description": "Extra arguments for HaplotypeCaller."
+                        }
+                    },
+                    "required": ["min_snp_qual", "min_indel_qual"]
+                }
+            },
+            "required": ["callers", "cpu"]
+        },
+        "consensus": {
+            "type": "object",
+            "title": "Consensus",
+            "description": "Voting, output and resource options for the consensus stage.",
+            "properties": {
+                "threshold": {
+                    "type": "integer",
+                    "description": "Minimum number of callers that must support an ALT allele.",
+                    "minimum": 1
+                },
+                "cpu": {
+                    "type": "integer",
+                    "description": "CPUs requested for consensus and merge tasks.",
+                    "minimum": 1
+                },
+                "absent_vote": {
+                    "type": "string",
+                    "description": "How a caller without a record at a position votes.",
+                    "enum": ["ref", "abstain"]
+                },
+                "filtered_vote": {
+                    "type": "string",
+                    "description": "How a caller record whose FILTER is not PASS or . votes.",
+                    "enum": ["abstain", "ref"]
+                },
+                "tie_policy": {
+                    "type": "string",
+                    "description": "Zygosity tie-breaker among supporters of the winning ALT.",
+                    "enum": ["nocall", "first"]
+                }
+            },
+            "required": ["threshold", "cpu"]
+        },
+        "boost": {
+            "type": "object",
+            "title": "nf-boost",
+            "description": "Work-directory cleanup performed by the nf-boost plugin.",
+            "properties": {
+                "cleanup": {
+                    "type": ["string", "boolean"],
+                    "description": "Cleanup observer for completed tasks: 'v1' or 'v2' delete work files as soon as no downstream process needs them, false keeps them so -resume can reuse the run.",
+                    "enum": ["v1", "v2", false]
+                }
+            },
+            "required": ["cleanup"]
+        }
+    }
+}

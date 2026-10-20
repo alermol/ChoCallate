@@ -1,8 +1,7 @@
 process CREATE_FAI_INDEX {
-    maxForks 1
-    cpus Runtime.runtime.availableProcessors()
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    label 'process_low'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
     input:
     path(ref_genome), name: "tmp/ref_genome.fasta"
@@ -12,7 +11,9 @@ process CREATE_FAI_INDEX {
 
     script:
     """
-    samtools faidx --threads ${task.cpus} --output ref_genome.fasta.fai tmp/ref_genome.fasta
+    samtools faidx --threads ${task.cpus} \
+        --output ref_genome.fasta.fai tmp/ref_genome.fasta
+    check_contig_lengths.py ref_genome.fasta.fai
     """
 }
 

@@ -1,0 +1,25 @@
+{
+    "splits covered intervals into caller chunks": {
+        "content": [
+            [
+                [
+                    "0000-scattered.bed",
+                    [
+                        "CP002684.1\t0\t100000"
+                    ]
+                ],
+                [
+                    "0001-scattered.bed",
+                    [
+                        "CP002684.1\t100000\t200001"
+                    ]
+                ]
+            ]
+        ],
+        "timestamp": "2026-10-17T23:52:18.604607296",
+        "meta": {
+            "nf-test": "0.9.5",
+            "nextflow": "26.04.7"
+        }
+    }
+}

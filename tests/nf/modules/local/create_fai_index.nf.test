@@ -1,0 +1,36 @@
+nextflow_process {
+
+    name "Test process CREATE_FAI_INDEX"
+    script "../../../../modules/local/create_fai_index/main.nf"
+    process "CREATE_FAI_INDEX"
+
+    test("creates a fai index for the reference") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+        }
+
+        when {
+            process {
+                """
+                input[0] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def fai = ChoCallateTestUtils.outputFile(
+                process.out.fai_index[0]
+            )
+            assert fai.isFile()
+            def lines = fai.readLines()
+            assert lines.size() == 1
+            def fields = lines[0].split('\t', -1)
+            assert fields[0] == 'CP002684.1'
+            assert fields[1] as int == 200001
+            assert snapshot(lines).match()
+        }
+    }
+}

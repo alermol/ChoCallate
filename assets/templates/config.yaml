@@ -1,53 +1,247 @@
+# ChoCallate configuration template.
+#
+# Copy this file, edit it, and run:
+#   nextflow run main.nf -params-file my_run.yaml
+#
+# The values below are the pipeline defaults. Only override what differs.
+# Every parameter is documented here; the pipeline has no --help output.
+
 input:
+  # Tab-separated samplesheet. Columns depend on input.format/reads_type:
+  #   fastq + pe: sample_id, R1, R2
+  #   fastq + se: sample_id, R1
+  #   fastq + mx: sample_id, R1, R2, unpaired
+  #   bam:        sample_id, BAM
+  # Relative read paths are resolved from the samplesheet directory.
   samples_tsv: null
+
+  # Reference FASTA. Plain and bgzip-compressed files are detected
+  # automatically. Contigs longer than 2^31-1 bp are rejected.
   reference_genome: null
+
+  # Directory containing the mapper and caller indexes. Required for
+  # format: fastq; unused for format: bam.
   reference_index_dir: null
+
+  # Index prefix inside reference_index_dir. Must be a plain file name
+  # without path separators. null uses the file name of reference_genome.
+  reference_index_prefix: null
+
+  # Optional BED of regions to call. null calls every covered region.
   include_bed: null
+
+  # Optional BED of regions to exclude. null excludes no region.
   exclude_bed: null
+
+  # Input molecule type: "fastq" or "bam".
   format: "fastq"
+
+  # FASTQ layout: "se" (single-end), "pe" (paired-end) or "mx" (mixed
+  # paired/unpaired; bowtie2 only).
   reads_type: "pe"
 
 output:
+  # Directory for published results and Nextflow reports.
   directory: "ChoCallate_output"
+
+  # "single": one merged multi-sample file; "sample": one file per sample.
+  # The pipeline always builds internal per-sample BCFs (and a merged BCF for
+  # "single") before this layout is applied to the final export.
   type: "single"
+
+  # Final published format: "bcf" or "vcf" (VCF is bgzip-compressed).
+  # Internals are always BCF; this option only affects EXPORT_OUTPUT.
   format: "bcf"
-  remove_invariant: true
+
+  # Drop monomorphic/reference-only records when exporting the final output.
+  # false (default) keeps monomorphic/reference records.
+  remove_invariant: false
+
+  # Keep one record per ALT allele in the final output instead of re-joining
+  # multi-allelic sites.
   split_multiallelic: false
 
-ref_genome:
-  bgzip: true
+  # Compress consecutive hom-reference positions into multi-base gVCF
+  # blocks with INFO/END in the final output. Reference records are always
+  # gVCF-style internally (ALT="<*>") so that a multi-sample merge assigns
+  # the ALT depth of hom-reference samples correctly; this option only
+  # controls whether runs of them are additionally collapsed into blocks.
+  # Multi-base blocks carry the minimum DP and omit AD, so merged ALT depth
+  # for a hom-reference sample is missing rather than a fabricated zero.
+  compress_reference_blocks: true
+
+  # Publishing mode for result files: "copy" writes independent copies,
+  # "link" creates symbolic links into the Nextflow work directory. Linked
+  # results depend on the work directory and must not be combined with
+  # work-directory cleanup.
+  publish_mode: "copy"
+
+resources:
+  # Resource limits for the three process labels. Memory and time are
+  # multiplied by the task attempt number, so retries after an out-of-memory
+  # exit (137) or a walltime exit (140) run with more memory and time; JVM
+  # heap sizes are derived from the resulting task memory.
+  # Maximum number of retries for exit status 137 or 140.
+  max_retries: 3
+
+  # Hard ceilings applied to every task after the per-label values and the
+  # attempt multiplier. Set these to what the executor can provide so a
+  # late retry cannot request resources that will never become available.
+  limits:
+    cpus: 64
+    memory_mb: 262144
+    time: "7d"
+
+  low:
+    # Index creation, decompression and coverage tasks.
+    cpus: 1
+    memory_mb: 4096
+    time: "4h"
+
+  medium:
+    # Mapping, variant calling, scattering and merging tasks.
+    cpus: 6
+    memory_mb: 16384
+    time: "24h"
+
+  high:
+    # GATK HaplotypeCaller tasks, which start one JVM per assigned CPU.
+    cpus: 8
+    memory_mb: 32768
+    time: "48h"
 
 mapping:
+  # Read mapper: "bowtie2", "bwa" or "minimap2". A minimap2 index must be
+  # built with `minimap2 -x sr -d`; the k/w settings stored in the .mmi
+  # override -x sr at mapping time.
   mapper: "bowtie2"
+
+  # Extra arguments passed verbatim to the mapper.
   extra_args: ""
+
+  # CPUs requested per mapping task. The mapper and BAM post-processing run
+  # concurrently, so this is split between them. Post-processing further
+  # divides its share between its concurrent samtools stages.
   cpu: 10
 
+  # Memory (MiB) reserved in each aligner mapping task for the index and
+  # mapper working set, which stay resident while samtools sort runs in the
+  # same pipe. Sort receives half of the task memory that remains after this
+  # reserve. 0 estimates it from the staged index files plus 1 GiB; set it
+  # explicitly for large genomes when the aligner needs more than the index
+  # files suggest. The reserve must be smaller than the task memory.
+  aligner_reserve_mb: 0
+
+  # Read-group PL value. Accepted characters: letters, digits, "_", ".",
+  # ":" and "-".
+  platform: "ILLUMINA"
+
+  # Read-group LB value. null uses the sample id. Accepted characters:
+  # letters, digits, "_", ".", ":" and "-".
+  library: null
+
 bam_filter:
-  min_map_qual: 0
+  # Minimum mapping quality; alignments below it are discarded.
+  min_map_qual: 10
 
 rmdup:
-  enabled: false
+  # Duplicate handling with samtools markdup:
+  #   "none"   leave duplicate reads unflagged
+  #   "mark"   flag duplicates without removing them (default)
+  #   "remove" flag and remove duplicate reads from the BAM
+  # Callers, mosdepth coverage and the consensus pileup skip reads flagged
+  # as duplicates, so "mark" is enough for calling while keeping the BAM.
+  mode: "mark"
 
 left_align_indels:
+  # Run GATK LeftAlignIndels on the final BAM.
   enabled: true
 
 coverage:
-  min_coverage: 2
+  # Minimum depth for a base to enter the coverage BED and consensus.
+  # Must be at least 1; zero-depth positions are not included.
+  min_coverage: 5
+
+  # Action when no base of a sample reaches min_coverage (empty coverage BED):
+  # "fail" aborts with the sample id and threshold; "skip" drops the sample,
+  # logs a warning and records it in dropped_samples.txt.
+  on_empty: "fail"
 
 calling:
+  # Comma-separated non-empty subset of bcftools, freebayes and gatk.
   callers: "bcftools,gatk,freebayes"
-  min_snp_qual: 20
+
+  # CPUs requested per calling task.
   cpu: 4
+
+  # Continue with the surviving callers when one fails. false aborts the
+  # run.
+  allow_caller_failure: false
+
   bcftools:
+    # Minimum QUAL for SNPs and for indels/other records.
+    min_snp_qual: 20
+    min_indel_qual: 20
     call:
+      # Extra arguments for bcftools call.
       extra_args: ""
     mpileup:
+      # Maximum raw depth per input file. bcftools defaults to 250, which
+      # silently down-samples high-coverage libraries.
+      max_depth: 100000
+      # Maximum per-file depth for indel calling. bcftools also defaults this
+      # separately to 250.
+      max_idepth: 100000
+      # Extra arguments for bcftools mpileup.
       extra_args: ""
+
   freebayes:
+    # Minimum QUAL for SNPs and for indels/other records.
+    min_snp_qual: 20
+    min_indel_qual: 20
+    # Evaluate only the N best alleles per site, ranked by supporting
+    # quality; 0 evaluates all and can blow up in repeat regions.
+    use_best_n_alleles: 4
+    # Cap per-sample coverage; freebayes down-samples above this depth.
+    limit_coverage: 100000
+    # Extra arguments for freebayes.
     extra_args: ""
+
   gatk:
+    # Minimum QUAL for SNPs and for indels/other records.
+    min_snp_qual: 20
+    min_indel_qual: 20
+    # Padding added to each calling interval so indels at covered-region
+    # edges are assembled.
+    interval_padding: 150
+    # Extra arguments for GATK HaplotypeCaller.
     extra_args: ""
 
 consensus:
+  # Minimum number of callers supporting an ALT allele (or the reference).
   threshold: 2
+
+  # CPUs requested for consensus and merge tasks.
   cpu: 4
+
+  # Vote of a caller without a record: "ref" or "abstain". "abstain"
+  # requires at least coverage.min_coverage reads at the position.
+  absent_vote: "ref"
+
+  # Vote of a caller record whose FILTER is not PASS/".": "abstain" or
+  # "ref". "abstain" keeps a soft-filtered record out of the vote instead of
+  # counting it as reference evidence.
+  filtered_vote: "abstain"
+
+  # Zygosity tie-breaker: "nocall" or "first".
+  tie_policy: "nocall"
+
+boost:
+  # nf-boost work-directory cleanup observer. "v1" and "v2" delete the files
+  # of a completed task once no downstream process needs them; "v2" is the
+  # current observer.
+  # Deleted files cannot be reused, so cleanup and -resume are mutually
+  # exclusive: a resumed run re-executes every task whose files were removed.
+  # Set this to false to keep the work directory and let -resume reuse
+  # completed tasks.
+  cleanup: "v2"

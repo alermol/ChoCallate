@@ -1,43 +1,42 @@
 process MERGE_OUTPUTS {
-    maxForks 1
-    cpus params.consensus.cpu
-    beforeScript 'export TMPDIR=$(mktemp -d -p $PWD/)'
-    afterScript 'stage_cleanup.sh'
+    label 'process_medium'
+    beforeScript 'export TMPDIR="$(mktemp -d -p "${PWD}")"'
+    afterScript 'stage_cleanup.sh "${nxf_main_ret:-0}"'
 
-    publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.bcf', enabled: params.output.type == 'single' && params.output.format == 'bcf'
-    publishDir "${params.output.directory}", mode: 'move', pattern: 'consensus.vcf.gz', enabled: params.output.type == 'single' && params.output.format == 'vcf'
+    tag "consensus"
 
     input:
-    path('tmp/?.bcf', arity: '1..*')
+    // The sample ids are carried explicitly so the merge order follows
+    // samples_tsv even though `dir/*` staging preserves the file names.
+    tuple val(sample_ids), path('tmp/bcfs/*', arity: '1..*')
+    path("tmp/ref_genome.fasta")
+    path("tmp/ref_genome.fasta.fai")
+    val dropped_samples
 
     output:
-    path("consensus.bcf"), optional: true
-    path("consensus.vcf.gz"), optional: true
+    // Internal merged representation.  Filtering, re-joining and the final
+    // BCF/VCF conversion are done by EXPORT_OUTPUT.
+    path("consensus.bcf"), emit: consensus
 
     script:
-    def regex = params.output.remove_invariant ? 'ALT~\"\\.\" || COUNT(GT=\"RR\")=N_SAMPLES' : 'ALT~\"\\.\"'
-    def output_format = params.output.format == 'vcf' ? "-Oz -o consensus.vcf.gz" : "-Ob -o consensus.bcf"
-    def split_multiallelic = params.output.split_multiallelic ? "" : "| bcftools norm --threads ${task.cpus} -m +any -Ou"
-    def fill_tags = "AN,AC,AF,NS,AC_Hom,AC_Het,MAF,TYPE,F_MISSING,'DP:1=int(sum(FORMAT/DP))'"
+    def sample_id_list = sample_ids.split(',').collect { id -> id.trim() }
+    def merge_paths = sample_id_list.collect { id -> "tmp/bcfs/${id}.bcf" }.join(' ')
+    def dropped = dropped_samples ? dropped_samples.join(',') : ''
+    def dropped_arg = dropped
+        ? "--samples-dropped '${dropped}'"
+        : ''
     """
-    n_bcf=\$(ls -1 tmp/*.bcf | wc -l)
+    printf '%s\n' ${merge_paths} > tmp/merge_list.txt
 
-    if [ "\$n_bcf" -gt 1 ]; then
-        parallel -j ${task.cpus} 'bcftools index --threads 1 --csi {}' ::: tmp/*.bcf
-    fi
-
-    if [ "\$n_bcf" -eq 1 ]; then
-        bcftools filter --threads ${task.cpus} -e '${regex}' -Ou tmp/1.bcf \
-        | bcftools +fill-tags -Ou -- -t ${fill_tags} \
-        | bcftools view ${output_format}
-    else
-        ls -1v tmp/*.bcf > tmp/merge_list.txt
-        merge_bcf_tree.py --cpus ${task.cpus} --file-list tmp/merge_list.txt \
-        | bcftools norm -m -any --threads ${task.cpus} -Ou \
-        | bcftools filter --threads ${task.cpus} -e '${regex}' -Ou ${split_multiallelic} \
-        | fill_missing_ad.py \
-        | bcftools +fill-tags -Ou -- -t ${fill_tags} \
-        | bcftools sort ${output_format}
-    fi
+    # Keep one record per ALT in the internal merge.  EXPORT_OUTPUT re-joins
+    # multi-allelic records when output.split_multiallelic is false.
+    merge_outputs.sh \
+        --file-list tmp/merge_list.txt \
+        --reference tmp/ref_genome.fasta \
+        --output consensus.bcf \
+        --format bcf \
+        --split-multiallelic \
+        --cpus ${task.cpus} \
+        ${dropped_arg}
     """
 }

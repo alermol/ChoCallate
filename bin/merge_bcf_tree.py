@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Merge per-sample BCF files through named pipes.
+
+The merge runs in two levels: each group of inputs is merged into a FIFO by
+one ``bcftools merge --gvcf`` process, and a final merge combines the FIFOs.
+This bounds the memory footprint and writes no intermediate file to disk.
+"""
 
 import argparse
 import atexit
@@ -8,23 +14,29 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 
 class BcfChunkMerge:
-    def __init__(self, cpus, pipe_dir=None):
+    def __init__(self, cpus, gvcf, pipe_dir=None):
         self.cpus = cpus
+        self.gvcf = gvcf
         self.pipe_dir = pipe_dir or os.environ.get("TMPDIR", "/tmp")
         self.pipes = []
         self.processes = []
+        self.unblock_fds = []
 
     def cleanup(self):
-        for proc in self.processes:
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+        alive = [proc for proc in self.processes
+                 if proc.poll() is None]
+        if alive:
+            self._abort(alive)
+        for fd in self.unblock_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self.unblock_fds = []
         for pipe in self.pipes:
             try:
                 os.unlink(pipe)
@@ -62,25 +74,60 @@ class BcfChunkMerge:
             return f"bcftools view -Ou {shlex.quote(files[0])} > {out}"
         inputs = " ".join(shlex.quote(path) for path in files)
         return (
-            "bcftools merge -Ou -m all --force-samples --force-single --threads 1 "
+            "bcftools merge -Ou -m all --force-samples --force-single "
+            f"--gvcf {shlex.quote(self.gvcf)} --threads 1 "
             f"{inputs} > {out}"
         )
 
     def _final_cmd(self, pipes):
         inputs = " ".join(shlex.quote(pipe) for pipe in pipes)
+        # --force-single: with --cpus 1 there is a single chunk pipe, and
+        # `bcftools merge` refuses a single input without the flag.
         return (
-            f"bcftools merge --no-index -Ou -m all --force-samples --threads {self.cpus} "
-            f"{inputs}"
+            f"bcftools merge --no-index -Ou -m all --force-samples --force-single "
+            f"--gvcf {shlex.quote(self.gvcf)} --threads {self.cpus} {inputs}"
         )
 
+    def _unblock_writers(self):
+        """Open the pipes so writers blocked in ``open`` can proceed."""
+        for pipe in self.pipes:
+            try:
+                fd = os.open(pipe, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            self.unblock_fds.append(fd)
+
+    def _abort(self, pending):
+        for proc in pending:
+            if proc.poll() is None:
+                proc.terminate()
+        # Open readers before reaping: a shell may leave a child behind that
+        # is blocked opening its FIFO, and only a reader releases it.
+        self._unblock_writers()
+        for proc in pending:
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
     def _wait_all(self):
-        errors = []
-        for proc in self.processes:
-            rc = proc.wait()
-            if rc != 0:
-                errors.append(rc)
-        if errors:
-            raise SystemExit(f"Merge failed with exit codes: {errors}")
+        pending = list(self.processes)
+        while pending:
+            failed = []
+            for proc in list(pending):
+                rc = proc.poll()
+                if rc is None:
+                    continue
+                pending.remove(proc)
+                if rc != 0:
+                    failed.append(rc)
+            if failed:
+                self._abort(pending)
+                raise SystemExit(
+                    f"Merge failed with exit codes: {failed}")
+            if pending:
+                time.sleep(0.05)
 
     def run(self, files):
         for path in files:
@@ -108,6 +155,11 @@ def parse_args():
         help="Input BCF paths, one per line",
     )
     parser.add_argument(
+        "--gvcf",
+        required=True,
+        help="Reference FASTA (with .fai) for `bcftools merge --gvcf`",
+    )
+    parser.add_argument(
         "--cpus",
         type=int,
         required=True,
@@ -131,7 +183,7 @@ def main():
         print("--cpus must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    merger = BcfChunkMerge(cpus=args.cpus)
+    merger = BcfChunkMerge(cpus=args.cpus, gvcf=args.gvcf)
 
     def _cleanup_handler(signum=None, frame=None):
         merger.cleanup()
