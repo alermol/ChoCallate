@@ -1,0 +1,32 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  ChoCallate: a computational pipeline for consensus
+  germline variant calling in genomic sequencing data
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Aleksey
+    family-names: Ermolaev
+    email: ermol-2012@yandex.ru
+    affiliation: >-
+      All-Russian Research Institute of Agricultural
+      Biotechnology, Moscow, Russia
+    orcid: 'https://orcid.org/0000-0001-9789-8694'
+  - given-names: Mikhail
+    family-names: Divashuk
+    orcid: 'https://orcid.org/0000-0001-6221-3659'
+    email: divashuk@iab.ac.ru
+    affiliation: >-
+      All-Russian Research Institute of Agricultural
+      Biotechnology, Moscow, Russia
+identifiers:
+  - type: doi
+    value: 10.7717/peerj.21758
+repository-code: 'https://github.com/alermol/ChoCallate'
+version: 4.0.1
+date-released: '2026-10-22'
