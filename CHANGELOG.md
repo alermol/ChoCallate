@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.1] - 2026-10-22
+
+### Added
+
+- `CITATION.cff` provides machine-readable software citation metadata: authors, ORCID iDs, repository URL, DOI and release version.
+
+### Fixed
+
+- `bin/merge_outputs.sh` and `bin/postprocess_bam.sh` no longer abort under `set -u` on Bash 4.3 and older when an optional argument array is empty. Array expansions now use the `${arr[@]+"${arr[@]}"}` form, covering `output_flags`, `markdup_flags`, `check_args` and `gatk_opts`, and keeping the `files` loop safe on the same shells.
+
 ## [4.0.0] - 2026-10-20
 
 ### Added
