@@ -418,13 +418,17 @@ def test_non_diploid_ploidy_is_rejected(tmp_path, caller, override, option):
     not sys.platform.startswith("linux"),
     reason="uses a POSIX descriptor limit",
 )
-def test_merge_file_descriptor_guard(tmp_path):
+@pytest.mark.parametrize("output_type", ["single", "both"])
+def test_merge_file_descriptor_guard(tmp_path, output_type):
     rows = ["sample{}\tr1.fq\tr2.fq".format(index) for index in range(300)]
     samplesheet = _prepare_inputs(tmp_path, rows=tuple(rows))
     params = _config(
         tmp_path,
         samplesheet=samplesheet,
-        overrides={"consensus": {"cpu": 1}},
+        overrides={
+            "consensus": {"cpu": 1},
+            "output": {"type": output_type},
+        },
     )
 
     result = _run(tmp_path, params, ulimit=256)

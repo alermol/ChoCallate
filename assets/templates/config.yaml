@@ -44,9 +44,10 @@ output:
   # Directory for published results and Nextflow reports.
   directory: "ChoCallate_output"
 
-  # "single": one merged multi-sample file; "sample": one file per sample.
+  # "single": one merged multi-sample file; "sample": one file per sample;
+  # "both": the merged file plus one file per sample under per_sample/.
   # The pipeline always builds internal per-sample BCFs (and a merged BCF for
-  # "single") before this layout is applied to the final export.
+  # "single" and "both") before this layout is applied to the final export.
   type: "single"
 
   # Final published format: "bcf" or "vcf" (VCF is bgzip-compressed).

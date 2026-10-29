@@ -37,6 +37,7 @@ nextflow_process {
                 """
                 input[0] = tuple(
                     'sample_a',
+                    'per_sample',
                     file("${launchDir}/bcfs/sample_a.bcf")
                 )
                 input[1] = file("${launchDir}/reference/genome.fasta")
@@ -90,6 +91,7 @@ nextflow_process {
                 """
                 input[0] = tuple(
                     'consensus',
+                    '',
                     file("${launchDir}/bcfs/consensus.bcf")
                 )
                 input[1] = file("${launchDir}/reference/genome.fasta")
@@ -143,6 +145,7 @@ nextflow_process {
                 """
                 input[0] = tuple(
                     'consensus',
+                    '',
                     file("${launchDir}/bcfs/consensus.bcf")
                 )
                 input[1] = file("${launchDir}/reference/genome.fasta")
@@ -189,6 +192,7 @@ nextflow_process {
                 """
                 input[0] = tuple(
                     'consensus',
+                    '',
                     file("${launchDir}/bcfs/consensus.bcf")
                 )
                 input[1] = file("${launchDir}/reference/genome.fasta")

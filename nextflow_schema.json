@@ -79,8 +79,8 @@
                 },
                 "type": {
                     "type": "string",
-                    "description": "Publish one merged multi-sample consensus ('single') or one file per sample ('sample').",
-                    "enum": ["single", "sample"]
+                    "description": "Publish one merged multi-sample consensus ('single'), one file per sample under per_sample/ ('sample'), or both layouts ('both').",
+                    "enum": ["single", "sample", "both"]
                 },
                 "format": {
                     "type": "string",

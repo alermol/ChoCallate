@@ -28,5 +28,5 @@ identifiers:
   - type: doi
     value: 10.7717/peerj.21758
 repository-code: 'https://github.com/alermol/ChoCallate'
-version: 4.0.1
-date-released: '2026-10-22'
+version: 4.1.0
+date-released: '2026-10-29'

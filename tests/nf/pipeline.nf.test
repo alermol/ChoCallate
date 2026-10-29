@@ -560,6 +560,65 @@ nextflow_pipeline {
         }
     }
 
+    test("test_both_outputs_merged_and_per_sample") {
+        tag "both"
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample_both'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [['sample_both', "${launchDir}/sample_both.bam"]]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "both"
+                    format = "vcf"
+                    remove_invariant = true
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def merged = new File("${outputDir}/consensus.vcf.gz")
+            def per_sample = new File(
+                "${outputDir}/per_sample/sample_both.vcf.gz"
+            )
+            assert merged.isFile()
+            assert per_sample.isFile()
+            assert merged.length() > 0
+            assert per_sample.length() > 0
+            assert ChoCallateTestUtils.vcfSamples(merged) == ['sample_both']
+            assert ChoCallateTestUtils.vcfSamples(per_sample) ==
+                ['sample_both']
+            assert ChoCallateTestUtils.recordCount(merged) == 271
+            assert ChoCallateTestUtils.recordCount(per_sample) == 271
+        }
+    }
+
     test("test_stage_copy_default_prefix") {
         tag "index"
         tag "stage_copy"

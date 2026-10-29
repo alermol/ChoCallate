@@ -5,28 +5,25 @@ process EXPORT_OUTPUT {
 
     tag "${sample_id}"
 
-    // Only the final export uses output.format and output.type. Every file
-    // consumed here is an internal BCF produced by GENERATE_CONSENSUS or
-    // MERGE_OUTPUTS.
+    // Only the final export applies output.format. Every file consumed here is
+    // an internal BCF produced by GENERATE_CONSENSUS or MERGE_OUTPUTS. The
+    // caller passes the target subdirectory so that merged and per-sample
+    // exports can run in the same pipeline.
     publishDir(
-        params.output.type == 'single'
-            ? params.output.directory
-            : "${params.output.directory}/per_sample",
+        { "${params.output.directory}/${publish_subdir}" },
         mode: params.output.publish_mode,
         pattern: '*.bcf',
         enabled: params.output.format == 'bcf'
     )
     publishDir(
-        params.output.type == 'single'
-            ? params.output.directory
-            : "${params.output.directory}/per_sample",
+        { "${params.output.directory}/${publish_subdir}" },
         mode: params.output.publish_mode,
         pattern: '*.vcf.gz',
         enabled: params.output.format == 'vcf'
     )
 
     input:
-    tuple val(sample_id), path("tmp/input.bcf")
+    tuple val(sample_id), val(publish_subdir), path("tmp/input.bcf")
     path("tmp/ref_genome.fasta")
 
     output:

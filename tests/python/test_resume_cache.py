@@ -86,7 +86,7 @@ def _trace_rows(trace):
     return [dict(zip(header, line.split('\t'))) for line in lines[1:]]
 
 
-@pytest.mark.parametrize('output_type', ['single', 'sample'])
+@pytest.mark.parametrize('output_type', ['single', 'sample', 'both'])
 def test_resume_keeps_all_tasks_cached(tmp_path, output_type):
     samples = tmp_path / 'samples.tsv'
     samples.write_text(f'sample1\t{READ1}\t{READ2}\n')
@@ -103,17 +103,21 @@ def test_resume_keeps_all_tasks_cached(tmp_path, output_type):
     assert rows
     statuses = {row['name']: row['status'] for row in rows}
     assert all(row['status'] == 'CACHED' for row in rows), statuses
-    final_step = (
-        'MERGE_OUTPUTS' if output_type == 'single' else 'EXPORT_OUTPUT'
-    )
-    assert any(row['name'].startswith(final_step) for row in rows)
+    assert any(row['name'].startswith('EXPORT_OUTPUT') for row in rows)
+    if output_type in ('single', 'both'):
+        assert any(row['name'].startswith('MERGE_OUTPUTS') for row in rows)
 
-    if output_type == 'single':
-        output = tmp_path / 'results' / 'consensus.bcf'
-    else:
-        output = tmp_path / 'results' / 'per_sample' / 'sample1.bcf'
-    header = subprocess.run(
-        [BCFTOOLS, 'view', '-h', str(output)],
-        check=True, capture_output=True, text=True,
-    ).stdout
-    assert '##ChoCallate=<' in header
+    outputs = []
+    if output_type in ('single', 'both'):
+        outputs.append(tmp_path / 'results' / 'consensus.bcf')
+    if output_type in ('sample', 'both'):
+        outputs.append(
+            tmp_path / 'results' / 'per_sample' / 'sample1.bcf'
+        )
+    for output in outputs:
+        assert output.is_file()
+        header = subprocess.run(
+            [BCFTOOLS, 'view', '-h', str(output)],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        assert '##ChoCallate=<' in header

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.0] - 2026-10-29
+
+### Added
+
+- `output.type: "both"` publishes the merged multi-sample BCF/VCF and one BCF/VCF per sample under `per_sample/` in the same run.
+
 ## [4.0.1] - 2026-10-22
 
 ### Added

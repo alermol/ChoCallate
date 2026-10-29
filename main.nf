@@ -53,7 +53,9 @@ workflow {
 
     // A merge opens every sample BCF plus the named pipes; fail before the
     // first task when the process descriptor limit cannot support that.
-    if (params.output.type == 'single') {
+    def merge_output = params.output.type in ['single', 'both']
+    def per_sample_output = params.output.type in ['sample', 'both']
+    if (merge_output) {
         CLIParamsValidation.merge_ulimit_validation(
             samples.size(),
             params.consensus.cpu as int
@@ -321,11 +323,16 @@ workflow {
     )
 
     // A single output is one multi-sample file: merge the internal BCFs first.
-    // Both paths end in EXPORT_OUTPUT, which applies output.format, output.type
+    // With "both", the same internal BCFs are also exported per sample. Every
+    // path ends in one EXPORT_OUTPUT invocation, which applies output.format
     // and the final record transformations.
     def all_dropped_message =
         "All samples were dropped; see dropped_samples.txt"
-    if (params.output.type == 'single') {
+    consensus_bcf = GENERATE_CONSENSUS.out.consensus_bcf
+        .combine(dropped_report)
+        .map { sample_id, bcf, _report -> tuple(sample_id, bcf) }
+    def export_input = channel.empty()
+    if (merge_output) {
         sample_rank = sample_run_ch
                         .map { item -> item[0] }
                         .collect()
@@ -334,11 +341,7 @@ workflow {
                                 tuple(id, i)
                             }
                         }
-        consensus = GENERATE_CONSENSUS.out.consensus_bcf
-                        .combine(dropped_report)
-                        .map { sample_id, bcf, _report ->
-                            tuple(sample_id, bcf)
-                        }
+        consensus = consensus_bcf
                         .join(sample_rank)
                         .toSortedList { item -> item[2] }
                         .map { items ->
@@ -350,19 +353,19 @@ workflow {
         merged = MERGE_OUTPUTS(
             consensus, ref_genome, fai_index, dropped_samples
         )
-        EXPORT_OUTPUT(
-            merged.map { bcf -> tuple('consensus', bcf) },
-            ref_genome
-        )
-    } else {
-        consensus_bcf = GENERATE_CONSENSUS.out.consensus_bcf
-            .combine(dropped_report)
-            .map { sample_id, bcf, _report -> tuple(sample_id, bcf) }
-            .ifEmpty { error(all_dropped_message) }
-        EXPORT_OUTPUT(
-            consensus_bcf,
-            ref_genome
+        export_input = export_input.concat(
+            merged.map { bcf -> tuple('consensus', '', bcf) }
         )
     }
+    if (per_sample_output) {
+        export_input = export_input.concat(
+            consensus_bcf
+                .map { sample_id, bcf ->
+                    tuple(sample_id, 'per_sample', bcf)
+                }
+                .ifEmpty { error(all_dropped_message) }
+        )
+    }
+    EXPORT_OUTPUT(export_input, ref_genome)
 }
 
