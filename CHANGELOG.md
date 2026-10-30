@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- `GENERATE_CONSENSUS` now hands reference-only runs to the Cython accelerator, which walks the pileup, tallies support and writes gVCF blocks without entering Python per base. On a 2 Mbp / ~20x benchmark this makes the default reference-block path about 2x faster, the no-block path about 1.6x faster and `--variants_only` about 1.2x faster. `--variants_only` also jumps directly between caller records instead of visiting every reference position.
+- `generate_consensus.py` accepts `--bcf_compression` (0-9) to trade intermediate BCF size for write speed.
+
 ## [4.1.0] - 2026-10-29
 
 ### Added

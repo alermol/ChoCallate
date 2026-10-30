@@ -70,7 +70,10 @@ The default output has one record per BED position (one per reference run with
   only collapsed when a column actually repeats a query name.  If the optional
   Cython extension ``consensus_accel`` is built (``bin/build_consensus_accel.py``)
   the pileup is driven and tallied in C and the records are written through
-  htslib, which together is another ~5x faster.
+  htslib, which together is another ~5x faster.  The extension's
+  ``ReferenceBlockWriter`` also handles entire runs without caller records in
+  Cython, removing the remaining per-base Python loop; on a 2 Mbp / ~20x
+  benchmark this halves the default reference-block runtime.
 * BED intervals are grouped into spans (gaps up to ``SPAN_MAX_GAP`` bases) that
   share one pileup iterator and one caller-record scan.  A BAM region query
   costs ~2 ms because htslib decompresses a whole index bin, which dominates the
@@ -98,10 +101,15 @@ def _warn_accel_unavailable(error):
 if os.environ.get('CHOCALLATE_NO_ACCEL'):
     BcfLineWriter = None
     PileupTally = None
+    ReferenceBlockWriter = None
 else:
     try:
         # Optional Cython helpers built by bin/build_consensus_accel.py.
-        from consensus_accel import BcfLineWriter, PileupTally
+        from consensus_accel import (
+            BcfLineWriter,
+            PileupTally,
+            ReferenceBlockWriter,
+        )
     except ModuleNotFoundError as error:
         # A checkout without the optional extension is the documented
         # normal state, so stay silent: this module is imported once per
@@ -112,6 +120,7 @@ else:
             _warn_accel_unavailable(error)
         BcfLineWriter = None
         PileupTally = None
+        ReferenceBlockWriter = None
     except Exception as error:
         # A stale extension built against another pysam raises ValueError
         # ("size changed, may indicate binary incompatibility"), not
@@ -120,6 +129,7 @@ else:
         _warn_accel_unavailable(error)
         BcfLineWriter = None
         PileupTally = None
+        ReferenceBlockWriter = None
 
 PileupSite = namedtuple('PileupSite', ['snp', 'ins', 'dele', 'dp'])
 
@@ -999,6 +1009,10 @@ def main():
     parser.add_argument('--variants_only', action='store_true',
                         help='Write only consensus variant records, omitting '
                              'reference records')
+    parser.add_argument('--bcf_compression', type=int, choices=range(0, 10),
+                        default=6, metavar='0-9',
+                        help='BCF compression level (default: 6); lower levels '
+                             'write faster and produce larger intermediates')
     args = parser.parse_args()
 
     threshold = args.consensus_threshold
@@ -1044,14 +1058,30 @@ def main():
         variant_files = [stack.enter_context(pysam.VariantFile(bcf, index_filename=bcf + '.csi'))
                          for bcf in input_paths]
         n_files = len(variant_files)
+        bcf_mode = 'wb{}'.format(args.bcf_compression)
         output_file = None
         writer = None
         if use_accel:
-            writer = BcfLineWriter(header, args.output)
+            writer = BcfLineWriter(header, args.output, bcf_mode)
         else:
-            output_file = stack.enter_context(pysam.VariantFile(args.output, mode='wb', header=header))
+            output_file = stack.enter_context(pysam.VariantFile(
+                args.output, mode=bcf_mode, header=header))
 
         pending_block = None
+        reference_writer = None
+        if (use_accel and not variants_only
+                and ReferenceBlockWriter is not None):
+            reference_writer = ReferenceBlockWriter(
+                writer, threshold, absent_vote == 'ref', min_coverage,
+                compress_blocks, n_files)
+
+        def flush_pending():
+            if reference_writer is not None:
+                reference_writer.flush()
+            elif pending_block is not None:
+                flush_reference_block(pending_block, output_file, writer,
+                                      use_accel)
+
         # 1-based inclusive end of the furthest called deletion.  Reference
         # records must not be written over that span: the deletion record's
         # REF already covers those positions.
@@ -1133,17 +1163,30 @@ def main():
                             # variants_only such positions are not written and
                             # need no reference support count.
                             if variants_only:
-                                vcf_start += 1
-                                rel += 1
+                                # Nothing is written here; jump to the next
+                                # caller record instead of visiting every base.
+                                next_pos = (min_next if min_next <= end0
+                                            else end0 + 1)
+                                vcf_start = next_pos
+                                rel = next_pos - start0 - 1
+                                continue
+                            if reference_writer is not None:
+                                # The accelerated path walks the whole run in
+                                # Cython: pileup sync, support tally and block
+                                # writing.  Caller records bound the run.
+                                run_end = min(end0, min_next - 1)
+                                reference_writer.write_interval(
+                                    walker.tally, rid, ref_seq, rel,
+                                    vcf_start, run_end, deletion_end)
+                                vcf_start = run_end + 1
+                                rel = vcf_start - start0 - 1
                                 continue
                             if vcf_start <= deletion_end:
                                 # The position is inside a called deletion.
                                 # Its REF span covers the site, so a
                                 # hom-reference record would contradict the
                                 # deletion genotype.
-                                flush_reference_block(
-                                    pending_block, output_file, writer,
-                                    use_accel)
+                                flush_pending()
                                 pending_block = None
                                 vcf_start += 1
                                 rel += 1
@@ -1153,9 +1196,7 @@ def main():
                                 # An IUPAC code (N included) cannot be
                                 # represented in the output; end the block and
                                 # omit the position.
-                                flush_reference_block(
-                                    pending_block, output_file, writer,
-                                    use_accel)
+                                flush_pending()
                                 pending_block = None
                                 vcf_start += 1
                                 rel += 1
@@ -1189,9 +1230,7 @@ def main():
                                         if dp < pending_block[6]:
                                             pending_block[6] = dp
                                     else:
-                                        flush_reference_block(
-                                            pending_block, output_file,
-                                            writer, use_accel)
+                                        flush_pending()
                                         pending_block = [
                                             contig, rid, vcf_start - 1,
                                             vcf_start, ref_base, ad, dp,
@@ -1202,9 +1241,7 @@ def main():
                                         rid, contig, vcf_start - 1,
                                         vcf_start, ref_base, ad, dp)
                             else:
-                                flush_reference_block(
-                                    pending_block, output_file, writer,
-                                    use_accel)
+                                flush_pending()
                                 pending_block = None
                             vcf_start += 1
                             rel += 1
@@ -1212,8 +1249,7 @@ def main():
 
                         # A caller record bounds a reference block: the
                         # position is evaluated individually below.
-                        flush_reference_block(pending_block, output_file,
-                                              writer, use_accel)
+                        flush_pending()
                         pending_block = None
                         # some caller has a record here: collect all of its
                         # records at this position (one per split ALT after
@@ -1309,8 +1345,7 @@ def main():
                         vcf_start += 1
                         rel += 1
 
-                flush_reference_block(pending_block, output_file, writer,
-                                      use_accel)
+                flush_pending()
                 pending_block = None
         except BedIntervalError as error:
             sys.exit('ERROR: {}'.format(error))

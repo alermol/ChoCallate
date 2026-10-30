@@ -14,12 +14,21 @@ pure-pysam implementation, so the pipeline keeps working from a plain checkout.
     matches the overlap-corrected mosdepth coverage BED.
 
 ``BcfLineWriter``
-    Writes records from VCF text lines through htslib's ``vcf_parse`` +
-    ``bcf_write``.  Constructing records with ``VariantFile.new_record`` plus
-    per-sample assignments costs ~20us/record, which dominates the runtime at
-    one record per position; text lines cost a fraction of that.
+    Builds records with htslib's ``bcf_update_*`` functions and writes them
+    through ``bcf_write``.  Constructing records with
+    ``VariantFile.new_record`` plus per-sample assignments costs ~20us/record,
+    which dominates the runtime at one record per position; direct htslib
+    updates cost a fraction of that.
+
+``ReferenceBlockWriter``
+    Drives the reference-only fast path: advances the pileup, tallies the
+    reference support without allocating a Python tuple per base, applies the
+    absent-caller vote and writes single-base records or contiguous gVCF
+    blocks.  This removes the per-base Python loop that otherwise remains even
+    when the pileup and record writing are already in C.
 """
 
+from cpython.unicode cimport PyUnicode_AsUTF8AndSize
 from libc.stdint cimport int32_t, uint8_t, uint32_t, uint64_t
 from libc.stdlib cimport free, malloc
 from libc.string cimport memcmp, memset
@@ -54,6 +63,22 @@ DEF MISSING_QUAL = 0xff
 DEF NO_ALLELE = 2
 # Table slots above this are refused; the caller falls back to the Python path.
 DEF MAX_TABLE_SLOTS = 1 << 21
+# The reference fast path grows the table instead of falling back to Python;
+# this is only a sanity bound for a pathologically deep column.
+DEF FAST_MAX_SLOTS = 1 << 30
+
+
+cdef inline bytes _alleles_for_base(char base):
+    """Pre-joined ``REF,<*>`` allele string for a monomorphic record."""
+    if base == 65:  # A
+        return b'A,<*>'
+    if base == 67:  # C
+        return b'C,<*>'
+    if base == 71:  # G
+        return b'G,<*>'
+    if base == 84:  # T
+        return b'T,<*>'
+    return None
 
 
 cdef inline uint64_t _hash_qname(const char *name, size_t length) noexcept:
@@ -228,10 +253,27 @@ cdef class PileupTally:
         wins over it.  ``n_ref`` counts observations whose collapsed allele is
         the plain reference base, so ``dp - n_ref`` is the ``<*>`` depth.
         """
+        cdef int dp, n_ref, n_obs, status
+        cdef char ref_char = 0
+        if ref_base:
+            ref_char = <char>ord(ref_base[0])
+        status = self._simple_counts(ref_char, max_slots, &dp, &n_ref, &n_obs)
+        if status == 1:
+            return None
+        return (dp, n_ref, n_obs)
+
+    cdef int _simple_counts(self, char ref_char, int max_slots,
+                            int* dp_out, int* n_ref_out,
+                            int* n_obs_out) except -1:
+        """C-level form of ``simple`` used by the reference fast path.
+
+        Returns 0 on success and 1 when the column is deeper than ``max_slots``
+        allows.  The count values are written through the output pointers so
+        the per-base loop does not allocate a Python tuple.
+        """
         cdef int n = self.it.n_plp
         cdef const bam_pileup1_t *start = self.it.plp
         cdef const bam_pileup1_t *p
-        cdef char ref_char
         cdef uint32_t epoch, qual, prev_q
         cdef uint64_t h
         cdef size_t slot, mask
@@ -242,11 +284,7 @@ cdef class PileupTally:
         cdef char base
 
         if n > (max_slots >> 1):
-            return None
-        if ref_base:
-            ref_char = <char>ord(ref_base[0])
-        else:
-            ref_char = 0
+            return 1
         self._reserve(n)
         self.cur_epoch += 1
         if self.cur_epoch == 0:
@@ -304,7 +342,10 @@ cdef class PileupTally:
                 if is_match != NO_ALLELE:
                     n_ref += is_match
                 n_obs += 1
-        return (n_obs, n_ref, n_obs)
+        dp_out[0] = n_obs
+        n_ref_out[0] = n_ref
+        n_obs_out[0] = n_obs
+        return 0
 
 
 cdef class BcfLineWriter:
@@ -323,8 +364,9 @@ cdef class BcfLineWriter:
     cdef int32_t ad_buf[64]
     cdef bint closed
 
-    def __cinit__(self, VariantHeader header, str path):
+    def __cinit__(self, VariantHeader header, str path, str mode="wb"):
         cdef bytes bpath
+        cdef bytes bmode
         self.fp = NULL
         self.rec = NULL
         self.closed = True
@@ -333,7 +375,8 @@ cdef class BcfLineWriter:
             raise ValueError("header is not initialized")
         header._hdr_sync()
         bpath = path.encode("utf-8")
-        self.fp = hts_open(<const char *>bpath, b"wb")
+        bmode = mode.encode("ascii")
+        self.fp = hts_open(<const char *>bpath, <const char *>bmode)
         if self.fp is NULL:
             raise OSError("could not open '%s' for writing" % path)
         if bcf_hdr_write(self.fp, self.hdr) < 0:
@@ -375,15 +418,10 @@ cdef class BcfLineWriter:
             raise OSError("could not write record")
         return 0
 
-    def write_monomorphic(self, int rid, int pos0, bytes alleles,
-                          int ad_ref, int ad_other, int dp, int end_pos=-1):
-        """Write a gVCF-style reference record or block ``alleles``
-        (precomputed, e.g. b'A,<*>'), GT 0/0, AD (ad_ref, ad_other) and DP.
-
-        ``ad_other`` is the depth of reads that do not support the reference
-        base (the ``<*>`` slot).  ``end_pos`` is the 1-based inclusive end; a
-        negative value means the single base at ``pos0``.
-        """
+    cdef int _write_monomorphic(self, int rid, int pos0, bytes alleles,
+                                int ad_ref, int ad_other, int dp,
+                                int end_pos) except -1:
+        """C-level writer used by both the public method and the fast path."""
         cdef int32_t ad[2]
         if end_pos < 0:
             end_pos = pos0 + 1
@@ -394,6 +432,26 @@ cdef class BcfLineWriter:
         return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
                            ad, 2, dp, end_pos)
 
+    def write_monomorphic(self, int rid, int pos0, bytes alleles,
+                          int ad_ref, int ad_other, int dp, int end_pos=-1):
+        """Write a gVCF-style reference record or block ``alleles``
+        (precomputed, e.g. b'A,<*>'), GT 0/0, AD (ad_ref, ad_other) and DP.
+
+        ``ad_other`` is the depth of reads that do not support the reference
+        base (the ``<*>`` slot).  ``end_pos`` is the 1-based inclusive end; a
+        negative value means the single base at ``pos0``.
+        """
+        return self._write_monomorphic(rid, pos0, alleles, ad_ref, ad_other,
+                                       dp, end_pos)
+
+    cdef int _write_reference_block(self, int rid, int pos0, bytes alleles,
+                                    int dp, int end_pos) except -1:
+        """C-level writer for a multi-base gVCF reference block."""
+        self.gt_buf[0] = 2  # bcf_gt_unphased(0)
+        self.gt_buf[1] = 2
+        return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
+                           NULL, 0, dp, end_pos)
+
     def write_reference_block(self, int rid, int pos0, bytes alleles, int dp,
                               int end_pos):
         """Write a multi-base gVCF reference block without FORMAT/AD.
@@ -402,10 +460,7 @@ cdef class BcfLineWriter:
         ``bcftools merge --gvcf`` reports missing depth when the block is used
         to fill a hom-reference sample at another sample's variant.
         """
-        self.gt_buf[0] = 2  # bcf_gt_unphased(0)
-        self.gt_buf[1] = 2
-        return self._write(rid, pos0, <const char *>alleles, self.gt_buf, 2,
-                           NULL, 0, dp, end_pos)
+        return self._write_reference_block(rid, pos0, alleles, dp, end_pos)
 
     def write_record(self, int rid, int pos0, object alleles, object gt,
                      object ad, int dp):
@@ -457,3 +512,146 @@ cdef class BcfLineWriter:
         # would otherwise leave a truncated BCF and a successful exit status.
         if fp is not NULL and hts_close(fp) < 0:
             raise OSError("error closing BCF output")
+
+
+cdef class ReferenceBlockWriter:
+    """Write runs of hom-reference positions without entering Python per base.
+
+    The Python driver still decides which positions have caller records and
+    where a run starts and ends.  This class walks the BED run, advances the
+    pileup, tallies reference support, applies the absent-caller vote and
+    emits either single-base records or contiguous gVCF blocks.  It keeps a
+    pending block across calls so adjacent BED intervals are not split.
+    """
+
+    cdef BcfLineWriter writer
+    cdef int threshold
+    cdef bint absent_vote_ref
+    cdef int min_coverage
+    cdef bint compress_blocks
+    cdef int n_files
+    cdef bint pending
+    cdef int pending_rid
+    cdef int pending_start0
+    cdef int pending_end0
+    cdef int pending_dp
+    cdef bint pending_ge
+    cdef char pending_ref
+    cdef int pending_ad_ref
+    cdef int pending_ad_other
+
+    def __cinit__(self, BcfLineWriter writer, int threshold,
+                  bint absent_vote_ref, int min_coverage,
+                  bint compress_blocks, int n_files):
+        if writer is None:
+            raise ValueError("writer is required")
+        self.writer = writer
+        self.threshold = threshold
+        self.absent_vote_ref = absent_vote_ref
+        self.min_coverage = min_coverage
+        self.compress_blocks = compress_blocks
+        self.n_files = n_files
+        self.pending = False
+
+    cdef int _flush(self) except -1:
+        """Emit the pending block, if any."""
+        cdef bytes alleles
+        if not self.pending:
+            return 0
+        alleles = _alleles_for_base(self.pending_ref)
+        if self.pending_end0 != self.pending_start0 + 1:
+            self.writer._write_reference_block(
+                self.pending_rid, self.pending_start0, alleles,
+                self.pending_dp, self.pending_end0)
+        else:
+            self.writer._write_monomorphic(
+                self.pending_rid, self.pending_start0, alleles,
+                self.pending_ad_ref, self.pending_ad_other,
+                self.pending_dp, self.pending_end0)
+        self.pending = False
+        return 0
+
+    def flush(self):
+        """Write a pending reference block, if one is open."""
+        return self._flush()
+
+    def write_interval(self, PileupTally tally, int rid, str ref_seq,
+                       int ref_offset, int start1, int end1,
+                       int deletion_end):
+        """Write the reference-only positions ``start1..end1`` (1-based).
+
+        ``ref_seq`` is the reference sequence of the enclosing BED interval;
+        ``ref_offset`` is the 0-based offset of ``start1`` within it.  No
+        caller record may fall inside the interval.  ``deletion_end`` is the
+        1-based inclusive end of the furthest called deletion, whose REF span
+        suppresses reference records.
+        """
+        cdef Py_ssize_t seq_len
+        cdef const char* seq
+        cdef long long pos
+        cdef int dp, n_ref, n_obs, ref_votes, status
+        cdef char ref_base
+        cdef bint has_column, ge
+        if start1 > end1:
+            return
+        seq = PyUnicode_AsUTF8AndSize(ref_seq, &seq_len)
+        if seq is NULL:
+            raise ValueError("reference sequence is not valid UTF-8")
+        if (ref_offset < 0 or start1 < 1 or end1 < start1
+                or ref_offset + (end1 - start1 + 1) > seq_len):
+            raise ValueError("reference sequence does not cover the interval")
+        # The loop counter is 64-bit so a BED interval ending at 2**31 - 1
+        # does not overflow when the stop value is incremented.
+        for pos in range(<long long>start1, <long long>end1 + 1):
+            if pos <= deletion_end:
+                # The called deletion's REF span already represents this base.
+                self._flush()
+                continue
+            ref_base = seq[ref_offset + pos - start1]
+            if not (ref_base == 65 or ref_base == 67
+                    or ref_base == 71 or ref_base == 84):
+                # IUPAC ambiguity codes (N included) cannot be written.
+                self._flush()
+                continue
+            has_column = tally.sync(<int>pos)
+            if has_column:
+                status = tally._simple_counts(
+                    ref_base, FAST_MAX_SLOTS, &dp, &n_ref, &n_obs)
+                if status != 0:
+                    raise MemoryError("pileup column is too deep")
+            else:
+                dp = 0
+                n_ref = 0
+                n_obs = 0
+            if self.absent_vote_ref:
+                ref_votes = self.n_files
+            elif has_column and dp >= self.min_coverage:
+                ref_votes = self.n_files
+            else:
+                ref_votes = 0
+            if ref_votes < self.threshold:
+                self._flush()
+                continue
+            ge = dp >= self.min_coverage
+            if not self.compress_blocks:
+                self.writer._write_monomorphic(
+                    rid, <int>pos - 1, _alleles_for_base(ref_base), n_ref,
+                    n_obs - n_ref, dp, <int>pos)
+                continue
+            if (self.pending and self.pending_rid == rid
+                    and <int>pos - 1 == self.pending_end0
+                    and ge == self.pending_ge):
+                self.pending_end0 = <int>pos
+                if dp < self.pending_dp:
+                    self.pending_dp = dp
+            else:
+                self._flush()
+                self.pending = True
+                self.pending_rid = rid
+                self.pending_start0 = <int>pos - 1
+                self.pending_end0 = <int>pos
+                self.pending_dp = dp
+                self.pending_ge = ge
+                self.pending_ref = ref_base
+                self.pending_ad_ref = n_ref
+                self.pending_ad_other = n_obs - n_ref

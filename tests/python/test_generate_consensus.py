@@ -86,6 +86,18 @@ def test_interval_ends_are_written(consensus_runner):
     assert [pos for pos, _, _ in read_records(output)] == [10, 20, 21, 22, 23, 24, 25]
 
 
+def test_bcf_compression_level_is_accepted(consensus_runner):
+    """The chunk writer can trade compression ratio for write speed."""
+    output = consensus_runner(
+        bed_intervals=[('chr1', 9, 10), ('chr1', 19, 25)],
+        caller_records=[[], []],
+        threshold=2,
+        bcf_compression=1,
+    )
+    assert [pos for pos, _, _ in read_records(output)] == [
+        10, 20, 21, 22, 23, 24, 25]
+
+
 def test_adjacent_intervals_are_not_truncated(consensus_runner):
     """Adjacent intervals keep their last bases (1-based 10 and 20)."""
     output = consensus_runner(
@@ -302,6 +314,43 @@ def test_reference_blocks_split_at_reference_caller_record(tmp_path,
         compress_reference_blocks=True)
     assert [(start, end) for start, end, *_ in read_spans(output)] == [
         (20, 21), (22, 22), (23, 25)]
+
+
+def test_reference_block_spans_adjacent_intervals(tmp_path, use_accel):
+    """Adjacent BED intervals do not split one contiguous reference block."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed',
+                       [('chr1', 19, 21), ('chr1', 21, 25)])
+    callers = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [])]
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1,
+        use_accel=use_accel, reference=reference,
+        compress_reference_blocks=True)
+    spans = read_spans(output)
+    assert [(start, end) for start, end, *_ in spans] == [(20, 25)]
+    assert span_positions(spans) == list(range(20, 26))
+
+
+def test_abstain_fast_path_omits_low_coverage_positions(tmp_path, use_accel):
+    """An absent caller abstains below min_coverage in the reference path."""
+    reference = write_reference(tmp_path / 'ref.fa')
+    reads = [(f'read{i}', i, REF_SEQ[i:i + 6]) for i in range(19, 24)]
+    bam = write_bam(tmp_path / 'sample.bam', reads)
+    bed_gz = write_bed(tmp_path / 'coverage.bed', [('chr1', 19, 25)])
+    callers = [write_caller_bcf(tmp_path / 'c0.bcf', 'sample1', [])]
+
+    output = run_consensus(
+        tmp_path, bam, bed_gz, callers, threshold=1,
+        use_accel=use_accel, reference=reference,
+        absent_vote='abstain', min_coverage=3,
+        compress_reference_blocks=True)
+    spans = read_spans(output)
+    # Depths at 1-based 20..25 are 1, 2, 3, 4, 5, 5; only 22..25 get a
+    # reference record, and the block minimum is 3.
+    assert [(start, end, dp) for start, end, *_, dp in spans] == [(22, 25, 3)]
 
 
 def test_reference_blocks_do_not_span_bed_gaps(tmp_path, use_accel):
@@ -1070,6 +1119,14 @@ def test_accel_and_pure_paths_agree_on_deletion_overlap_ad(tmp_path):
     # 1-based 22 and 27 are the deleted bases; AD is (reference, <*>).
     for pos in (22, 27):
         assert records[pos] == ((ref_base(pos), '<*>'), (1, 0), 1)
+
+
+def test_accel_exports_reference_block_writer():
+    """The built extension exposes the accelerated reference fast path."""
+    if not ACCEL_AVAILABLE:
+        pytest.skip('consensus_accel is not built for this interpreter')
+    import consensus_accel
+    assert hasattr(consensus_accel, 'ReferenceBlockWriter')
 
 
 def test_accel_import_failure_falls_back(monkeypatch, capsys):
