@@ -168,9 +168,16 @@ if [[ ${#files[@]} -eq 1 ]]; then
         | tag_stream \
         | output_stream
 else
-    for bcf in ${files[@]+"${files[@]}"}; do
-        "$bcftools" index -f --csi "$bcf"
-    done
+    # Index the inputs in parallel.  The exported helper keeps the bcftools
+    # path and file names as single argv elements even when they contain
+    # spaces; --halt makes the whole step fail on the first indexing error.
+    index_one() {
+        "$bcftools" index --threads 1 -f --csi "$1"
+    }
+    export -f index_one
+    export bcftools
+    parallel --halt now,fail=1 -j "$cpus" \
+        index_one ::: ${files[@]+"${files[@]}"}
 
     # Aggregate the structured metadata of every sample so that per-sample
     # caller failures are not reduced to the first sample's provenance.

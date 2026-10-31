@@ -15,6 +15,7 @@ tested directly.
 """
 
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -156,7 +157,7 @@ def build_degraded_samples(tmp_path, use_accel):
 
 def merge_chain(tmp_path, sample_files, reference, remove_invariant,
                 split_multiallelic=False, output_format='bcf', cpus=1,
-                samples_dropped=None):
+                samples_dropped=None, bcftools=BCFTOOLS):
     """Run bin/merge_outputs.sh and return the merged output path."""
     list_file = tmp_path / 'merge_list.txt'
     list_file.write_text('\n'.join(str(path) for path in sample_files.values()) + '\n')
@@ -169,7 +170,7 @@ def merge_chain(tmp_path, sample_files, reference, remove_invariant,
         '--output', str(output),
         '--format', output_format,
         '--cpus', str(cpus),
-        '--bcftools', BCFTOOLS,
+        '--bcftools', bcftools,
         '--python', sys.executable,
     ]
     if remove_invariant:
@@ -250,6 +251,41 @@ def test_all_sites_kept_without_remove_invariant_split(tmp_path, use_accel):
     merged = merge_chain(tmp_path, sample_files, reference,
                          remove_invariant=False, split_multiallelic=True)
     assert [pos for pos, _, _, _ in read_merged(merged)] == list(range(20, 33))
+
+
+def test_input_bcf_indexing_is_parallel(tmp_path):
+    """--cpus 2 indexes multiple input BCFs concurrently."""
+    sample_files, reference = build_two_samples(tmp_path, use_accel=False)
+    log = tmp_path / 'index.log'
+    wrapper = tmp_path / 'bcftools-wrapper.sh'
+    wrapper.write_text(
+        '#!/usr/bin/env bash\n'
+        'set -euo pipefail\n'
+        'if [[ "${1:-}" == "index" ]]; then\n'
+        '    start=$(date +%s%N)\n'
+        '    sleep 1\n'
+        '    end=$(date +%s%N)\n'
+        f'    printf "%s %s %s\\n" "$$" "$start" "$end" '
+        f'>> {shlex.quote(str(log))}\n'
+        'fi\n'
+        f'exec {shlex.quote(BCFTOOLS)} "$@"\n')
+    wrapper.chmod(0o755)
+
+    merged = merge_chain(tmp_path, sample_files, reference,
+                         remove_invariant=False, cpus=2,
+                         bcftools=str(wrapper))
+    assert read_merged(merged)
+
+    intervals = []
+    for line in log.read_text().splitlines():
+        _, start, end = line.split()
+        intervals.append((int(start), int(end)))
+    assert len(intervals) == len(sample_files)
+    assert any(
+        a_start < b_end and b_start < a_end
+        for index, (a_start, a_end) in enumerate(intervals)
+        for b_start, b_end in intervals[index + 1:]
+    )
 
 
 @pytest.mark.parametrize('split_multiallelic', [False, True],
