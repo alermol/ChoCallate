@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.2] - 2026-10-31
+
+### Changed
+
+- `merge_outputs.sh` indexes input BCF files in parallel with GNU `parallel`, using the existing `--cpus` setting.
+
 ## [4.1.1] - 2026-10-30
 
 ### Changed
