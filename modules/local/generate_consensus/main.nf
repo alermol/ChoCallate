@@ -31,11 +31,16 @@ process GENERATE_CONSENSUS {
     def compress_blocks = params.output.compress_reference_blocks
         ? "--compress_reference_blocks"
         : ""
-    // Per-sample export discards reference records when remove_invariant is
-    // true, so skip writing them at all.  A merged output still needs them for
-    // bcftools merge --gvcf to assign ALT depths across samples.
+    // Per-sample export discards reference records when the per-sample
+    // remove_invariant setting is true, so skip writing them at all.  A
+    // merged output ("single" or "both") still needs them for bcftools merge
+    // --gvcf to assign ALT depths across samples, so this shortcut only
+    // applies when no merge is requested.
+    def per_sample_flags = CLIParamsValidation.output_record_flags(
+        params.output, 'per_sample'
+    )
     def variants_only = params.output.type == 'sample'
-        && params.output.remove_invariant
+        && per_sample_flags.remove_invariant
     def variants_only_arg = variants_only ? "--variants_only" : ""
     def absent_vote = params.consensus.absent_vote != null ? params.consensus.absent_vote : 'ref'
     def filtered_vote = params.consensus.filtered_vote != null

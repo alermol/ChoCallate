@@ -325,7 +325,8 @@ workflow {
     // A single output is one multi-sample file: merge the internal BCFs first.
     // With "both", the same internal BCFs are also exported per sample. Every
     // path ends in one EXPORT_OUTPUT invocation, which applies output.format
-    // and the final record transformations.
+    // and the record transformations for that layout (output.merged for the
+    // merged file, output.per_sample for the files under per_sample/).
     def all_dropped_message =
         "All samples were dropped; see dropped_samples.txt"
     consensus_bcf = GENERATE_CONSENSUS.out.consensus_bcf

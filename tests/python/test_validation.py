@@ -117,7 +117,24 @@ def test_pipeline_defaults_for_depth_and_mapq(tmp_path):
     assert "min_coverage = 5" in output
     assert "compress_reference_blocks = true" in output
     assert "remove_invariant = false" in output
+    assert "merged {" in output
+    assert "per_sample {" in output
     assert "mode = 'mark'" in output
+
+
+def test_unknown_scoped_output_key_is_rejected(tmp_path):
+    _prepare_inputs(tmp_path)
+    params = _config(
+        tmp_path,
+        overrides={
+            "output": {"per_sample": {"remove_invariants": True}}
+        },
+    )
+
+    result = _run(tmp_path, params)
+
+    assert result.returncode != 0
+    assert "--output.per_sample.remove_invariants" in _output(result)
 
 
 def test_missing_required_parameter_is_named(tmp_path):

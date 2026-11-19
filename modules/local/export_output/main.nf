@@ -33,10 +33,17 @@ process EXPORT_OUTPUT {
     script:
     def extension = params.output.format == 'vcf' ? 'vcf.gz' : 'bcf'
     def output_name = "${sample_id}.${extension}"
-    def remove_invariant = params.output.remove_invariant
+    // The per-sample layout publishes under per_sample/ and the merged layout
+    // at the output root, so the publish subdirectory also selects which
+    // scoped override (output.per_sample or output.merged) applies.
+    def scope = publish_subdir == 'per_sample' ? 'per_sample' : 'merged'
+    def record_flags = CLIParamsValidation.output_record_flags(
+        params.output, scope
+    )
+    def remove_invariant = record_flags.remove_invariant
         ? '--remove-invariant'
         : ''
-    def split_multiallelic = params.output.split_multiallelic
+    def split_multiallelic = record_flags.split_multiallelic
         ? '--split-multiallelic'
         : ''
     """

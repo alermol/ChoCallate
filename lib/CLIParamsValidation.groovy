@@ -53,6 +53,46 @@ class CLIParamsValidation {
     }
 
     /**
+     * Resolves the final-export record transformations for one output scope.
+     *
+     * The top-level `output.remove_invariant` and `output.split_multiallelic`
+     * remain the defaults. `output.merged` and `output.per_sample` may
+     * override either value for the merged multi-sample file and the
+     * single-sample files respectively; a null or absent scoped value
+     * inherits the top-level setting, so existing parameter files keep their
+     * meaning.
+     *
+     * @param output the `output` parameter map
+     * @param scope "merged" or "per_sample"
+     * @return a map with boolean `remove_invariant` and `split_multiallelic`
+     */
+    static Map<String, Boolean> output_record_flags(Map output, String scope) {
+        def scoped = output?.get(scope)
+        if (!(scoped instanceof Map)) {
+            scoped = [:]
+        }
+        def defaults = output ?: [:]
+        return [
+            remove_invariant: output_flag(
+                scoped, defaults, 'remove_invariant'
+            ),
+            split_multiallelic: output_flag(
+                scoped, defaults, 'split_multiallelic'
+            )
+        ]
+    }
+
+    private static boolean output_flag(
+        Map scoped, Map defaults, String key
+    ) {
+        def value = scoped[key]
+        if (value == null) {
+            value = defaults[key]
+        }
+        return value == true
+    }
+
+    /**
      * Resolves the effective duplicate-handling mode.
      */
     static String rmdup_mode(Map rmdup) {

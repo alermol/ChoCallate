@@ -161,6 +161,137 @@ nextflow_process {
         }
     }
 
+    test("applies per_sample overrides in both mode") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'sample_a', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '10', '.', 'G', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '11', '.', 'T', '<*>', '.', 'PASS',
+                     'END=11', 'GT:AD:DP', '0/0:9,1:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10'],
+                    ['CP002684.1', '21', '.', 'A', '<*>', '.', 'PASS',
+                     'END=21', 'GT:AD:DP', '0/0:9,1:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'both'
+                    format = 'bcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                    merged {
+                        remove_invariant = true
+                        split_multiallelic = true
+                    }
+                    per_sample {
+                        remove_invariant = false
+                        split_multiallelic = false
+                    }
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'sample_a',
+                    'per_sample',
+                    file("${launchDir}/bcfs/sample_a.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(process.out.bcf[0][1])
+            assert bcf.name == 'sample_a.bcf'
+            // Both alleles at 10 are re-joined and both invariant records
+            // survive, because the per_sample overrides disable filtering.
+            assert ChoCallateTestUtils.recordCount(bcf) == 4
+        }
+    }
+
+    test("applies merged overrides in both mode") {
+        setup {
+            ChoCallateTestUtils.referenceBundle(
+                projectDir, new File(launchDir)
+            )
+            def bcfs = new File(launchDir, 'bcfs')
+            ChoCallateTestUtils.writeBcf(
+                bcfs, 'consensus', 'sample_a',
+                [
+                    ['CP002684.1', '10', '.', 'G', 'A', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '10', '.', 'G', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '0/1:5,5:10'],
+                    ['CP002684.1', '11', '.', 'T', '<*>', '.', 'PASS',
+                     'END=11', 'GT:AD:DP', '0/0:9,1:10'],
+                    ['CP002684.1', '20', '.', 'T', 'C', '50', 'PASS', '.',
+                     'GT:AD:DP', '1/1:0,10:10'],
+                    ['CP002684.1', '21', '.', 'A', '<*>', '.', 'PASS',
+                     'END=21', 'GT:AD:DP', '0/0:9,1:10']
+                ]
+            )
+        }
+
+        when {
+            params {
+                output {
+                    directory = "${launchDir}/output"
+                    type = 'both'
+                    format = 'bcf'
+                    remove_invariant = false
+                    split_multiallelic = false
+                    merged {
+                        remove_invariant = true
+                        split_multiallelic = true
+                    }
+                    per_sample {
+                        remove_invariant = false
+                        split_multiallelic = false
+                    }
+                }
+            }
+            process {
+                """
+                input[0] = tuple(
+                    'consensus',
+                    '',
+                    file("${launchDir}/bcfs/consensus.bcf")
+                )
+                input[1] = file("${launchDir}/reference/genome.fasta")
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            def bcf = ChoCallateTestUtils.outputFile(process.out.bcf[0][1])
+            assert bcf.name == 'consensus.bcf'
+            // Both invariant records are dropped and the two ALTs at 10 stay
+            // split, so 3 records remain.
+            assert ChoCallateTestUtils.recordCount(bcf) == 3
+            def positions = ChoCallateTestUtils.run(
+                bcf.parentFile,
+                "bcftools query -f '%POS\\n' '${bcf.absolutePath}'"
+            ).trim().readLines()
+            assert positions.count { it == '10' } == 2
+        }
+    }
+
     test("preserves gVCF reference blocks in the final VCF") {
         setup {
             ChoCallateTestUtils.referenceBundle(

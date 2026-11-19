@@ -619,6 +619,72 @@ nextflow_pipeline {
         }
     }
 
+    test("test_both_outputs_scoped_record_settings") {
+        tag "both"
+        tag "both_scoped"
+        setup {
+            ChoCallateTestUtils.bowtie2Bam(
+                projectDir, new File(launchDir), 'sample_both'
+            )
+            ChoCallateTestUtils.samplesheet(
+                new File(launchDir),
+                [['sample_both', "${launchDir}/sample_both.bam"]]
+            )
+        }
+
+        when {
+            params {
+                input {
+                    samples_tsv = "${launchDir}/samples.tsv"
+                    reference_genome = "${launchDir}/reference/" +
+                        "genome.fasta"
+                    reference_index_dir = "${launchDir}/reference"
+                    reference_index_prefix = "genome.fasta"
+                    format = "bam"
+                    reads_type = "pe"
+                }
+                output {
+                    directory = "${outputDir}"
+                    type = "both"
+                    format = "vcf"
+                    remove_invariant = false
+                    split_multiallelic = false
+                    merged {
+                        remove_invariant = true
+                    }
+                    per_sample {
+                        remove_invariant = false
+                    }
+                }
+                coverage {
+                    min_coverage = 1
+                }
+                calling {
+                    callers = "bcftools"
+                }
+                consensus {
+                    threshold = 1
+                }
+            }
+        }
+
+        then {
+            assert workflow.success
+            def merged = new File("${outputDir}/consensus.vcf.gz")
+            def per_sample = new File(
+                "${outputDir}/per_sample/sample_both.vcf.gz"
+            )
+            assert merged.isFile()
+            assert per_sample.isFile()
+            def merged_records =
+                ChoCallateTestUtils.recordCount(merged)
+            def per_sample_records =
+                ChoCallateTestUtils.recordCount(per_sample)
+            assert merged_records == 271
+            assert per_sample_records > merged_records
+        }
+    }
+
     test("test_stage_copy_default_prefix") {
         tag "index"
         tag "stage_copy"

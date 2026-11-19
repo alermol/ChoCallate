@@ -96,6 +96,36 @@
                     "type": "boolean",
                     "description": "Keep one record per ALT allele in the final output instead of re-joining multi-allelic sites."
                 },
+                "merged": {
+                    "type": "object",
+                    "title": "Merged output",
+                    "description": "Overrides for the merged multi-sample file. A null value inherits the top-level remove_invariant or split_multiallelic setting.",
+                    "properties": {
+                        "remove_invariant": {
+                            "type": ["boolean", "null"],
+                            "description": "Drop monomorphic records from the merged file; null inherits output.remove_invariant."
+                        },
+                        "split_multiallelic": {
+                            "type": ["boolean", "null"],
+                            "description": "Keep one record per ALT allele in the merged file; null inherits output.split_multiallelic."
+                        }
+                    }
+                },
+                "per_sample": {
+                    "type": "object",
+                    "title": "Per-sample output",
+                    "description": "Overrides for the single-sample files published under per_sample/. A null value inherits the top-level remove_invariant or split_multiallelic setting.",
+                    "properties": {
+                        "remove_invariant": {
+                            "type": ["boolean", "null"],
+                            "description": "Drop monomorphic records from each per-sample file; null inherits output.remove_invariant."
+                        },
+                        "split_multiallelic": {
+                            "type": ["boolean", "null"],
+                            "description": "Keep one record per ALT allele in each per-sample file; null inherits output.split_multiallelic."
+                        }
+                    }
+                },
                 "compress_reference_blocks": {
                     "type": "boolean",
                     "default": true,

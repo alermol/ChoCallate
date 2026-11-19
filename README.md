@@ -60,7 +60,7 @@ The image bundles the Nextflow plugins and works offline and under an arbitrary 
 
 ## Outputs
 
-By default, a run publishes one merged multi-sample `consensus.bcf`. Set `output.type: "sample"` for one file per sample under `per_sample/`, `output.type: "both"` to publish the merged file plus the per-sample files under `per_sample/`, and `output.format: "vcf"` for bgzip-compressed VCF. All covered sites are kept by default, including monomorphic positions; set `output.remove_invariant: true` to drop them. Mapping statistics, `dropped_samples.txt` and standard Nextflow reports are also published.
+By default, a run publishes one merged multi-sample `consensus.bcf`. Set `output.type: "sample"` for one file per sample under `per_sample/`, `output.type: "both"` to publish the merged file plus the per-sample files under `per_sample/`, and `output.format: "vcf"` for bgzip-compressed VCF. All covered sites are kept by default, including monomorphic positions; set `output.remove_invariant: true` to drop them and `output.split_multiallelic: true` to keep one record per ALT. With `output.type: "both"`, `output.merged` and `output.per_sample` override `remove_invariant` and `split_multiallelic` separately for the merged file and the files under `per_sample/`; a null value inherits the top-level setting. Mapping statistics, `dropped_samples.txt` and standard Nextflow reports are also published.
 
 ## Documentation
 

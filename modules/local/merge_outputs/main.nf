@@ -29,7 +29,9 @@ process MERGE_OUTPUTS {
     printf '%s\n' ${merge_paths} > tmp/merge_list.txt
 
     # Keep one record per ALT in the internal merge.  EXPORT_OUTPUT re-joins
-    # multi-allelic records when output.split_multiallelic is false.
+    # multi-allelic records when the merged layout's split_multiallelic
+    # (output.merged.split_multiallelic, falling back to the top level) is
+    # false.
     merge_outputs.sh \
         --file-list tmp/merge_list.txt \
         --reference tmp/ref_genome.fasta \

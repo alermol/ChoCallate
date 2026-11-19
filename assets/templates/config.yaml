@@ -55,12 +55,34 @@ output:
   format: "bcf"
 
   # Drop monomorphic/reference-only records when exporting the final output.
-  # false (default) keeps monomorphic/reference records.
+  # false (default) keeps monomorphic/reference records. This is the default
+  # for every layout; the merged and per_sample blocks below override it.
   remove_invariant: false
 
   # Keep one record per ALT allele in the final output instead of re-joining
-  # multi-allelic sites.
+  # multi-allelic sites. This is the default for every layout; the merged and
+  # per_sample blocks below override it.
   split_multiallelic: false
+
+  # Overrides for the merged multi-sample file (output.type "single" or
+  # "both"). Set either key to true or false to give the merged file its own
+  # behaviour; leave it null to inherit the top-level value above.
+  merged:
+    remove_invariant: null
+    split_multiallelic: null
+
+  # Overrides for the single-sample files under per_sample/ (output.type
+  # "sample" or "both"). A null value inherits the top-level value above.
+  # With output.type "both", for example, the merged file can keep every
+  # monomorphic site while the per-sample files drop them:
+  #   remove_invariant: false
+  #   merged:
+  #     remove_invariant: false
+  #   per_sample:
+  #     remove_invariant: true
+  per_sample:
+    remove_invariant: null
+    split_multiallelic: null
 
   # Compress consecutive hom-reference positions into multi-base gVCF
   # blocks with INFO/END in the final output. Reference records are always

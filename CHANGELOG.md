@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `output.merged` and `output.per_sample` provide `remove_invariant` and `split_multiallelic` overrides for the merged multi-sample file and the single-sample files respectively. With `output.type: "both"` the two layouts can now be configured independently; a `null` scoped value inherits the top-level `output.remove_invariant` or `output.split_multiallelic`, so existing parameter files are unchanged.
+
+### Changed
+
+- `EXPORT_OUTPUT` resolves `remove_invariant` and `split_multiallelic` per published layout instead of applying the top-level values to both. `GENERATE_CONSENSUS` uses the per-sample value for its `--variants_only` shortcut, which still applies only when no merge runs.
+
 ## [4.1.2] - 2026-10-31
 
 ### Changed
